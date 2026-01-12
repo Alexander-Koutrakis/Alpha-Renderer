@@ -1,0 +1,40 @@
+#version 450
+
+// Recap:
+// - Copies camera depth to mip 0 of the Hi-Z pyramid in linear view-space units.
+// - Treats sky/far depth as "empty" by writing far distance to keep min conservative.
+// - Output stores min=max depth in RG16F for downstream depth reduction.
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(push_constant) uniform DepthPC {
+    float cameraNear;
+    float cameraFar;
+} pc;
+
+layout(set = 0, binding = 0) uniform sampler2D uSrcDepth;
+
+layout(rg16f, set = 0, binding = 1) uniform writeonly image2D uDstMip0;
+
+float linearizeDepth(float depthSample) {
+    float n = pc.cameraNear;
+    float f = pc.cameraFar;
+    
+    return (n * f) / (f - depthSample * (f - n));
+}
+
+void main() {
+    ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 dstSize = imageSize(uDstMip0);
+    if (gid.x >= dstSize.x || gid.y >= dstSize.y) {
+        return;
+    }
+
+    float rawDepth = texelFetch(uSrcDepth, gid, 0).r;
+
+    float linearDepth = (rawDepth >= 0.999999) ? pc.cameraFar : linearizeDepth(rawDepth);
+
+    imageStore(uDstMip0, gid, vec4(linearDepth, linearDepth, 0.0, 0.0));
+}
+
+

@@ -1,0 +1,356 @@
+#version 450
+
+// Recap:
+// - Builds per-probe radiance intervals for the current cascade tile.
+// - Depth pyramid + GBuffer validate hits and skip empty space.
+// - Jitters ray origin/direction to trade banding for temporally filterable noise.
+// - Writes radiance.rgb and beta (transmittance) into the cascade atlas.
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+// Camera UBO
+layout(set = 0, binding = 0) uniform CameraUBO {
+    mat4 view;
+    mat4 proj;
+    mat4 viewProj;
+    vec4 camPos;
+    vec4 clipPlanes; // x=near, y=far, z=far-near, w=near*far
+} uCamera;
+
+// GBuffer
+layout(set = 0, binding = 1) uniform sampler2D uGBufferPosition;
+layout(set = 0, binding = 2) uniform sampler2D uGBufferNormal;
+layout(set = 0, binding = 3) uniform sampler2D uGBufferAlbedo;
+layout(set = 0, binding = 4) uniform sampler2D uGBufferMaterial;
+
+// Depth pyramid storing linear view-space MIN/MAX depth in RG.
+// Mip 0: min=max=per-pixel depth. Higher mips: min of mins, max of maxes.
+layout(set = 0, binding = 5) uniform sampler2D uDepthPyramid;
+// Incident diffuse buffer from light pass (pre-albedo)
+layout(set = 0, binding = 6) uniform sampler2D uIncidentBuffer;
+
+
+// Radiance = rgb, Beta = a
+layout(rgba16f, set = 0, binding = 7) uniform writeonly image2D uRadiance[6];
+
+// Push constants
+layout(push_constant) uniform BuildPC {
+    int cascadeIndex;
+    int probeStridePx;
+    int tileSize;
+    int depthMipCount;
+    int frameIndex;   // frame-local jitter seed
+    float tStart;       // start distance 'a' of the interval in world units
+    float segmentLen;   // interval length 'L' (so we build [a, a+L])
+} pc;
+
+// Simple guard to avoid divide-by-zero if bad data is pushed.
+bool isValidStride() {
+    return pc.probeStridePx > 0 && pc.tileSize > 0;
+}
+
+ivec2 computeProbeCenter(ivec2 probeIndex, ivec2 screenSize) {
+    ivec2 stride = ivec2(pc.probeStridePx);
+    ivec2 probeCenter = probeIndex * stride + stride / 2;
+    return clamp(probeCenter, ivec2(0), screenSize - ivec2(1));
+}
+
+
+vec3 decodeNormal(vec3 encoded) {
+    return normalize(encoded * 2.0 - 1.0);
+}
+
+mat3 buildProbeBasis(vec3 n) {
+    vec3 normal = normalize(n);
+    vec3 up = (abs(normal.z) < 0.999) ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
+    vec3 tangent = normalize(cross(up, normal));
+    vec3 bitangent = cross(normal, tangent);
+    return mat3(tangent, bitangent, normal);
+}
+
+
+float computeHemisphereShrink(int tileSize) {
+    // 2 -> 0.90, 8+ -> 0.98, smooth in between
+    float t = clamp((float(tileSize) - 2.0) / 6.0, 0.0, 1.0);
+    return mix(0.90, 0.98, t);
+}
+
+const float PI = 3.14159265359;
+
+
+float hash(vec3 p) {
+    p = fract(p * vec3(0.1031, 0.1030, 0.0973));
+    p += dot(p, p.yxz + 33.33);
+    return fract((p.x + p.y) * p.z);
+}
+
+// Generate 2D random offset with temporal variation
+// frameNoise should change each frame for proper temporal jittering
+vec2 random2DTemporal(vec2 spatialSeed, float frameNoise) {
+    return vec2(
+        hash(vec3(spatialSeed, frameNoise)),
+        hash(vec3(spatialSeed + vec2(127.1, 311.7), frameNoise + 0.5))
+    );
+}
+
+// Scalar random in [0,1) with temporal variation.
+float random1DTemporal(vec2 spatialSeed, float frameNoise) {
+    return hash(vec3(spatialSeed, frameNoise));
+}
+
+
+// Upper-hemisphere octahedral mapping with shrink toward center.
+// UV in [0,1]^2 -> local direction with z >= 0.
+vec3 hemisphereDirFromUV(vec2 uv, float hemiShrink) {
+    uv = mix(vec2(0.5), uv, hemiShrink);
+    vec2 p = uv * 2.0 - 1.0;               // [-1,1]
+    vec3 v = vec3(p.x, p.y, 1.0 - abs(p.x) - abs(p.y));
+    if (v.z < 0.0) {                       // fold back into upper hemisphere
+        v.xy = (1.0 - abs(v.yx)) * sign(v.xy);
+        v.z = 0.0;
+    }
+    v = normalize(v);
+    return v;
+}
+vec4 traceWorldSpace(vec3 worldStart, vec3 worldDir, float maxDistance, ivec2 originPixel, vec3 startNormal, float probeLinearDepth) {
+    ivec2 screenSize = textureSize(uDepthPyramid, 0);
+    float nearPlane = uCamera.clipPlanes.x;
+    float farPlane = uCamera.clipPlanes.y;
+    
+
+    float depthScale = 1.0 + probeLinearDepth * 0.01;
+    
+    // Step count: 8 for short intervals, up to 48 for long ones
+    // Using sqrt gives good scaling: sqrt(1)=1, sqrt(100)=10, sqrt(800)≈28
+    int numSteps = clamp(8 + int(sqrt(maxDistance) * 1.5), 8, 48);
+    float stepSize = maxDistance / float(numSteps);
+    
+    // Minimum travel distance to avoid self-intersection artifacts.
+    // Cascade 0: keep this as a small, depth-scaled epsilon (mm–cm range).
+    // Higher cascades: slightly larger but still tied to interval length.
+    float tightThickness = max(stepSize * 0.75, 0.003);
+    float minTravel;
+    if (pc.tStart <= 0.0) {
+    // For cascade 0: use at least 10% of interval or 2x normal offset, whichever is larger
+        float minFraction = maxDistance * 0.20;  // 10% of interval
+        minTravel = max(tightThickness, max(minFraction, 0.015)) * depthScale;
+    } else {
+        minTravel = max(0.01, maxDistance * 0.01);
+    }
+
+    // Per-ray jitter along the march distance to break up step-quantization banding.
+    // This turns coherent bands into temporally-stable noise that TAA/temporal GI can smooth.
+    // Use originPixel + cascade/frame to keep it deterministic per ray per frame.
+    float frameNoise = fract(float(pc.frameIndex % 1024) * 0.1313);
+    float cascadeNoise = fract(pc.tStart * 0.1 + pc.segmentLen * 0.07 + float(pc.cascadeIndex) * 0.31 + frameNoise);
+    float tJitter = random1DTemporal(vec2(originPixel) + vec2(pc.cascadeIndex * 19, pc.frameIndex * 7), cascadeNoise);
+    
+    // Select coarse mip for empty-space skipping based on cascade
+    // Higher cascades use coarser mips since steps cover more world space
+    int coarseMip = clamp(pc.cascadeIndex, 0, pc.depthMipCount - 1);
+    ivec2 coarseSize = textureSize(uDepthPyramid, coarseMip);
+    
+    // Thickness scales with step size (larger steps need more tolerance)
+    float baseThickness = stepSize * 0.5;
+    
+    // March along the ray in world space
+    for (int i = 1; i <= numSteps; ++i) {
+        // Jitter within a smaller portion of the step interval to reduce noise.
+        // Golden ratio increment spreads samples; scaling by 0.5 keeps jitter conservative.
+        float jitterOffset = fract(tJitter + float(i) * 0.6180339) * 0.5 + 0.25;
+        float t = stepSize * (float(i - 1) + jitterOffset);
+        vec3 sampleWorldPos = worldStart + worldDir * t;
+        
+        // Project to clip space
+        vec4 clip = uCamera.viewProj * vec4(sampleWorldPos, 1.0);
+        if (clip.w <= 0.0) continue;
+        
+        vec3 ndc = clip.xyz / clip.w;
+        if (any(greaterThan(abs(ndc.xy), vec2(1.0))) || ndc.z < 0.0 || ndc.z > 1.0) {
+            continue;
+        }
+        
+        vec2 uv = ndc.xy * 0.5 + 0.5;
+        
+        // Ray's view-space depth
+        vec3 viewPos = (uCamera.view * vec4(sampleWorldPos, 1.0)).xyz;
+        float rayDepth = abs(viewPos.z);
+        
+        // === COARSE CHECK: Use depth pyramid to skip empty space ===
+        ivec2 coarsePixel = ivec2(uv * vec2(coarseSize));
+        coarsePixel = clamp(coarsePixel, ivec2(0), coarseSize - ivec2(1));
+        
+        vec2 depthMinMax = texelFetch(uDepthPyramid, coarsePixel, coarseMip).rg;
+        
+        // Skip sky/invalid
+        if (depthMinMax.r <= 0.0 || depthMinMax.r >= farPlane * 0.99) {
+            continue;
+        }
+        
+        // Coarse rejection: if ray is clearly in front of or behind all geometry in this cell
+        float coarseThickness = baseThickness + depthMinMax.g * 0.02;
+        if (rayDepth < depthMinMax.r - coarseThickness || rayDepth > depthMinMax.g + coarseThickness) {
+            continue;  // Empty space - skip
+        }
+        
+        // === FINE VALIDATION: Potential hit, check at full resolution ===
+        ivec2 pixel = ivec2(uv * vec2(screenSize));
+        pixel = clamp(pixel, ivec2(0), screenSize - ivec2(1));
+        
+        vec2 fineDepth = texelFetch(uDepthPyramid, pixel, 0).rg;
+        if (fineDepth.r <= 0.0 || fineDepth.r >= farPlane * 0.99) {
+            continue;
+        }
+        
+        float fineThickness = baseThickness * 0.5 + fineDepth.r * 0.015;
+        if (rayDepth < fineDepth.r - fineThickness || rayDepth > fineDepth.r + fineThickness * 2.0) {
+            continue;
+        }
+        
+        // === GBUFFER VALIDATION ===
+        vec4 hitPosSample = texelFetch(uGBufferPosition, pixel, 0);
+        if (hitPosSample.w <= 0.0) continue;
+        
+        vec3 hitWorldPos = hitPosSample.xyz;
+        float actualT = dot(hitWorldPos - worldStart, worldDir);
+        
+        if (actualT < minTravel || actualT > maxDistance) {
+            continue;
+        }
+        
+        vec3 hitNormal = decodeNormal(texelFetch(uGBufferNormal, pixel, 0).xyz);
+        
+
+        float selfHitThreshold = max(minTravel * 1.5, baseThickness * 2.5);
+        float normalSimilarity = dot(startNormal, hitNormal);
+        float selfHitAttenuation = 1.0;
+        if (actualT < selfHitThreshold) {
+            // Soft attenuation: very similar normals near start get attenuated
+            // smoothstep from 0.85 (full contribution) to 0.98 (near-zero contribution)
+            float normalFade = smoothstep(0.85, 0.98, normalSimilarity);
+            // Also fade based on how close we are to the start
+            float distFade = 1.0 - smoothstep(0.0, selfHitThreshold, actualT);
+            selfHitAttenuation = 1.0 - (normalFade * distFade);
+        }
+        
+        // Skip only if attenuation would be essentially zero
+        if (selfHitAttenuation < 0.01) {
+            continue;
+        }
+        
+        // Backface handling: reject surfaces facing away from the ray.
+        // For diffuse GI, backfaces shouldn't contribute - they're not emitting toward us.
+        float facingFactor = dot(hitNormal, -worldDir);
+        
+        // Hard reject any backface (normal pointing away from incoming ray)
+        // Small negative threshold (-0.05) allows slight tolerance for grazing angles
+        if (facingFactor < -0.05) {
+            continue;
+        }
+        
+        // Attenuate grazing angles smoothly to avoid hard edges
+        float backfaceAttenuation = smoothstep(-0.05, 0.3, facingFactor);
+        
+        // Valid hit - compute radiance with combined attenuation
+        vec3 hitAlbedo = texelFetch(uGBufferAlbedo, pixel, 0).rgb;
+        vec3 incident = texelFetch(uIncidentBuffer, pixel, 0).rgb;
+        float kD = 1.0 - texelFetch(uGBufferMaterial, pixel, 0).r;
+        float combinedAttenuation = backfaceAttenuation * selfHitAttenuation;
+        vec3 radiance = incident * hitAlbedo * kD * (1.0 / PI) * combinedAttenuation;
+        
+        // Beta (transmittance) for opaque surface hits:
+        // For diffuse GI with opaque geometry, a hit should block most far cascade contribution.
+        // We use a steep falloff so hits near interval end still allow smooth cascade blending,
+        // but hits in the first ~70% of the interval are effectively opaque.
+        float normalizedT = actualT / maxDistance;
+        
+        // Smooth hermite curve: steep near 0, gradual near 1
+        // This prevents the harsh cascade boundary artifact
+        float beta = smoothstep(0.0, 1.0, normalizedT);
+        beta = beta * beta;  // Square for even steeper falloff
+        
+        // Allow beta to reach 1.0 at the interval end so cascade handoff can be continuous.
+        // (Clamping to <1 permanently makes "end-of-interval hits" artificially block far cascades,
+        // which can show up as dark seams/bands at cascade transitions.)
+        beta = clamp(beta, 0.0, 1.0);
+        
+        return vec4(radiance, beta);
+    }
+    
+    // No hit found - return fully transparent interval (miss)
+    return vec4(0.0, 0.0, 0.0, 1.0);
+}
+
+
+
+void main() {
+    ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+    if (!isValidStride()) {
+        return;
+    }
+
+    // Atlas bounds for this cascade
+    ivec2 atlasSize = imageSize(uRadiance[pc.cascadeIndex]);
+    if (gid.x >= atlasSize.x || gid.y >= atlasSize.y) {
+        return;
+    }
+
+    // Map atlas pixel -> probe index and intra-tile coord
+    ivec2 probeIndex = gid / pc.tileSize;
+    ivec2 tileCoord = gid - probeIndex * pc.tileSize;
+    vec2 tileUV = (vec2(tileCoord) + 0.5) / float(pc.tileSize);
+
+    ivec2 screenSize = textureSize(uDepthPyramid, 0);
+    ivec2 probeCenterPx = computeProbeCenter(probeIndex, screenSize);
+    
+    // Stochastic direction jittering - converts banding into noise that temporal can smooth
+    // Use probe position + cascade-specific values for pseudo-random variation
+    // The jitter spreads samples across the tile's solid angle coverage
+    float frameNoise = fract(float(pc.frameIndex % 1024) * 0.1313);
+    float cascadeNoise = fract(pc.tStart * 0.1 + pc.segmentLen * 0.07 + float(pc.cascadeIndex) * 0.31 + frameNoise);
+    vec2 spatialSeed = vec2(gid) + vec2(probeIndex) * 17.0;
+    vec2 randomOffset = random2DTemporal(spatialSeed, cascadeNoise) - 0.5;  // [-0.5, 0.5] range
+    
+    // Jitter within a fraction of the tile cell - reduced from 0.5 to 0.25 to lower noise
+    // while still breaking banding artifacts. Temporal accumulation will smooth the rest.
+    float jitterScale = 0.25 / float(pc.tileSize);
+    tileUV += randomOffset * jitterScale;
+    tileUV = clamp(tileUV, vec2(0.02), vec2(0.98));  // Keep within valid tile bounds
+
+    // If this probe center is sky/invalid, store a miss (fully transparent interval).
+    vec4 gbufPos = texelFetch(uGBufferPosition, probeCenterPx, 0);
+    if (gbufPos.w <= 0.0) {
+        imageStore(uRadiance[pc.cascadeIndex], gid, vec4(0.0, 0.0, 0.0, 1.0));
+        return;
+    }
+
+    float linearDepth = texelFetch(uDepthPyramid, probeCenterPx, 0).r;
+
+    // Surface basis at probe center
+    vec3 probeNormal = decodeNormal(texelFetch(uGBufferNormal, probeCenterPx, 0).xyz);
+
+    if (!all(greaterThan(abs(probeNormal), vec3(1e-4)))) {
+        probeNormal = vec3(0.0, 0.0, 1.0); // fallback if invalid normal
+    }
+    mat3 probeBasis = buildProbeBasis(probeNormal);
+
+    // World position at probe center (ray start)
+    vec3 worldPos = gbufPos.xyz;
+    float hemiShrink = computeHemisphereShrink(pc.tileSize);
+    vec3 localDir = hemisphereDirFromUV(tileUV, hemiShrink);
+    vec3 worldDir = normalize(probeBasis * localDir);
+
+    // Surface bias: offset probe origin along normal BEFORE computing ray start.
+    // This cleanly separates "where is the probe" from "where does the ray go".
+    // Scale with depth to handle both near and far geometry appropriately.
+    float normalOffset = max(0.01, linearDepth * 0.0015);
+    vec3 probeOrigin = worldPos + probeNormal * normalOffset;
+
+    // Interval starts at tStart distance from the offset probe origin
+    // For cascade 0: tStart=0, so we start at the offset surface position
+    // For cascade 1+: tStart>0, so we start further along the ray
+    vec3 worldStart = probeOrigin + worldDir * max(0.0, pc.tStart);
+    
+    vec4 marchResult = traceWorldSpace(worldStart, worldDir, pc.segmentLen, probeCenterPx, probeNormal, linearDepth);
+    imageStore(uRadiance[pc.cascadeIndex], gid, marchResult);
+}

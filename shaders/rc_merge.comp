@@ -1,0 +1,279 @@
+#version 450
+
+// Recap:
+// - Merges far cascade intervals into the next-near cascade with bilateral guards.
+// - Uses GBuffer position/normal to prevent leaking across depth/normal breaks.
+// - Spatial + angular bilinear mapping matches build/resolve alignment.
+// - Writes merged radiance.rgb and beta back into the near cascade atlas.
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 1) uniform sampler2D uGBufferPosition;
+layout(set = 0, binding = 2) uniform sampler2D uGBufferNormal;
+
+layout(rgba16f, set = 0, binding = 7) uniform image2D uRadiance[6];
+
+layout(push_constant) uniform MergePC {
+    int cascadeIndex;      // The "near" cascade we're merging INTO
+    int probeStridePx;     // Probe stride for THIS cascade (already scaled)
+    int tileSize;          // Tile size for THIS cascade (already scaled)
+    int depthMipCount;     // Unused in merge, but part of shared layout
+    float tStart;          // Unused in merge
+    float segmentLen;      // Unused in merge
+} pc;
+
+const int RC_CASCADE_COUNT = 6;
+
+const float NORMAL_THRESHOLD = -0.1;        // allow strong normal divergence
+const float PLANE_DISTANCE_BASE = 1.5;      // base allowance in world units
+const float PLANE_DISTANCE_SCALE = 0.8;     // scales with probe spacing
+
+bool cascadeIndicesValid() {
+    return pc.cascadeIndex >= 0 && pc.cascadeIndex < RC_CASCADE_COUNT - 1;
+}
+
+vec3 decodeNormal(vec3 encoded) {
+    return normalize(encoded * 2.0 - 1.0);
+}
+
+ivec2 getProbePixel(ivec2 probeIndex, int stride) {
+    return probeIndex * stride + stride / 2;
+}
+
+struct ProbeSurface {
+    vec3 position;
+    vec3 normal;
+    bool valid;
+};
+
+ProbeSurface sampleProbeSurface(ivec2 probeIndex, int probeStride, ivec2 gbufferSize) {
+    ProbeSurface result;
+    result.valid = false;
+    result.position = vec3(0.0);
+    result.normal = vec3(0.0);
+    
+    ivec2 pixel = getProbePixel(probeIndex, probeStride);
+    pixel = clamp(pixel, ivec2(0), gbufferSize - ivec2(1));
+    
+    vec4 posSample = texelFetch(uGBufferPosition, pixel, 0);
+    if (posSample.w <= 0.0) {
+        return result;
+    }
+    
+    result.position = posSample.xyz;
+    result.normal = decodeNormal(texelFetch(uGBufferNormal, pixel, 0).xyz);
+    result.valid = true;
+    return result;
+}
+
+float calculateBilateralWeight(
+    ProbeSurface nearProbe,
+    ProbeSurface farProbe,
+    float planeDistanceThreshold
+) {
+    if (!nearProbe.valid) {
+        return 0.0;
+    }
+    
+    if (!farProbe.valid) {
+        // Far probe is sky - allow contribution
+        return 0.3;
+    }
+    
+
+    float normalDot = dot(nearProbe.normal, farProbe.normal);
+    float normalWeight = smoothstep(NORMAL_THRESHOLD, 1.0, normalDot);
+    
+    vec3 toFarProbe = farProbe.position - nearProbe.position;
+    float planeDistance = abs(dot(toFarProbe, nearProbe.normal));
+    float softMax = planeDistanceThreshold * 3.5;
+    float planeWeight = 1.0 - smoothstep(planeDistanceThreshold, softMax, planeDistance);
+    
+    float weight = normalWeight * planeWeight;
+    return max(0.05, weight);  // small floor to avoid seams
+}
+
+ivec2 bilinearOffset(int index) {
+    return ivec2(index & 1, index >> 1);
+}
+
+vec4 bilinearWeights(vec2 frac) {
+    return vec4(
+        (1.0 - frac.x) * (1.0 - frac.y),  // (0,0) weight
+        frac.x * (1.0 - frac.y),           // (1,0) weight
+        (1.0 - frac.x) * frac.y,           // (0,1) weight
+        frac.x * frac.y                    // (1,1) weight
+    );
+}
+
+vec4 mergeIntervals(vec4 near, vec4 far) {
+    vec3 radiance = near.rgb + near.a * far.rgb;
+    float beta = near.a * far.a;
+    return vec4(radiance, beta);
+}
+
+void main() {
+    if (!cascadeIndicesValid()) {
+        return;
+    }
+
+    int nearIdx = pc.cascadeIndex;
+    int farIdx = nearIdx + 1;
+
+    ivec2 gid = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 nearSize = imageSize(uRadiance[nearIdx]);
+    
+    if (gid.x >= nearSize.x || gid.y >= nearSize.y) {
+        return;
+    }
+
+    ivec2 farSize = imageSize(uRadiance[farIdx]);
+    ivec2 gbufferSize = textureSize(uGBufferPosition, 0);
+
+    int nearTileSize = max(1, pc.tileSize);
+    int farTileSize = nearTileSize * 2;
+    
+    int nearStride = max(1, pc.probeStridePx);
+    int farStride = nearStride * 2;
+
+    ivec2 nearProbe = gid / nearTileSize;
+    ivec2 nearTile = gid - nearProbe * nearTileSize;
+
+    vec4 destInterval = imageLoad(uRadiance[nearIdx], gid);
+    
+    ProbeSurface nearSurface = sampleProbeSurface(nearProbe, nearStride, gbufferSize);
+    
+    if (!nearSurface.valid) {
+        return;
+    }
+
+    float planeDistanceThreshold = PLANE_DISTANCE_BASE + float(nearStride) * PLANE_DISTANCE_SCALE;
+    planeDistanceThreshold = clamp(planeDistanceThreshold, 0.5, 10.0);
+
+    ivec2 farProbeCount = farSize / farTileSize;
+    
+    // Map near probe center to far probe space
+    // Use center-based mapping to avoid half-texel bias at cascade seams:
+    // farCoord = ((near + 0.5) * 0.5) - 0.5
+    // This aligns the near probe center with the corresponding far grid center.
+    vec2 farProbeFloat = (vec2(nearProbe) + 0.5) * 0.5 - 0.5;
+    ivec2 farProbeBase = ivec2(floor(farProbeFloat));
+    vec2 frac = fract(farProbeFloat);
+  
+    // Adjust for edge cases - ensure we have valid interpolation range
+    farProbeBase = max(farProbeBase, ivec2(0));
+    if (farProbeBase.x >= farProbeCount.x - 1) {
+        farProbeBase.x = max(0, farProbeCount.x - 2);
+        frac.x = 1.0;
+    }
+    if (farProbeBase.y >= farProbeCount.y - 1) {
+        farProbeBase.y = max(0, farProbeCount.y - 2);
+        frac.y = 1.0;
+    }
+    
+    vec4 weights = bilinearWeights(frac);
+
+    // ========================================================================
+    // Angular mapping: 1 near direction → 4 far directions (branch factor 4)
+    // ========================================================================
+    // Far cascade has 2x tile size, so near tile coord maps to 2x position in far.
+    // Add sub-tile offset based on position within the near tile to create
+    // smoother angular transitions (reduces grid banding at cascade boundaries).
+    vec2 nearTileUV = (vec2(nearTile) + 0.5) / float(nearTileSize);  // [0,1] within tile
+    vec2 farTileFloat = nearTileUV * float(farTileSize) - 0.5;       // continuous far coord
+    ivec2 farTileBase = ivec2(floor(farTileFloat));
+    vec2 angularFrac = fract(farTileFloat);
+    
+    // Clamp to valid range within far tile
+    farTileBase = clamp(farTileBase, ivec2(0), ivec2(farTileSize - 2));
+    
+    // Angular weights for smooth direction blending
+    vec4 angularWeights = bilinearWeights(angularFrac);
+
+    // ========================================================================
+    // Merge loop: for each far direction, bilinearly interpolate 4 far probes
+    // Following tutorial: directions outer loop, bilinear inner loop
+    // ========================================================================
+    vec4 merged = vec4(0.0);
+    float totalWeight = 0.0;
+
+    // Loop over 4 far directions with angular interpolation weights
+    for (int d = 0; d < 4; d++) {
+        ivec2 dirOffset = bilinearOffset(d);
+        ivec2 farDirCoord = farTileBase + dirOffset;
+        float angularWeight = angularWeights[d];
+        
+        // For this direction, accumulate bilinearly-weighted merged intervals
+        vec4 dirMerged = vec4(0.0);
+        float dirWeight = 0.0;
+        
+        // Skip directions with negligible angular weight
+        if (angularWeight < 0.001) continue;
+        
+        // Loop over 4 bilinear far probes
+        for (int b = 0; b < 4; b++) {
+            ivec2 probeOffset = bilinearOffset(b);
+            ivec2 farProbe = farProbeBase + probeOffset;
+            
+            // Clamp to valid probe range
+            farProbe = clamp(farProbe, ivec2(0), farProbeCount - ivec2(1));
+            
+            // Get bilinear weight for this probe
+            float bilinearWeight = weights[b];
+            if (bilinearWeight < 0.001) continue;
+            
+            // Bilateral check: is this far probe on a compatible surface?
+            ProbeSurface farSurface = sampleProbeSurface(farProbe, farStride, gbufferSize);
+            float bilateralWeight = calculateBilateralWeight(nearSurface, farSurface, planeDistanceThreshold);
+            
+            // Combined weight: angular * spatial bilinear * bilateral
+            float probeWeight = angularWeight * bilinearWeight * bilateralWeight;
+            if (probeWeight < 0.0001) continue;
+            
+            // Fetch the far interval for this probe and direction
+            ivec2 farTexel = farProbe * farTileSize + farDirCoord;
+            farTexel = clamp(farTexel, ivec2(0), farSize - ivec2(1));
+            vec4 farInterval = imageLoad(uRadiance[farIdx], farTexel);
+            
+            // Merge: dest + transmittance * far, then weight
+            vec4 mergedInterval = mergeIntervals(destInterval, farInterval);
+            
+            dirMerged += mergedInterval * probeWeight;
+            dirWeight += probeWeight;
+        }
+        
+        // Accumulate this direction's contribution
+        if (dirWeight > 0.0001) {
+            merged += dirMerged;
+            totalWeight += dirWeight;
+        }
+    }
+
+    // Normalize by total weight across all directions and probes
+    if (totalWeight > 0.0001) {
+        merged /= totalWeight;
+    } else {
+        // Fallback: when all far samples were rejected, grab the center mapped texel from far cascade
+        // to avoid a black seam at the handoff. Still compose through the near interval (destInterval).
+        ivec2 fallbackProbe = clamp(farProbeBase, ivec2(0), farProbeCount - ivec2(1));
+        ivec2 fallbackDir = farTileBase + ivec2(1); // center of the 2x2 mapped block
+        ivec2 fallbackTexel = clamp(fallbackProbe * farTileSize + fallbackDir, ivec2(0), farSize - ivec2(1));
+        vec4 farInterval = imageLoad(uRadiance[farIdx], fallbackTexel);
+        merged = mergeIntervals(destInterval, farInterval);
+    }
+
+    // If coverage was extremely low, bias toward the far interval to avoid visible darkening
+    if (totalWeight < 0.01) {
+        ivec2 fallbackProbe = clamp(farProbeBase, ivec2(0), farProbeCount - ivec2(1));
+        ivec2 fallbackDir = farTileBase + ivec2(1);
+        ivec2 fallbackTexel = clamp(fallbackProbe * farTileSize + fallbackDir, ivec2(0), farSize - ivec2(1));
+        vec4 farInterval = imageLoad(uRadiance[farIdx], fallbackTexel);
+        // Blend 50/50 to ensure continuity
+        merged = mix(merged, mergeIntervals(destInterval, farInterval), 0.5);
+    }
+
+    // Clamp beta to valid range
+    merged.a = clamp(merged.a, 0.0, 1.0);
+
+    imageStore(uRadiance[nearIdx], gid, merged);
+}

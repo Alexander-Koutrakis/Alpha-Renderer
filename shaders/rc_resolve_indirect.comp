@@ -1,0 +1,457 @@
+#version 450
+
+// Recap:
+// - Resolves merged radiance cascades into screen-space diffuse GI.
+// - Bilinear probe sampling + horizon check fetch the correct interval per pixel.
+// - Skybox fills remaining transmittance; temporal reprojection smooths noise.
+// - Outputs GI to uGIOut; history buffers feed temporal accumulation.
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform CameraUBO {
+    mat4 view;
+    mat4 proj;
+    mat4 viewProj;
+    vec4 camPos;
+    vec4 clipPlanes;
+} uCamera;
+
+layout(set = 0, binding = 1) uniform sampler2D uGBufferPosition;
+layout(set = 0, binding = 2) uniform sampler2D uGBufferNormal;
+layout(set = 0, binding = 3) uniform sampler2D uGBufferAlbedo;
+layout(set = 0, binding = 4) uniform sampler2D uGBufferMaterial;
+
+layout(set = 0, binding = 5) uniform sampler2D uRadiance[6];
+
+layout(rgba16f, set = 0, binding = 7) uniform writeonly image2D uGIOut;
+
+layout(set = 0, binding = 8) uniform sampler2D uGIHistory;
+layout(set = 0, binding = 9) uniform sampler2D uPrevGBufferPosition;
+
+layout(set = 1, binding = 0) uniform samplerCube uSkybox;
+
+layout(push_constant) uniform ResolvePC {
+    mat4 prevViewProj;   // Used to reproject for history validation
+    int probeStridePx;
+    int tileSize;
+    int temporalFrame;   // Frame index seed for sample jitter / temporal logic
+} pc;
+
+const int RESOLVE_WIDTH = 2;
+const int RESOLVE_HEIGHT = 2;
+const float INV_WIDTH = 1.0 / float(RESOLVE_WIDTH);
+const float INV_HEIGHT = 1.0 / float(RESOLVE_HEIGHT);
+const float PI = 3.14159265359;
+const float GI_BOOST = 3.0;
+const float RC_BASE_INTERVAL_LENGTH = 0.08; // Must match Rendering::RC_BASE_INTERVAL_LENGTH
+const float TEMPORAL_DEPTH_THRESHOLD = 0.6;      
+const float TEMPORAL_NORMAL_THRESHOLD = 0.75;    
+const float TEMPORAL_BLEND_ALPHA = 0.05;
+const float HISTORY_SPATIAL_BLUR_RADIUS = 1.5;
+
+float computeHemisphereShrink(int tileSize) {
+    float t = clamp((float(tileSize) - 2.0) / 6.0, 0.0, 1.0);
+    return mix(0.90, 0.98, t);
+}
+
+vec3 hemisphereDirFromUV(vec2 uv, float hemiShrink) {
+    uv = mix(vec2(0.5), uv, hemiShrink);
+    vec2 p = uv * 2.0 - 1.0; 
+    vec3 v = vec3(p.x, p.y, 1.0 - abs(p.x) - abs(p.y));
+    if (v.z < 0.0) {                    
+        v.xy = (1.0 - abs(v.yx)) * sign(v.xy);
+        v.z = 0.0;
+    }
+    v = normalize(v);
+    return v;
+}
+
+vec2 uvFromHemisphereDir(vec3 dir, float hemiShrink) {
+    vec3 d = normalize(dir);
+    if (d.z <= 0.0) return vec2(-1.0);
+    float denom = abs(d.x) + abs(d.y) + d.z;
+    if (denom < 0.0001) return vec2(-1.0);
+    vec2 p = d.xy / denom;      
+    vec2 uv = 0.5 * (p + 1.0);
+    uv = 0.5 + (uv - 0.5) / hemiShrink;
+    return clamp(uv, vec2(0.001), vec2(0.999));
+}
+
+mat3 buildProbeBasis(vec3 n) {
+    vec3 normal = normalize(n);
+    vec3 up = (abs(normal.z) < 0.999) ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
+    vec3 tangent = normalize(cross(up, normal));
+    vec3 bitangent = cross(normal, tangent);
+    return mat3(tangent, bitangent, normal);
+}
+
+vec3 decodeNormal(vec3 encoded) {
+    return normalize(encoded * 2.0 - 1.0);
+}
+
+vec3 FresnelSchlick(float cosTheta, vec3 F0) {
+    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+}
+
+struct ScreenSample {
+    vec3 worldPosition;
+    vec3 normal;
+    vec3 albedo;
+    vec4 materialParams;
+    bool valid;
+};
+
+struct CascadeSamplingParams {
+    int cascadeIndex;
+    int probeStridePx;
+    int tileSize;
+    vec2 atlasSize;
+    ivec2 probeCount;
+    float intervalStart;
+    float intervalLength;
+};
+
+struct ProbeLookup {
+    ivec2 probeIndex;
+    vec2 tileOriginUV;
+    vec2 tileScaleUV;
+    bool insideAtlas;
+};
+
+struct BilinearSamplingInfo {
+    ProbeLookup lookups[4]; // TL, TR, BL, BR
+    float weights[4];
+};
+
+struct RadianceIntervalSample {
+    vec3 radiance;
+    float beta;
+    vec3 worldDirection;
+    float weight;
+};
+
+ScreenSample fetchScreenSample(ivec2 pixel) {
+    ScreenSample result;
+    result.worldPosition = vec3(0.0);
+    result.normal = vec3(0.0);
+    result.albedo = vec3(0.0);
+    result.materialParams = vec4(0.0);
+    result.valid = false;
+
+    ivec2 targetSize = imageSize(uGIOut);
+    if (pixel.x < 0 || pixel.y < 0 || pixel.x >= targetSize.x || pixel.y >= targetSize.y) {
+        return result;
+    }
+
+    vec4 worldSample = texelFetch(uGBufferPosition, pixel, 0);
+    if (worldSample.w <= 0.0) {
+        return result;
+    }
+
+    result.worldPosition = worldSample.xyz;
+    result.normal = decodeNormal(texelFetch(uGBufferNormal, pixel, 0).xyz);
+    result.albedo = texelFetch(uGBufferAlbedo, pixel, 0).rgb;
+    result.materialParams = texelFetch(uGBufferMaterial, pixel, 0);
+    result.valid = true;
+    return result;
+}
+
+CascadeSamplingParams makeCascadeParams(int cascadeIdx) {
+    CascadeSamplingParams params;
+    params.cascadeIndex = cascadeIdx;
+    params.probeStridePx = max(1, pc.probeStridePx << cascadeIdx);
+    params.tileSize = max(1, pc.tileSize << cascadeIdx);
+
+    ivec2 atlasPixels = textureSize(uRadiance[cascadeIdx], 0);
+    params.atlasSize = vec2(atlasPixels);
+    params.probeCount = atlasPixels / params.tileSize;
+
+    float scaleStart = (cascadeIdx == 0) ? 0.0 : float(1 << (2 * cascadeIdx));
+    float scaleEnd = float(1 << (2 * (cascadeIdx + 1)));
+    params.intervalStart = RC_BASE_INTERVAL_LENGTH * scaleStart;
+    params.intervalLength = RC_BASE_INTERVAL_LENGTH * (scaleEnd - scaleStart);
+    return params;
+}
+
+BilinearSamplingInfo buildBilinearLookup(ivec2 pixel, const CascadeSamplingParams params) {
+    BilinearSamplingInfo info;
+
+    // Center-based mapping to align with merge mapping:
+    // continuousProbe = ((pixel + 0.5) / stride) - 0.5
+    float stride = float(params.probeStridePx);
+    vec2 continuousProbe = ((vec2(pixel) + 0.5) / stride) - 0.5;
+    ivec2 baseProbeIdx = ivec2(floor(continuousProbe));
+    vec2 f = fract(continuousProbe);
+
+    info.weights[0] = (1.0 - f.x) * (1.0 - f.y); // TL
+    info.weights[1] = f.x * (1.0 - f.y);         // TR
+    info.weights[2] = (1.0 - f.x) * f.y;         // BL
+    info.weights[3] = f.x * f.y;                 // BR
+
+    ivec2 offsets[4] = {
+        ivec2(0, 0), ivec2(1, 0), ivec2(0, 1), ivec2(1, 1)
+    };
+
+    for (int i = 0; i < 4; i++) {
+        ivec2 probeId = baseProbeIdx + offsets[i];
+        ProbeLookup lookup;
+        lookup.probeIndex = ivec2(0);
+        lookup.tileOriginUV = vec2(0.0);
+        lookup.tileScaleUV = vec2(0.0);
+        lookup.insideAtlas = false;
+
+        if (probeId.x >= 0 && probeId.y >= 0 &&
+            probeId.x < params.probeCount.x && probeId.y < params.probeCount.y) {
+            lookup.probeIndex = probeId;
+            lookup.insideAtlas = true;
+            ivec2 tileOriginPx = probeId * params.tileSize;
+            vec2 atlasDim = params.atlasSize;
+            lookup.tileOriginUV = vec2(tileOriginPx) / atlasDim;
+            lookup.tileScaleUV = vec2(params.tileSize) / atlasDim;
+        }
+        info.lookups[i] = lookup;
+    }
+    return info;
+}
+
+ivec2 getProbePixel(ivec2 probeIndex, int probeStridePx) {
+    return probeIndex * probeStridePx + probeStridePx / 2;
+}
+
+RadianceIntervalSample sampleRadianceInterval(
+    int cascadeIdx,
+    const CascadeSamplingParams params,
+    const BilinearSamplingInfo bilinearInfo,
+    vec3 worldDir
+) {
+    RadianceIntervalSample result;
+    result.radiance = vec3(0.0);
+    result.beta = 1.0;
+    result.worldDirection = worldDir;
+    result.weight = 0.0;
+
+    vec2 texelSizeUV = 1.0 / params.atlasSize;
+    float totalWeight = 0.0;
+    vec3 accumRadiance = vec3(0.0);
+    float accumBeta = 0.0;
+
+    for (int i = 0; i < 4; i++) {
+        float w = bilinearInfo.weights[i];
+        ProbeLookup lookup = bilinearInfo.lookups[i];
+        if (!lookup.insideAtlas || w <= 0.00001) continue;
+
+        ivec2 probePixel = getProbePixel(lookup.probeIndex, params.probeStridePx);
+        ivec2 gbufferSize = textureSize(uGBufferPosition, 0);
+        probePixel = clamp(probePixel, ivec2(0), gbufferSize - ivec2(1));
+        vec4 probePosSample = texelFetch(uGBufferPosition, probePixel, 0);
+        if (probePosSample.w <= 0.0) {
+            continue;
+        }
+
+        vec3 probeNormal = decodeNormal(texelFetch(uGBufferNormal, probePixel, 0).xyz);
+        mat3 probeBasis = buildProbeBasis(probeNormal);
+        vec3 localDir = transpose(probeBasis) * worldDir;
+
+        // Soft horizon handling: allow slightly negative to avoid dark bands at cascade edges.
+        if (localDir.z < -0.1) {
+            continue; // clearly behind the probe
+        }
+        float horizonWeight = smoothstep(-0.1, 0.2, localDir.z);
+        localDir.z = max(localDir.z, 0.01);
+        localDir = normalize(localDir);
+        float hemiShrink = computeHemisphereShrink(params.tileSize);
+        vec2 probeUV = uvFromHemisphereDir(localDir, hemiShrink);
+        if (probeUV.x < 0.0) {
+            continue;
+        }
+
+        vec2 atlasUV = lookup.tileOriginUV + probeUV * lookup.tileScaleUV;
+        vec2 minUV = lookup.tileOriginUV + 0.5 * texelSizeUV;
+        vec2 maxUV = lookup.tileOriginUV + lookup.tileScaleUV - 0.5 * texelSizeUV;
+        atlasUV = clamp(atlasUV, minUV, maxUV);
+
+        vec4 rb = texture(uRadiance[cascadeIdx], atlasUV);
+
+        float weighted = w * horizonWeight;
+        accumRadiance += rb.rgb * weighted;
+        accumBeta += rb.a * weighted;
+        totalWeight += weighted;
+    }
+
+    if (totalWeight > 0.00001) {
+        result.radiance = accumRadiance / totalWeight;
+        result.beta = clamp(accumBeta / totalWeight, 0.0, 1.0);
+        result.weight = totalWeight;
+    } else {
+        result.radiance = vec3(0.0);
+        result.beta = 1.0;
+        result.weight = 0.0;
+    }
+    return result;
+}
+
+struct IntegrationResult {
+    vec3 irradiance;
+};
+
+vec3 sampleHistoryWithSpatialBlur(vec2 historyUV, ivec2 targetSize) {
+    vec2 texel = 1.0 / vec2(targetSize);
+    vec2 o = texel * HISTORY_SPATIAL_BLUR_RADIUS;
+    vec2 offsets[9] = vec2[9](
+        vec2(0.0, 0.0),
+        vec2(-o.x, 0.0), vec2(o.x, 0.0),
+        vec2(0.0, -o.y), vec2(0.0, o.y),
+        vec2(-o.x, -o.y), vec2(o.x, -o.y),
+        vec2(-o.x, o.y), vec2(o.x, o.y)
+    );
+    float weights[9] = float[9](0.25, 0.125, 0.125, 0.125, 0.125, 0.0625, 0.0625, 0.0625, 0.0625);
+    vec3 accum = vec3(0.0);
+    for (int i = 0; i < 9; ++i) {
+        vec2 uv = clamp(historyUV + offsets[i], vec2(0.0), vec2(1.0));
+        accum += texture(uGIHistory, uv).rgb * weights[i];
+    }
+    return accum;
+}
+
+vec3 clampHistoryToNeighborhood(vec3 history, vec3 currentGI, ivec2 pixel, ivec2 targetSize) {
+    float histL = dot(history, vec3(0.299, 0.587, 0.114));
+    float currL = dot(currentGI, vec3(0.299, 0.587, 0.114));
+    // Relaxed bounds to avoid over-clamping which causes flickering
+    // Allow history to be darker (0.1x) or brighter (8x) before soft-clamping
+    float lmin = currL * 0.1;
+    float lmax = currL * 8.0 + 0.1;
+    if (histL < lmin || histL > lmax) {
+        // Softer blend - 30% toward current instead of 50% to preserve more history
+        return mix(history, currentGI, 0.3);
+    }
+    return history;
+}
+
+struct TemporalResult {
+    vec3 blendedGI;
+    bool historyValid;
+};
+
+TemporalResult applyTemporalAccumulation(
+    vec3 currentGI,
+    vec3 worldPosition,
+    vec3 normal,
+    ivec2 pixel,
+    ivec2 targetSize
+) {
+    TemporalResult outResult;
+    outResult.blendedGI = currentGI;
+    outResult.historyValid = false;
+
+    vec4 prevClip = pc.prevViewProj * vec4(worldPosition, 1.0);
+    if (prevClip.w <= 0.0) {
+        return outResult;
+    }
+    vec3 prevNDC = prevClip.xyz / prevClip.w;
+    if (abs(prevNDC.x) > 1.0 || abs(prevNDC.y) > 1.0 || prevNDC.z < 0.0 || prevNDC.z > 1.0) {
+        return outResult;
+    }
+    vec2 historyUV = prevNDC.xy * 0.5 + 0.5;
+    ivec2 historyPx = clamp(ivec2(historyUV * vec2(targetSize)), ivec2(0), targetSize - ivec2(1));
+
+    vec4 historyPos = texelFetch(uPrevGBufferPosition, historyPx, 0);
+    if (historyPos.w <= 0.0) {
+        return outResult;
+    }
+
+    float depthDiff = length(historyPos.xyz - worldPosition);
+    float depthConf = 1.0 - smoothstep(TEMPORAL_DEPTH_THRESHOLD * 0.5, TEMPORAL_DEPTH_THRESHOLD, depthDiff);
+
+    vec3 historyNormal = decodeNormal(texelFetch(uGBufferNormal, historyPx, 0).xyz);
+    float normalDot = dot(normal, historyNormal);
+    float normalConf = smoothstep(TEMPORAL_NORMAL_THRESHOLD - 0.1, 0.99, normalDot);
+
+    float confidence = depthConf * normalConf;
+    if (confidence < 0.1) {
+        return outResult;
+    }
+
+    vec3 historyGI = sampleHistoryWithSpatialBlur(historyUV, targetSize);
+    historyGI = clampHistoryToNeighborhood(historyGI, currentGI, pixel, targetSize);
+
+    float alpha = mix(TEMPORAL_BLEND_ALPHA, 0.5, 1.0 - confidence); // more history when confident
+    outResult.blendedGI = mix(historyGI, currentGI, alpha);
+    outResult.historyValid = true;
+    return outResult;
+}
+IntegrationResult integrateDiffuseGI(ivec2 pixel, const ScreenSample screenSample) {
+    IntegrationResult result;
+    result.irradiance = vec3(0.0);
+
+    CascadeSamplingParams cascade0 = makeCascadeParams(0);
+    BilinearSamplingInfo bilinear0 = buildBilinearLookup(pixel, cascade0);
+    mat3 pixelBasis = buildProbeBasis(screenSample.normal);
+
+    vec3 totalIrradiance = vec3(0.0);
+    const float hemiShrink = computeHemisphereShrink(cascade0.tileSize);
+    // Reduced jitter amplitude from 0.07 to 0.03 to minimize frame-to-frame noise
+    // The temporal accumulation will handle the rest of the variance smoothing
+    float frameJitter = fract(float(pc.temporalFrame) * 0.61803398875);
+    vec2 jitter = (vec2(frameJitter, fract(frameJitter * 3.1)) - 0.5) * 0.03;
+
+    for (int y = 0; y < RESOLVE_HEIGHT; ++y) {
+        for (int x = 0; x < RESOLVE_WIDTH; ++x) {
+            vec2 uv = (vec2(float(x) + 0.5, float(y) + 0.5) + jitter) * vec2(INV_WIDTH, INV_HEIGHT);
+            uv = clamp(uv, vec2(0.02), vec2(0.98));
+
+            vec3 localDir = hemisphereDirFromUV(uv, hemiShrink);
+            vec3 worldDir = normalize(pixelBasis * localDir);
+
+            float ndotl = max(dot(screenSample.normal, worldDir), 0.0);
+            if (ndotl <= 0.0) continue;
+
+            RadianceIntervalSample interval = sampleRadianceInterval(
+                0, cascade0, bilinear0, worldDir
+            );
+
+            vec3 rayRadiance = interval.radiance;
+            if (interval.beta > 0.0) {
+                rayRadiance += interval.beta * texture(uSkybox, worldDir).rgb;
+            }
+
+            totalIrradiance += rayRadiance * ndotl;
+        }
+    }
+
+    float sampleCount = float(RESOLVE_WIDTH * RESOLVE_HEIGHT);
+    result.irradiance = totalIrradiance * (2.0 * PI / sampleCount);
+    return result;
+}
+
+void main() {
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ScreenSample screenSample = fetchScreenSample(pixel);
+    if (!screenSample.valid) {
+        imageStore(uGIOut, pixel, vec4(0.0));
+        return;
+    }
+
+    IntegrationResult gi = integrateDiffuseGI(pixel, screenSample);
+
+    vec3 viewDir = normalize(uCamera.camPos.xyz - screenSample.worldPosition);
+    float NdotV = max(dot(screenSample.normal, viewDir), 0.0);
+
+    float metallic = screenSample.materialParams.r;
+    vec3 F0 = mix(vec3(0.04), screenSample.albedo, metallic);
+    vec3 F = FresnelSchlick(NdotV, F0);
+    vec3 kD = (vec3(1.0) - F) * (1.0 - metallic);
+
+    vec3 diffuseRadiance = gi.irradiance * screenSample.albedo * kD * (1.0 / PI) * GI_BOOST;
+
+    // Temporal accumulation
+    ivec2 targetSize = imageSize(uGIOut);
+    TemporalResult temporal = applyTemporalAccumulation(
+        diffuseRadiance,
+        screenSample.worldPosition,
+        screenSample.normal,
+        pixel,
+        targetSize
+    );
+
+    imageStore(uGIOut, pixel, vec4(temporal.blendedGI, 1.0));
+}

@@ -1,0 +1,32 @@
+#version 450
+
+// Recap:
+// - Downsamples linear depth pyramid: mip k+1 = min/max over 2x2 of mip k.
+// - Preserves min for conservative occlusion and max for thickness checks.
+// - Consumes sampler mip k and writes storage image mip k+1 (bound via view).
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform sampler2D uPyramid;
+
+layout(rg16f, set = 0, binding = 1) uniform writeonly image2D uDstMip;
+
+void main() {
+    ivec2 dstCoord = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 dstSize = imageSize(uDstMip);
+    if (dstCoord.x >= dstSize.x || dstCoord.y >= dstSize.y) {
+        return;
+    }
+
+    ivec2 srcCoord = dstCoord * 2;
+    vec2 d00 = texelFetch(uPyramid, srcCoord + ivec2(0, 0), 0).rg;
+    vec2 d10 = texelFetch(uPyramid, srcCoord + ivec2(1, 0), 0).rg;
+    vec2 d01 = texelFetch(uPyramid, srcCoord + ivec2(0, 1), 0).rg;
+    vec2 d11 = texelFetch(uPyramid, srcCoord + ivec2(1, 1), 0).rg;
+
+    float minDepth = min(min(d00.r, d10.r), min(d01.r, d11.r));
+    float maxDepth = max(max(d00.g, d10.g), max(d01.g, d11.g));
+    imageStore(uDstMip, dstCoord, vec4(minDepth, maxDepth, 0.0, 0.0));
+}
+
+
