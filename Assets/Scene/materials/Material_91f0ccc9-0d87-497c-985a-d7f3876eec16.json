@@ -1,0 +1,22 @@
+{
+  "ID": "91f0ccc9-0d87-497c-985a-d7f3876eec16",
+  "Type": 0,
+  "AlbedoPath": null,
+  "NormalPath": null,
+  "MetallicSmoothnessPath": null,
+  "OcclusionPath": null,
+  "EmissionPath": null,
+  "AlbedoColor": {
+    "x": 1.0,
+    "y": 0.0,
+    "z": 0.0,
+    "w": 1.0
+  },
+  "Mettalic": 0.0,
+  "Smoothness": 0.5,
+  "AO": 1.0,
+  "Alpha": 1.0,
+  "AlphaCutoff": 0.5,
+  "NormalStrength": 1.0,
+  "EnableGPUInstancing": false
+}

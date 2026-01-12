@@ -1,0 +1,367 @@
+{
+  "ColorTexturePaths": [],
+  "NormalTexturePaths": [],
+  "MeshPaths": [
+    "Assets/Scene/meshes/Cube_0fddae11-53cc-4449-9567-08431abf328b.json",
+    "Assets/Scene/meshes/Suzanne_1efc555b-3353-441b-a6bc-6df60a891e5e.json",
+    "Assets/Scene/meshes/Sphere_63fae732-5757-4e03-8194-3205dacef2f5.json"
+  ],
+  "MaterialPaths": [
+    "Assets/Scene/materials/Material_13e1d11d-293b-4ae9-90b0-a1ac3b0af3e8.json",
+    "Assets/Scene/materials/Material_d65c42c9-b7ab-405a-b4df-3256448a8f77.json",
+    "Assets/Scene/materials/Material_47df98d2-3111-4570-a3c9-faf8dbe98bd4.json",
+    "Assets/Scene/materials/Material_cec13c4c-61f0-4224-a411-5740583ae52a.json",
+    "Assets/Scene/materials/Material_91f0ccc9-0d87-497c-985a-d7f3876eec16.json"
+  ],
+  "Gameobjects": [
+    {
+      "EntityID": 0,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": -0.206,
+            "y": 0.786,
+            "z": -6.503
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+          },
+          "Scale": {
+            "x": 0.6,
+            "y": 0.6,
+            "z": 0.6
+          }
+        },
+        {
+          "$type": "SceneSerialization.sMeshRenderer, Assembly-CSharp",
+          "MeshID": "Cube_0fddae11-53cc-4449-9567-08431abf328b",
+          "MaterialID": "13e1d11d-293b-4ae9-90b0-a1ac3b0af3e8",
+          "MaterialIDs": [
+            "13e1d11d-293b-4ae9-90b0-a1ac3b0af3e8"
+          ],
+          "CastingShadows": true
+        }
+      ]
+    },
+    {
+      "EntityID": 1,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 1.454,
+            "y": 1.071,
+            "z": -6.594
+          },
+          "Rotation": {
+            "x": 0.29276827,
+            "y": 0.462756336,
+            "z": 0.8202833,
+            "w": -0.165162861
+          },
+          "Scale": {
+            "x": 100.000069,
+            "y": 100.000046,
+            "z": 100.000015
+          }
+        },
+        {
+          "$type": "SceneSerialization.sMeshRenderer, Assembly-CSharp",
+          "MeshID": "Suzanne_1efc555b-3353-441b-a6bc-6df60a891e5e",
+          "MaterialID": "d65c42c9-b7ab-405a-b4df-3256448a8f77",
+          "MaterialIDs": [
+            "d65c42c9-b7ab-405a-b4df-3256448a8f77"
+          ],
+          "CastingShadows": true
+        }
+      ]
+    },
+    {
+      "EntityID": 2,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 0.46,
+            "y": 4.365,
+            "z": -7.23
+          },
+          "Rotation": {
+            "x": 0.707106769,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 0.707106769
+          },
+          "Scale": {
+            "x": 1.0,
+            "y": 0.9999999,
+            "z": 0.9999999
+          }
+        },
+        {
+          "$type": "SceneSerialization.sSpotLight, Assembly-CSharp",
+          "Intensity": 5.0,
+          "Color": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+          },
+          "InnerCutoff": 96.30075,
+          "OuterCutoff": 158.67952,
+          "Range": 10.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 3,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 0.0,
+            "y": 4.28,
+            "z": -4.0
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+          },
+          "Scale": {
+            "x": 10.0,
+            "y": 1.0,
+            "z": 10.0
+          }
+        },
+        {
+          "$type": "SceneSerialization.sMeshRenderer, Assembly-CSharp",
+          "MeshID": "Cube_0fddae11-53cc-4449-9567-08431abf328b",
+          "MaterialID": "d65c42c9-b7ab-405a-b4df-3256448a8f77",
+          "MaterialIDs": [
+            "d65c42c9-b7ab-405a-b4df-3256448a8f77"
+          ],
+          "CastingShadows": true
+        }
+      ]
+    },
+    {
+      "EntityID": 4,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 0.0,
+            "y": 1.6,
+            "z": -4.28
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+          },
+          "Scale": {
+            "x": 10.0,
+            "y": 5.0,
+            "z": 1.0
+          }
+        },
+        {
+          "$type": "SceneSerialization.sMeshRenderer, Assembly-CSharp",
+          "MeshID": "Cube_0fddae11-53cc-4449-9567-08431abf328b",
+          "MaterialID": "47df98d2-3111-4570-a3c9-faf8dbe98bd4",
+          "MaterialIDs": [
+            "47df98d2-3111-4570-a3c9-faf8dbe98bd4"
+          ],
+          "CastingShadows": true
+        }
+      ]
+    },
+    {
+      "EntityID": 5,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": -1.8,
+            "y": 1.44,
+            "z": -5.9
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+          },
+          "Scale": {
+            "x": 2.0,
+            "y": 2.0,
+            "z": 2.0
+          }
+        },
+        {
+          "$type": "SceneSerialization.sMeshRenderer, Assembly-CSharp",
+          "MeshID": "Sphere_63fae732-5757-4e03-8194-3205dacef2f5",
+          "MaterialID": "d65c42c9-b7ab-405a-b4df-3256448a8f77",
+          "MaterialIDs": [
+            "d65c42c9-b7ab-405a-b4df-3256448a8f77"
+          ],
+          "CastingShadows": true
+        }
+      ]
+    },
+    {
+      "EntityID": 6,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 3.5,
+            "y": 1.94,
+            "z": -3.86
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+          },
+          "Scale": {
+            "x": 1.0,
+            "y": 5.0,
+            "z": 10.0
+          }
+        },
+        {
+          "$type": "SceneSerialization.sMeshRenderer, Assembly-CSharp",
+          "MeshID": "Cube_0fddae11-53cc-4449-9567-08431abf328b",
+          "MaterialID": "cec13c4c-61f0-4224-a411-5740583ae52a",
+          "MaterialIDs": [
+            "cec13c4c-61f0-4224-a411-5740583ae52a"
+          ],
+          "CastingShadows": true
+        }
+      ]
+    },
+    {
+      "EntityID": 7,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": -3.5,
+            "y": 1.94,
+            "z": -3.86
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+          },
+          "Scale": {
+            "x": 1.0,
+            "y": 5.0,
+            "z": 10.0
+          }
+        },
+        {
+          "$type": "SceneSerialization.sMeshRenderer, Assembly-CSharp",
+          "MeshID": "Cube_0fddae11-53cc-4449-9567-08431abf328b",
+          "MaterialID": "91f0ccc9-0d87-497c-985a-d7f3876eec16",
+          "MaterialIDs": [
+            "91f0ccc9-0d87-497c-985a-d7f3876eec16"
+          ],
+          "CastingShadows": true
+        }
+      ]
+    },
+    {
+      "EntityID": 8,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 0.0,
+            "y": 0.04,
+            "z": -4.0
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+          },
+          "Scale": {
+            "x": 10.0,
+            "y": 1.0,
+            "z": 10.0
+          }
+        },
+        {
+          "$type": "SceneSerialization.sMeshRenderer, Assembly-CSharp",
+          "MeshID": "Cube_0fddae11-53cc-4449-9567-08431abf328b",
+          "MaterialID": "d65c42c9-b7ab-405a-b4df-3256448a8f77",
+          "MaterialIDs": [
+            "d65c42c9-b7ab-405a-b4df-3256448a8f77"
+          ],
+          "CastingShadows": true
+        }
+      ]
+    },
+    {
+      "EntityID": 9,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 0.0,
+            "y": 1.837,
+            "z": -10.0
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+          },
+          "Scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+          }
+        },
+        {
+          "$type": "SceneSerialization.sCamera, Assembly-CSharp",
+          "FieldOfView": 60.0,
+          "NearPlane": 0.3,
+          "FarPlane": 1000.0
+        }
+      ]
+    }
+  ],
+  "EnviromentLighting": {
+    "Color": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+    },
+    "AmbientIntensity": 0.0,
+    "SkyboxPaths": [
+      "Assets/Scene/textures/FluffballDayFront_9852452c.hdr",
+      "Assets/Scene/textures/FluffballDayBack_392749dd.hdr",
+      "Assets/Scene/textures/FluffballDayRight_976ce4fb.hdr",
+      "Assets/Scene/textures/FluffballDayLeft_53679ff1.hdr",
+      "Assets/Scene/textures/FluffballDayTop_08394a24.hdr",
+      "Assets/Scene/textures/FluffballDayBottom_fa5cfdaf.hdr"
+    ],
+    "ReflectionIntensity": 0.0
+  }
+}
