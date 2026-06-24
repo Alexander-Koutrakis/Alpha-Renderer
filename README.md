@@ -19,17 +19,21 @@ Alpha Renderer is **not a game engine**. It is a renderer-first project intended
   </tr>
   <tr>
     <td>
-      <img src="https://github.com/user-attachments/assets/6f9870c1-1ff2-4c06-a280-ad09ea1a4ff5" />
+      <img src="./media/AlphaSample.jpg" />
     </td>
     <td>
-      <img src="https://github.com/user-attachments/assets/87bc2baf-c166-4e81-9b48-b0aaea9af7bd" />
+      <img src="./media/AlphaSampleGI.jpg" />
     </td>
   </tr>
 </table>
 
 ### Real-Time Rendering Demo
 
-https://github.com/user-attachments/assets/a0214d83-2f8e-4207-be3d-8a5bbaca1ed1
+
+
+https://github.com/user-attachments/assets/712dff09-0053-4ede-ae4c-1e595e898644
+
+
 
 *Deferred PBR lighting, cascaded shadows, screen-space global illumination, transparency, and post-processing running in real time.*
 
@@ -37,8 +41,8 @@ https://github.com/user-attachments/assets/a0214d83-2f8e-4207-be3d-8a5bbaca1ed1
 
 ### Scene Examples
 
-<img src="https://github.com/user-attachments/assets/10ae5c26-5f8f-44fa-be84-cfae5648ef84" />
-<img src="https://github.com/user-attachments/assets/de14e02d-ec43-49ee-931f-947729481580" />
+<img src="./media/SampleStreet.jpg" />
+<img src="./media/SampleStreet2.jpg" />
 
 ---
 
