@@ -33,7 +33,7 @@ Rules for any agent (Claude Code or Codex) changing this repo.
 - `shaders/`: GLSL 450 (vert/frag/comp), compiled with glslc to Vulkan 1.3 SPIR-V.
 - `Assets/`: Unity-exported sample scene (JSON + HDR cubemap faces).
 - `external/`: vendored third-party code (imgui, json, tinygltf, stb, SMAA tables). Never reformat or edit.
-- `PLAN.md`: the phased CV-polish plan. One `polish/<phase>` branch per phase, merged after approval.
+- `PLAN.md`: the phased engineering-quality plan. One branch per phase, named after the phase, merged after approval.
 - `scripts/`: helper scripts used by `just`.
 
 ## Environment
