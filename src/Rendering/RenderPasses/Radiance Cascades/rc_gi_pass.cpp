@@ -3,16 +3,14 @@
 #include <algorithm>
 #include <stdexcept>
 
-
 namespace Rendering {
 constexpr uint32_t RC_BUILD_GROUP_SIZE_X = 8u;
 constexpr uint32_t RC_BUILD_GROUP_SIZE_Y = 8u;
-RCGIPass::RCGIPass(Device& device, const CreateInfo& createInfo)
-    : device(device), info(createInfo) {
+RCGIPass::RCGIPass(Device& device, const CreateInfo& createInfo) : device(device), info(createInfo) {
     // Create a dedicated sampler for compute sampling
     VkSamplerCreateInfo samplerInfo{};
     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = VK_FILTER_NEAREST;  // texelFetch ignores filter, but NEAREST is explicit
+    samplerInfo.magFilter = VK_FILTER_NEAREST; // texelFetch ignores filter, but NEAREST is explicit
     samplerInfo.minFilter = VK_FILTER_NEAREST;
     samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
     samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -90,16 +88,9 @@ void RCGIPass::createDepthPyramidPipeline() {
 
     ComputePipelineConfigInfo cfg{};
     cfg.pipelineLayout = depthPyramidPipelineLayout;
-    depthPyramidSeedPipeline = std::make_unique<ComputePipeline>(
-        device,
-        "shaders/rc_depth_copy.comp.spv",
-        cfg
-    );
-    depthPyramidDownsamplePipeline = std::make_unique<ComputePipeline>(
-        device,
-        "shaders/rc_depth_downsample.comp.spv",
-        cfg
-    );
+    depthPyramidSeedPipeline = std::make_unique<ComputePipeline>(device, "shaders/rc_depth_copy.comp.spv", cfg);
+    depthPyramidDownsamplePipeline =
+        std::make_unique<ComputePipeline>(device, "shaders/rc_depth_downsample.comp.spv", cfg);
 }
 
 void RCGIPass::createRCBuildPipeline() {
@@ -122,11 +113,7 @@ void RCGIPass::createRCBuildPipeline() {
 
     ComputePipelineConfigInfo cfg{};
     cfg.pipelineLayout = rcBuildPipelineLayout;
-    rcBuildPipeline = std::make_unique<ComputePipeline>(
-        device,
-        "shaders/rc_build_cascade.comp.spv",
-        cfg
-    );
+    rcBuildPipeline = std::make_unique<ComputePipeline>(device, "shaders/rc_build_cascade.comp.spv", cfg);
 }
 
 void RCGIPass::createRCMergePipeline() {
@@ -136,11 +123,7 @@ void RCGIPass::createRCMergePipeline() {
 
     ComputePipelineConfigInfo cfg{};
     cfg.pipelineLayout = rcBuildPipelineLayout;
-    rcMergePipeline = std::make_unique<ComputePipeline>(
-        device,
-        "shaders/rc_merge.comp.spv",
-        cfg
-    );
+    rcMergePipeline = std::make_unique<ComputePipeline>(device, "shaders/rc_merge.comp.spv", cfg);
 }
 
 void RCGIPass::createRCResolvePipeline() {
@@ -153,10 +136,7 @@ void RCGIPass::createRCResolvePipeline() {
     VkPipelineLayoutCreateInfo layoutInfo{};
     layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 
-    std::array<VkDescriptorSetLayout, 2> setLayouts = {
-        info.rcResolveSetLayout,
-        info.skyboxSetLayout
-    };
+    std::array<VkDescriptorSetLayout, 2> setLayouts = {info.rcResolveSetLayout, info.skyboxSetLayout};
 
     layoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
     layoutInfo.pSetLayouts = setLayouts.data();
@@ -169,11 +149,7 @@ void RCGIPass::createRCResolvePipeline() {
 
     ComputePipelineConfigInfo cfg{};
     cfg.pipelineLayout = rcResolvePipelineLayout;
-    rcResolvePipeline = std::make_unique<ComputePipeline>(
-        device,
-        "shaders/rc_resolve_indirect.comp.spv",
-        cfg
-    );
+    rcResolvePipeline = std::make_unique<ComputePipeline>(device, "shaders/rc_resolve_indirect.comp.spv", cfg);
 }
 
 void RCGIPass::buildRCCascades(FrameContext& frameContext) {
@@ -185,16 +161,7 @@ void RCGIPass::buildRCCascades(FrameContext& frameContext) {
     // Bind pipeline and descriptor set once
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, rcBuildPipeline->getPipeline());
     VkDescriptorSet ds = frameContext.rcBuildDescriptorSet;
-    vkCmdBindDescriptorSets(
-        cmd,
-        VK_PIPELINE_BIND_POINT_COMPUTE,
-        rcBuildPipelineLayout,
-        0,
-        1,
-        &ds,
-        0,
-        nullptr
-    );
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, rcBuildPipelineLayout, 0, 1, &ds, 0, nullptr);
 
     // Compute probe-relative distance bands so each cascade integrates a specific ray interval
     const uint32_t depthMipLevels = frameContext.depthPyramidMipLevels;
@@ -221,48 +188,30 @@ void RCGIPass::mergeRCCascades(FrameContext& frameContext) {
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, rcMergePipeline->getPipeline());
     VkDescriptorSet ds = frameContext.rcBuildDescriptorSet;
-    vkCmdBindDescriptorSets(
-        cmd,
-        VK_PIPELINE_BIND_POINT_COMPUTE,
-        rcBuildPipelineLayout,
-        0,
-        1,
-        &ds,
-        0,
-        nullptr
-    );
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, rcBuildPipelineLayout, 0, 1, &ds, 0, nullptr);
 
     for (int cascade = static_cast<int>(Rendering::RC_CASCADE_COUNT) - 2; cascade >= 0; --cascade) {
-        CascadeDispatchInfo dispatchInfo = prepareCascadeDispatch(
-            static_cast<uint32_t>(cascade),
-            cascadeBands[static_cast<size_t>(cascade)]
-        );
+        CascadeDispatchInfo dispatchInfo =
+            prepareCascadeDispatch(static_cast<uint32_t>(cascade), cascadeBands[static_cast<size_t>(cascade)]);
         dispatchInfo.push.depthMipCount = 0;
         dispatchInfo.push.frameIndex = static_cast<int>(frameContext.temporalFrameIndex % 1000u);
         if (dispatchInfo.groupsX == 0u || dispatchInfo.groupsY == 0u) {
             continue;
         }
 
-        vkCmdPushConstants(
-            cmd,
-            rcBuildPipelineLayout,
-            VK_SHADER_STAGE_COMPUTE_BIT,
-            0,
-            static_cast<uint32_t>(sizeof(CascadeBuildPushConstants)),
-            &dispatchInfo.push
-        );
+        vkCmdPushConstants(cmd, rcBuildPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                           static_cast<uint32_t>(sizeof(CascadeBuildPushConstants)), &dispatchInfo.push);
 
         rcMergePipeline->dispatch(cmd, dispatchInfo.groupsX, dispatchInfo.groupsY, 1);
 
         emitComputeBarrier(cmd);
-
     }
 }
 
-void RCGIPass::computeCascadeBands(){
+void RCGIPass::computeCascadeBands() {
     // 4x branching: angular resolution quadruples each cascade (2x per dimension),
     // so interval length must also scale by 4x to maintain the penumbra condition.
-    // 
+    //
     // Following tutorial formula:
     //   interval_scale(c) = 0 for c=0, else 4^c
     //   interval_range(c) = [scale(c), scale(c+1)] * base
@@ -277,16 +226,16 @@ void RCGIPass::computeCascadeBands(){
     //
     // Total max distance = 4^(N+1) * base = 4096 * base for 6 cascades
     // Example: if base = 0.25, cascade 5 reaches 1024 world units
-    
-    const float baseSegmentLength = Rendering::RC_BASE_INTERVAL_LENGTH;  
+
+    const float baseSegmentLength = Rendering::RC_BASE_INTERVAL_LENGTH;
     const uint32_t cascadeCount = Rendering::RC_CASCADE_COUNT;
-    
+
     for (uint32_t c = 0; c < cascadeCount; ++c) {
         // scale(c) = 4^c for c > 0, else 0
         // scale(c+1) = 4^(c+1)
         const uint32_t scaleStart = (c == 0) ? 0u : (1u << (2u * c));
         const uint32_t scaleEnd = 1u << (2u * (c + 1u));
-        
+
         float start = baseSegmentLength * static_cast<float>(scaleStart);
         float end = baseSegmentLength * static_cast<float>(scaleEnd);
 
@@ -302,10 +251,9 @@ RCGIPass::CascadeDispatchInfo RCGIPass::prepareCascadeDispatch(uint32_t cascadeI
     dispatch.push.tileSize = std::max(1, static_cast<int>(Rendering::RC_BASE_TILE_SIZE) << cascadeIndex);
     dispatch.push.frameIndex = 0;
     dispatch.push.tStart = std::max(0.0f, band.start);
-    
-    const float prevLen = (cascadeIndex > 0u)
-        ? std::max(0.0f, cascadeBands[cascadeIndex - 1u].length)
-        : std::max(0.0f, band.length);
+
+    const float prevLen =
+        (cascadeIndex > 0u) ? std::max(0.0f, cascadeBands[cascadeIndex - 1u].length) : std::max(0.0f, band.length);
     const float overlap = prevLen * Rendering::RC_INTERVAL_OVERLAP_FRACTION;
     dispatch.push.segmentLen = std::max(0.0f, band.length + overlap);
 
@@ -343,14 +291,8 @@ void RCGIPass::dispatchCascade(VkCommandBuffer cmd, const CascadeDispatchInfo& d
         return;
     }
 
-    vkCmdPushConstants(
-        cmd,
-        rcBuildPipelineLayout,
-        VK_SHADER_STAGE_COMPUTE_BIT,
-        0,
-        static_cast<uint32_t>(sizeof(CascadeBuildPushConstants)),
-        &dispatchInfo.push
-    );
+    vkCmdPushConstants(cmd, rcBuildPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                       static_cast<uint32_t>(sizeof(CascadeBuildPushConstants)), &dispatchInfo.push);
 
     rcBuildPipeline->dispatch(cmd, dispatchInfo.groupsX, dispatchInfo.groupsY, 1);
 }
@@ -362,32 +304,16 @@ void RCGIPass::resolveIndirect(FrameContext& frameContext) {
     }
 
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, rcResolvePipeline->getPipeline());
-    
+
     // Bind the resolve descriptor set
     // Assumes frameContext has rcResolveDescriptorSet matching the layout
-    vkCmdBindDescriptorSets(
-        cmd,
-        VK_PIPELINE_BIND_POINT_COMPUTE,
-        rcResolvePipelineLayout,
-        0,
-        1,
-        &frameContext.rcResolveDescriptorSet,
-        0,
-        nullptr
-    );
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, rcResolvePipelineLayout, 0, 1,
+                            &frameContext.rcResolveDescriptorSet, 0, nullptr);
 
     // Bind skybox descriptor set (Set 1)
     if (frameContext.skyboxDescriptorSet != VK_NULL_HANDLE) {
-        vkCmdBindDescriptorSets(
-            cmd,
-            VK_PIPELINE_BIND_POINT_COMPUTE,
-            rcResolvePipelineLayout,
-            1,
-            1,
-            &frameContext.skyboxDescriptorSet,
-            0,
-            nullptr
-        );
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, rcResolvePipelineLayout, 1, 1,
+                                &frameContext.skyboxDescriptorSet, 0, nullptr);
     }
 
     // Push constants: base values + temporal data
@@ -397,14 +323,7 @@ void RCGIPass::resolveIndirect(FrameContext& frameContext) {
     pc.temporalFrame = static_cast<int>(frameContext.temporalFrameIndex);
     pc.prevViewProj = frameContext.prevCameraData.viewProjectionMatrix;
 
-    vkCmdPushConstants(
-        cmd,
-        rcResolvePipelineLayout,
-        VK_SHADER_STAGE_COMPUTE_BIT,
-        0,
-        sizeof(ResolvePushConstants),
-        &pc
-    );
+    vkCmdPushConstants(cmd, rcResolvePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ResolvePushConstants), &pc);
 
     // Dispatch over screen size (8x8 group size)
     const uint32_t groupSizeX = 8;
@@ -452,22 +371,16 @@ void RCGIPass::setDepthPyramidBarriersBefore(FrameContext& frameContext) {
     mip0ToGeneral.newLayout = VK_IMAGE_LAYOUT_GENERAL;
 
     std::array<VkImageMemoryBarrier, 2> barriers{depthBarrier, mip0ToGeneral};
-    vkCmdPipelineBarrier(
-        cmd,
-        VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        0,
-        0, nullptr,
-        0, nullptr,
-        static_cast<uint32_t>(barriers.size()), barriers.data()
-    );
+    vkCmdPipelineBarrier(cmd,
+                         VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
+                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr,
+                         static_cast<uint32_t>(barriers.size()), barriers.data());
 }
 
-
 void RCGIPass::setMipLevelBarriers(FrameContext& frameContext, uint32_t mipLevel) {
-    
     VkCommandBuffer cmd = frameContext.commandBuffer;
-    VkImageMemoryBarrier barriers[2]{};           
+    VkImageMemoryBarrier barriers[2]{};
     barriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER; // prev mip to READ_ONLY
     barriers[0].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
     barriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
@@ -477,7 +390,7 @@ void RCGIPass::setMipLevelBarriers(FrameContext& frameContext, uint32_t mipLevel
     barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
     barriers[0].image = frameContext.depthPyramidImage;
     barriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barriers[0].subresourceRange.baseMipLevel =mipLevel - 1;
+    barriers[0].subresourceRange.baseMipLevel = mipLevel - 1;
     barriers[0].subresourceRange.levelCount = 1;
     barriers[0].subresourceRange.baseArrayLayer = 0;
     barriers[0].subresourceRange.layerCount = 1;
@@ -496,17 +409,9 @@ void RCGIPass::setMipLevelBarriers(FrameContext& frameContext, uint32_t mipLevel
     barriers[1].subresourceRange.baseArrayLayer = 0;
     barriers[1].subresourceRange.layerCount = 1;
 
-    vkCmdPipelineBarrier(
-        cmd,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        0,
-        0, nullptr,
-        0, nullptr,
-        2, barriers
-    );
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr,
+                         0, nullptr, 2, barriers);
 }
-
 
 // Finalize: transition last mip to READ_ONLY for external sampling
 void RCGIPass::setDepthPyramidCompletedBarriers(FrameContext& frameContext) {
@@ -528,15 +433,9 @@ void RCGIPass::setDepthPyramidCompletedBarriers(FrameContext& frameContext) {
     lastToRead.subresourceRange.baseArrayLayer = 0;
     lastToRead.subresourceRange.layerCount = 1;
 
-    vkCmdPipelineBarrier(
-        cmd,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-        0,
-        0, nullptr,
-        0, nullptr,
-        1, &lastToRead
-    );
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0,
+                         nullptr, 1, &lastToRead);
 }
 
 void RCGIPass::buildDepthPyramid(FrameContext& frameContext) {
@@ -544,16 +443,8 @@ void RCGIPass::buildDepthPyramid(FrameContext& frameContext) {
     VkCommandBuffer cmd = frameContext.commandBuffer;
     // Seed mip 0
     vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, depthPyramidSeedPipeline->getPipeline());
-    vkCmdBindDescriptorSets(
-        cmd,
-        VK_PIPELINE_BIND_POINT_COMPUTE,
-        depthPyramidPipelineLayout,
-        0,
-        1,
-        &frameContext.depthPyramidDescriptorSet,
-        0,
-        nullptr
-    );
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, depthPyramidPipelineLayout, 0, 1,
+                            &frameContext.depthPyramidDescriptorSet, 0, nullptr);
 
     const uint32_t groupSizeX = 8;
     const uint32_t groupSizeY = 8;
@@ -564,33 +455,17 @@ void RCGIPass::buildDepthPyramid(FrameContext& frameContext) {
     seedPC.cameraFar = frameContext.cameraData.farPlane;
     seedPC.padding = 0.0f;
 
-    vkCmdPushConstants(
-        cmd,
-        depthPyramidPipelineLayout,
-        VK_SHADER_STAGE_COMPUTE_BIT,
-        0,
-        sizeof(DepthPyramidPushConstants),
-        &seedPC
-    );
+    vkCmdPushConstants(cmd, depthPyramidPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                       sizeof(DepthPyramidPushConstants), &seedPC);
     depthPyramidSeedPipeline->dispatch(cmd, groupsX0, groupsY0, 1);
 
-    
     for (uint32_t m = 1; m < frameContext.depthPyramidMipLevels; ++m) {
-
         setMipLevelBarriers(frameContext, m);
 
         vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, depthPyramidDownsamplePipeline->getPipeline());
         VkDescriptorSet setForMip = frameContext.depthPyramidMipDescriptorSets[m];
-        vkCmdBindDescriptorSets(
-            cmd,
-            VK_PIPELINE_BIND_POINT_COMPUTE,
-            depthPyramidPipelineLayout,
-            0,
-            1,
-            &setForMip,
-            0,
-            nullptr
-        );
+        vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, depthPyramidPipelineLayout, 0, 1, &setForMip, 0,
+                                nullptr);
 
         const uint32_t mipWidth = std::max(1u, info.width >> m);
         const uint32_t mipHeight = std::max(1u, info.height >> m);
@@ -616,20 +491,8 @@ void RCGIPass::emitComputeBarrier(VkCommandBuffer cmd) const {
     barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
     barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
 
-    vkCmdPipelineBarrier(
-        cmd,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-        0,
-        1,
-        &barrier,
-        0,
-        nullptr,
-        0,
-        nullptr
-    );
+    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1,
+                         &barrier, 0, nullptr, 0, nullptr);
 }
 
 } // namespace Rendering
-
-

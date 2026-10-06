@@ -29,7 +29,7 @@ public:
      * @param imageCount Number of swap chain images
      */
     ImGuiManager(Device& device, Window& window, SwapChain& swapChain, uint32_t imageCount);
-    
+
     /**
      * @brief Cleanup ImGui resources
      */
@@ -67,7 +67,7 @@ private:
     void createFramebuffers(SwapChain& swapChain);
     void initImGui(Window& window, uint32_t imageCount);
     void cleanup();
-    
+
     void beginFrame();
     void endFrame(VkCommandBuffer commandBuffer, uint32_t imageIndex);
     void renderFPSCounter();
@@ -77,11 +77,10 @@ private:
     VkRenderPass imguiRenderPass{VK_NULL_HANDLE};
     std::vector<VkFramebuffer> framebuffers;
     bool initialized{false};
-    
+
     // Frame statistics
     float currentFPS{0.0f};
     float currentFrameTime{0.0f};
 };
 
 } // namespace Rendering
-

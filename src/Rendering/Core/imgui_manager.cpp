@@ -5,8 +5,7 @@
 
 namespace Rendering {
 
-ImGuiManager::ImGuiManager(Device& device, Window& window, SwapChain& swapChain, uint32_t imageCount)
-    : device{device} {
+ImGuiManager::ImGuiManager(Device& device, Window& window, SwapChain& swapChain, uint32_t imageCount) : device{device} {
     createDescriptorPool();
     createRenderPass(swapChain);
     createFramebuffers(swapChain);
@@ -21,19 +20,17 @@ ImGuiManager::~ImGuiManager() {
 void ImGuiManager::createDescriptorPool() {
     // Create descriptor pool for ImGui
     // ImGui needs a fairly large pool for its internal descriptor sets
-    std::array<VkDescriptorPoolSize, 11> poolSizes = {{
-        { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
-        { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
-        { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
-        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
-        { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
-        { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
-        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
-        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
-        { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
-        { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
-        { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
-    }};
+    std::array<VkDescriptorPoolSize, 11> poolSizes = {{{VK_DESCRIPTOR_TYPE_SAMPLER, 1000},
+                                                       {VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000},
+                                                       {VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000},
+                                                       {VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000},
+                                                       {VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000},
+                                                       {VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000},
+                                                       {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000},
+                                                       {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000},
+                                                       {VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000},
+                                                       {VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000},
+                                                       {VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000}}};
 
     VkDescriptorPoolCreateInfo poolInfo{};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -92,11 +89,9 @@ void ImGuiManager::createRenderPass(SwapChain& swapChain) {
 
 void ImGuiManager::createFramebuffers(SwapChain& swapChain) {
     framebuffers.resize(swapChain.imageCount());
-    
+
     for (size_t i = 0; i < swapChain.imageCount(); i++) {
-        VkImageView attachments[] = {
-            swapChain.getImageView(i)
-        };
+        VkImageView attachments[] = {swapChain.getImageView(i)};
 
         VkFramebufferCreateInfo framebufferInfo{};
         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -118,7 +113,7 @@ void ImGuiManager::initImGui(Window& window, uint32_t imageCount) {
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;  // Enable Keyboard Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
 
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
@@ -126,7 +121,7 @@ void ImGuiManager::initImGui(Window& window, uint32_t imageCount) {
 
     // Setup Platform/Renderer backends
     ImGui_ImplGlfw_InitForVulkan(window.getGLFWwindow(), true);
-    
+
     // Initialize ImGui Vulkan backend
     ImGui_ImplVulkan_InitInfo initInfo{};
     initInfo.ApiVersion = VK_API_VERSION_1_3;
@@ -141,7 +136,7 @@ void ImGuiManager::initImGui(Window& window, uint32_t imageCount) {
     initInfo.ImageCount = imageCount;
     initInfo.Allocator = nullptr;
     initInfo.CheckVkResultFn = nullptr;
-    
+
     // Set up pipeline info for the main viewport
     initInfo.PipelineInfoMain.RenderPass = imguiRenderPass;
     initInfo.PipelineInfoMain.Subpass = 0;
@@ -149,16 +144,16 @@ void ImGuiManager::initImGui(Window& window, uint32_t imageCount) {
     initInfo.UseDynamicRendering = false;
 
     ImGui_ImplVulkan_Init(&initInfo);
-    
+
     // Font texture is now automatically created on first NewFrame() call
 }
 
 void ImGuiManager::run(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
     beginFrame();
-    
+
     // Render all ImGui UI elements here
     renderFPSCounter();
-    
+
     endFrame(commandBuffer, imageIndex);
 }
 
@@ -178,7 +173,7 @@ void ImGuiManager::endFrame(VkCommandBuffer commandBuffer, uint32_t imageIndex) 
     // Render ImGui
     ImGui::Render();
     ImDrawData* drawData = ImGui::GetDrawData();
-    
+
     // Begin ImGui render pass
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -187,31 +182,29 @@ void ImGuiManager::endFrame(VkCommandBuffer commandBuffer, uint32_t imageIndex) 
     renderPassInfo.renderArea.offset = {0, 0};
     renderPassInfo.renderArea.extent.width = static_cast<uint32_t>(drawData->DisplaySize.x);
     renderPassInfo.renderArea.extent.height = static_cast<uint32_t>(drawData->DisplaySize.y);
-    
+
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-    
+
     // Record ImGui draw commands into the command buffer
     ImGui_ImplVulkan_RenderDrawData(drawData, commandBuffer);
-    
+
     vkCmdEndRenderPass(commandBuffer);
 }
 
 void ImGuiManager::renderFPSCounter() {
     // Create a window in the top-right corner
     ImGuiIO& io = ImGui::GetIO();
-    
+
     // Set window position to top-right
     ImGui::SetNextWindowPos(ImVec2(10.0f, io.DisplaySize.y - 10.0f), ImGuiCond_Always, ImVec2(0.0f, 1.0f));
-    
+
     // Create a small, semi-transparent window
     ImGui::SetNextWindowBgAlpha(0.35f); // Transparent background
-    
-    ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoDecoration | 
-                                   ImGuiWindowFlags_AlwaysAutoResize | 
-                                   ImGuiWindowFlags_NoSavedSettings | 
-                                   ImGuiWindowFlags_NoFocusOnAppearing | 
+
+    ImGuiWindowFlags windowFlags = ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_AlwaysAutoResize |
+                                   ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoFocusOnAppearing |
                                    ImGuiWindowFlags_NoNav;
-    
+
     if (ImGui::Begin("FPS Counter", nullptr, windowFlags)) {
         ImGui::Text("FPS: %.1f", currentFPS);
         ImGui::Text("Frame Time: %.2f ms", currentFrameTime);
@@ -225,39 +218,37 @@ void ImGuiManager::onWindowResize(SwapChain& swapChain) {
         vkDestroyFramebuffer(device.getDevice(), framebuffer, nullptr);
     }
     framebuffers.clear();
-    
+
     // Recreate framebuffers with new swap chain
     createFramebuffers(swapChain);
 }
 
 void ImGuiManager::cleanup() {
     if (initialized) {
-
         vkDeviceWaitIdle(device.getDevice());
-    
+
         ImGui_ImplVulkan_Shutdown();
         ImGui_ImplGlfw_Shutdown();
         ImGui::DestroyContext();
-        
+
         // Cleanup framebuffers
         for (auto framebuffer : framebuffers) {
             vkDestroyFramebuffer(device.getDevice(), framebuffer, nullptr);
         }
         framebuffers.clear();
-        
+
         if (imguiRenderPass != VK_NULL_HANDLE) {
             vkDestroyRenderPass(device.getDevice(), imguiRenderPass, nullptr);
             imguiRenderPass = VK_NULL_HANDLE;
         }
-        
+
         if (imguiDescriptorPool != VK_NULL_HANDLE) {
             vkDestroyDescriptorPool(device.getDevice(), imguiDescriptorPool, nullptr);
             imguiDescriptorPool = VK_NULL_HANDLE;
         }
-        
+
         initialized = false;
     }
 }
 
 } // namespace Rendering
-

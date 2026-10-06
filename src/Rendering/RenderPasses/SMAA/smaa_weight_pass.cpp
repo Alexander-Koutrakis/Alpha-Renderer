@@ -83,9 +83,7 @@ void SMAAWeightPass::createRenderPass() {
 
 void SMAAWeightPass::createFramebuffers() {
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        std::array<VkImageView, 1> attachments = {
-            (*targetViews)[i]
-        };
+        std::array<VkImageView, 1> attachments = {(*targetViews)[i]};
 
         VkFramebufferCreateInfo framebufferInfo{};
         framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -123,10 +121,8 @@ void SMAAWeightPass::createPipeline() {
     pipelineConfig.bindingDescriptions.clear();
     pipelineConfig.attributeDescriptions.clear();
 
-    std::vector<ShaderStageInfo> stages = {
-        {VK_SHADER_STAGE_VERTEX_BIT, "shaders/fullscreen.vert.spv"},
-        {VK_SHADER_STAGE_FRAGMENT_BIT, "shaders/smaa_weight.frag.spv"}
-    };
+    std::vector<ShaderStageInfo> stages = {{VK_SHADER_STAGE_VERTEX_BIT, "shaders/fullscreen.vert.spv"},
+                                           {VK_SHADER_STAGE_FRAGMENT_BIT, "shaders/smaa_weight.frag.spv"}};
 
     pipeline = std::make_unique<Pipeline>(device, stages, pipelineConfig);
 }
@@ -154,23 +150,11 @@ void SMAAWeightPass::endRenderPass(FrameContext& frameContext) {
 void SMAAWeightPass::run(FrameContext& frameContext) {
     beginRenderPass(frameContext);
 
-    vkCmdBindPipeline(
-        frameContext.commandBuffer,
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
-        pipeline->getPipeline()
-    );
+    vkCmdBindPipeline(frameContext.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->getPipeline());
 
     VkDescriptorSet descriptorSet = frameContext.smaaWeightDescriptorSet;
-    vkCmdBindDescriptorSets(
-        frameContext.commandBuffer,
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
-        pipelineLayout,
-        0,
-        1,
-        &descriptorSet,
-        0,
-        nullptr
-    );
+    vkCmdBindDescriptorSets(frameContext.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1,
+                            &descriptorSet, 0, nullptr);
 
     vkCmdDraw(frameContext.commandBuffer, 3, 1, 0, 0);
 
@@ -178,4 +162,3 @@ void SMAAWeightPass::run(FrameContext& frameContext) {
 }
 
 } // namespace Rendering
-

@@ -15,4 +15,3 @@
 #include <glm/common.hpp>
 // Additional GLM extensions (optional)
 #include <glm/gtx/quaternion.hpp>
-

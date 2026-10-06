@@ -15,7 +15,6 @@ using namespace ECS;
 namespace Rendering {
 
 class TransparencyPass {
-
 public:
     struct CreateInfo {
         uint32_t width;
@@ -25,27 +24,23 @@ public:
         VkDescriptorSetLayout shadowMapSamplerLayout;
         VkDescriptorSetLayout transparencyModelDescriptorSetLayout;
         VkDescriptorSetLayout materialDescriptorSetLayout;
-        VkDescriptorSetLayout sceneLightingDescriptorSetLayout;    
+        VkDescriptorSetLayout sceneLightingDescriptorSetLayout;
         VkDescriptorSetLayout lightMatrixDescriptorSetLayout;
         VkDescriptorSetLayout cascadeSplitsDescriptorSetLayout;
         VkFormat hdrFormat;
         VkFormat revealageFormat;
         VkFormat depthFormat;
-        std::array<VkImageView,MAX_FRAMES_IN_FLIGHT>* accumulationViewsPtr;
-        std::array<VkImageView,MAX_FRAMES_IN_FLIGHT>* revealageViewsPtr;
-        std::array<VkImageView,MAX_FRAMES_IN_FLIGHT>* depthViewsPtr;
+        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* accumulationViewsPtr;
+        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* revealageViewsPtr;
+        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* depthViewsPtr;
     };
 
-    TransparencyPass(
-        Device& device, 
-        const CreateInfo& createInfo
-        );
+    TransparencyPass(Device& device, const CreateInfo& createInfo);
     ~TransparencyPass();
 
     VkRenderPass getRenderPass() const { return renderPass; }
     void run(FrameContext& frameContext);
-    
-    
+
 private:
     void cleanup();
     void createRenderPass(const CreateInfo& createInfo);
@@ -61,7 +56,6 @@ private:
     Device& device;
     uint32_t width;
     uint32_t height;
-    
 
     VkRenderPass renderPass{VK_NULL_HANDLE};
     std::unique_ptr<Pipeline> pipeline{nullptr};
@@ -69,4 +63,4 @@ private:
     std::array<VkFramebuffer, MAX_FRAMES_IN_FLIGHT> framebuffers{};
 };
 
-} 
+} // namespace Rendering

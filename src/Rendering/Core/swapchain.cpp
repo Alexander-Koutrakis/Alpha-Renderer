@@ -11,8 +11,7 @@
 
 namespace Rendering {
 
-SwapChain::SwapChain(Device& deviceRef, VkExtent2D extent)
-    : device{deviceRef}, windowExtent{extent} {
+SwapChain::SwapChain(Device& deviceRef, VkExtent2D extent) : device{deviceRef}, windowExtent{extent} {
     init();
 }
 
@@ -22,18 +21,17 @@ SwapChain::SwapChain(Device& deviceRef, VkExtent2D extent, std::shared_ptr<SwapC
     oldSwapChain = nullptr;
 }
 
-void SwapChain::init() {  
+void SwapChain::init() {
     createSwapChain();
     createImageViews();
     createSyncObjects();
 }
 
-SwapChain::~SwapChain() {      
+SwapChain::~SwapChain() {
     for (auto imageView : swapChainImageViews) {
         vkDestroyImageView(device.getDevice(), imageView, nullptr);
     }
     swapChainImageViews.clear();
-
 
     if (vkSwapChain != nullptr) {
         vkDestroySwapchainKHR(device.getDevice(), vkSwapChain, nullptr);
@@ -50,22 +48,11 @@ SwapChain::~SwapChain() {
 }
 
 VkResult SwapChain::acquireNextImage(uint32_t* imageIndex) {
-    vkWaitForFences(
-        device.getDevice(),
-        1,
-        &inFlightFences[currentFrame],
-        VK_TRUE,
-        std::numeric_limits<uint64_t>::max());
+    vkWaitForFences(device.getDevice(), 1, &inFlightFences[currentFrame], VK_TRUE,
+                    std::numeric_limits<uint64_t>::max());
 
-    VkResult result = vkAcquireNextImageKHR(
-        device.getDevice(),
-        vkSwapChain,
-        std::numeric_limits<uint64_t>::max(),
-        imageAvailableSemaphores[currentFrame],
-        VK_NULL_HANDLE,
-        imageIndex);
-
-    
+    VkResult result = vkAcquireNextImageKHR(device.getDevice(), vkSwapChain, std::numeric_limits<uint64_t>::max(),
+                                            imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, imageIndex);
 
     return result;
 }
@@ -120,8 +107,7 @@ void SwapChain::createSwapChain() {
     VkExtent2D extent = chooseSwapExtent(swapChainSupport.capabilities);
 
     uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
-    if (swapChainSupport.capabilities.maxImageCount > 0 &&
-        imageCount > swapChainSupport.capabilities.maxImageCount) {
+    if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount) {
         imageCount = swapChainSupport.capabilities.maxImageCount;
     }
 
@@ -201,8 +187,10 @@ void SwapChain::createSyncObjects() {
     fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        if (vkCreateSemaphore(device.getDevice(), &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) != VK_SUCCESS ||
-            vkCreateSemaphore(device.getDevice(), &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) != VK_SUCCESS ||
+        if (vkCreateSemaphore(device.getDevice(), &semaphoreInfo, nullptr, &imageAvailableSemaphores[i]) !=
+                VK_SUCCESS ||
+            vkCreateSemaphore(device.getDevice(), &semaphoreInfo, nullptr, &renderFinishedSemaphores[i]) !=
+                VK_SUCCESS ||
             vkCreateFence(device.getDevice(), &fenceInfo, nullptr, &inFlightFences[i]) != VK_SUCCESS) {
             throw std::runtime_error("failed to create synchronization objects for a frame!");
         }
@@ -235,12 +223,10 @@ VkExtent2D SwapChain::chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilit
         return capabilities.currentExtent;
     } else {
         VkExtent2D actualExtent = windowExtent;
-        actualExtent.width = std::max(
-            capabilities.minImageExtent.width,
-            std::min(capabilities.maxImageExtent.width, actualExtent.width));
-        actualExtent.height = std::max(
-            capabilities.minImageExtent.height,
-            std::min(capabilities.maxImageExtent.height, actualExtent.height));
+        actualExtent.width = std::max(capabilities.minImageExtent.width,
+                                      std::min(capabilities.maxImageExtent.width, actualExtent.width));
+        actualExtent.height = std::max(capabilities.minImageExtent.height,
+                                       std::min(capabilities.maxImageExtent.height, actualExtent.height));
         return actualExtent;
     }
 }

@@ -6,11 +6,9 @@
 
 namespace Rendering {
 
-ComputePipeline::ComputePipeline(
-    Device& device,
-    const std::string& computeFilepath,
-    const ComputePipelineConfigInfo& configInfo
-) : device{device}, pipelineLayout{configInfo.pipelineLayout} {
+ComputePipeline::ComputePipeline(Device& device, const std::string& computeFilepath,
+                                 const ComputePipelineConfigInfo& configInfo)
+    : device{device}, pipelineLayout{configInfo.pipelineLayout} {
     createComputePipeline(computeFilepath, configInfo);
 }
 
@@ -51,11 +49,9 @@ void ComputePipeline::createShaderModule(const std::vector<char>& code, VkShader
     }
 }
 
-void ComputePipeline::createComputePipeline(
-    const std::string& computeFilepath,
-    const ComputePipelineConfigInfo& configInfo
-) {
-    assert(configInfo.pipelineLayout != VK_NULL_HANDLE && 
+void ComputePipeline::createComputePipeline(const std::string& computeFilepath,
+                                            const ComputePipelineConfigInfo& configInfo) {
+    assert(configInfo.pipelineLayout != VK_NULL_HANDLE &&
            "Cannot create compute pipeline: no pipelineLayout provided in configInfo");
 
     // Load and create compute shader module
@@ -75,17 +71,14 @@ void ComputePipeline::createComputePipeline(
     pipelineInfo.stage = computeShaderStageInfo;
     pipelineInfo.layout = configInfo.pipelineLayout;
 
-    if (vkCreateComputePipelines(device.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &computePipeline) != VK_SUCCESS) {
+    if (vkCreateComputePipelines(device.getDevice(), VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &computePipeline) !=
+        VK_SUCCESS) {
         throw std::runtime_error("Failed to create compute pipeline");
     }
 }
 
-void ComputePipeline::dispatch(
-    VkCommandBuffer commandBuffer, 
-    uint32_t groupCountX, 
-    uint32_t groupCountY, 
-    uint32_t groupCountZ
-) const {
+void ComputePipeline::dispatch(VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY,
+                               uint32_t groupCountZ) const {
     vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
     vkCmdDispatch(commandBuffer, groupCountX, groupCountY, groupCountZ);
 }

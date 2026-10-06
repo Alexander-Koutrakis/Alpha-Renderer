@@ -4,20 +4,18 @@
 
 namespace Rendering {
 
-    SkyboxPass::SkyboxPass(Device& device, const CreateInfo& createInfo)
-        : device(device), width(createInfo.width), height(createInfo.height) {
-
+SkyboxPass::SkyboxPass(Device& device, const CreateInfo& createInfo)
+    : device(device), width(createInfo.width), height(createInfo.height) {
     createRenderPass(createInfo);
     createFramebuffers(createInfo);
     createPipeline(createInfo);
 }
 
-
 SkyboxPass::~SkyboxPass() {
     cleanup();
 }
 
-void SkyboxPass::setBarriers(FrameContext& frameContext){
+void SkyboxPass::setBarriers(FrameContext& frameContext) {
     VkImageMemoryBarrier barrier{};
     barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
     barrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -33,15 +31,10 @@ void SkyboxPass::setBarriers(FrameContext& frameContext){
     barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
     barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-    vkCmdPipelineBarrier(
-        frameContext.commandBuffer,
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, // previous usage
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // next usage
-        0,
-        0, nullptr,
-        0, nullptr,
-        1, &barrier
-    );
+    vkCmdPipelineBarrier(frameContext.commandBuffer,
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,         // previous usage
+                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // next usage
+                         0, 0, nullptr, 0, nullptr, 1, &barrier);
 }
 
 void SkyboxPass::cleanup() {
@@ -49,14 +42,14 @@ void SkyboxPass::cleanup() {
     for (auto framebuffer : framebuffers) {
         vkDestroyFramebuffer(device.getDevice(), framebuffer, nullptr);
     }
-    
+
     // Destroy pipeline resources
     if (pipelineLayout != VK_NULL_HANDLE) {
         vkDestroyPipelineLayout(device.getDevice(), pipelineLayout, nullptr);
         pipelineLayout = VK_NULL_HANDLE;
     }
     pipeline.reset();
-    
+
     // Destroy render pass
     vkDestroyRenderPass(device.getDevice(), renderPass, nullptr);
 
@@ -72,9 +65,9 @@ void SkyboxPass::createRenderPass(const CreateInfo& createInfo) {
     colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL; 
+    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     colorAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    
+
     // Depth buffer is still used for depth testing
     VkAttachmentDescription depthAttachment{};
     depthAttachment.format = VK_FORMAT_D32_SFLOAT; // Typical depth format, adjust if needed
@@ -106,9 +99,11 @@ void SkyboxPass::createRenderPass(const CreateInfo& createInfo) {
     VkSubpassDependency dependency{};
     dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
     dependency.dstSubpass = 0;
-    dependency.srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependency.srcStageMask =
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     dependency.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+    dependency.dstStageMask =
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
     dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT;
 
     // Create render pass
@@ -128,13 +123,12 @@ void SkyboxPass::createRenderPass(const CreateInfo& createInfo) {
 }
 
 void SkyboxPass::createPipeline(const CreateInfo& createInfo) {
-  
     // Create pipeline layout with camera and skybox texture descriptor sets
     std::array<VkDescriptorSetLayout, 2> descriptorSetLayouts = {
-        createInfo.cameraDescriptorSetLayout,  // Camera set (set = 0)
+        createInfo.cameraDescriptorSetLayout, // Camera set (set = 0)
         createInfo.skyboxDescriptorSetLayout  // Cubemap texture (set = 1)
     };
-    
+
     VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
     pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
@@ -147,16 +141,16 @@ void SkyboxPass::createPipeline(const CreateInfo& createInfo) {
     // Create pipeline
     PipelineConfigInfo pipelineConfig{};
     Pipeline::defaultPipelineConfigInfo(pipelineConfig);
-    
+
     // Customize pipeline for skybox rendering
     pipelineConfig.renderPass = renderPass;
     pipelineConfig.pipelineLayout = pipelineLayout;
-    
+
     // Turn off depth writing but enable depth testing (we want to render the skybox behind everything else)
     pipelineConfig.depthStencilInfo.depthTestEnable = VK_TRUE;
     pipelineConfig.depthStencilInfo.depthWriteEnable = VK_FALSE;
     pipelineConfig.depthStencilInfo.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-    
+
     // Change to triangle list to match the indexed vertices in the shader
     pipelineConfig.inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
     pipelineConfig.inputAssemblyInfo.primitiveRestartEnable = VK_FALSE;
@@ -167,25 +161,18 @@ void SkyboxPass::createPipeline(const CreateInfo& createInfo) {
     pipelineConfig.attributeDescriptions.clear();
 
     // Create pipeline
-    std::vector<ShaderStageInfo> stages = {
-        {VK_SHADER_STAGE_VERTEX_BIT, "shaders/skybox.vert.spv"},
-        {VK_SHADER_STAGE_FRAGMENT_BIT, "shaders/skybox.frag.spv"}
-    };
-    pipeline = std::make_unique<Pipeline>(
-        device,
-        stages,
-        pipelineConfig
-    );
+    std::vector<ShaderStageInfo> stages = {{VK_SHADER_STAGE_VERTEX_BIT, "shaders/skybox.vert.spv"},
+                                           {VK_SHADER_STAGE_FRAGMENT_BIT, "shaders/skybox.frag.spv"}};
+    pipeline = std::make_unique<Pipeline>(device, stages, pipelineConfig);
 }
 
 void SkyboxPass::createFramebuffers(const CreateInfo& createInfo) {
-
     std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> albedoViews = *createInfo.albedoViewsPtr;
     std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> depthViews = *createInfo.depthViewsPtr;
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         std::array<VkImageView, 2> attachments = {
-            albedoViews[i],      // Light pass output instead of albedo
+            albedoViews[i], // Light pass output instead of albedo
             depthViews[i]   // Depth buffer stays the same
         };
 
@@ -212,9 +199,9 @@ void SkyboxPass::beginRenderPass(FrameContext& frameContext) {
     renderPassInfo.framebuffer = framebuffers[frameContext.frameIndex];
     renderPassInfo.renderArea.offset = {0, 0};
     renderPassInfo.renderArea.extent = {width, height};
-    
+
     vkCmdBeginRenderPass(frameContext.commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-    
+
     // Set viewport and scissor
     VkViewport viewport{};
     viewport.x = 0.0f;
@@ -224,7 +211,7 @@ void SkyboxPass::beginRenderPass(FrameContext& frameContext) {
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
     vkCmdSetViewport(frameContext.commandBuffer, 0, 1, &viewport);
-    
+
     VkRect2D scissor{};
     scissor.offset = {0, 0};
     scissor.extent = {width, height};
@@ -236,37 +223,23 @@ void SkyboxPass::endRenderPass(FrameContext& frameContext) {
 }
 
 void SkyboxPass::run(FrameContext& frameContext) {
-
     setBarriers(frameContext);
-    
+
     beginRenderPass(frameContext);
-    
+
     // Bind pipeline
     vkCmdBindPipeline(frameContext.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline->getPipeline());
-    
-    std::array<VkDescriptorSet,2> descriptorSets={
-        frameContext.cameraDescriptorSet,
-        frameContext.skyboxDescriptorSet};
+
+    std::array<VkDescriptorSet, 2> descriptorSets = {frameContext.cameraDescriptorSet,
+                                                     frameContext.skyboxDescriptorSet};
     // Bind camera descriptor set
-    vkCmdBindDescriptorSets(
-        frameContext.commandBuffer,
-        VK_PIPELINE_BIND_POINT_GRAPHICS,
-        pipelineLayout,
-        0,
-        static_cast<uint32_t>(descriptorSets.size()),
-        descriptorSets.data(),
-        0,
-        nullptr
-    );
-     
+    vkCmdBindDescriptorSets(frameContext.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0,
+                            static_cast<uint32_t>(descriptorSets.size()), descriptorSets.data(), 0, nullptr);
+
     // Draw indexed triangles (6 indices)
     vkCmdDraw(frameContext.commandBuffer, 6, 1, 0, 0);
-    
+
     endRenderPass(frameContext);
 }
-
-
-
-
 
 } // namespace Rendering

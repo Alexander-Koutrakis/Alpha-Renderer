@@ -11,18 +11,16 @@ namespace Rendering {
 
 class ShadowMap {
 public:
-
     struct ShadowMapCreateInfo {
         uint32_t width;
         uint32_t height;
-        uint32_t arrayLayers;                
+        uint32_t arrayLayers;
         VkFormat depthFormat;
     };
 
     ShadowMap(Device& device, const ShadowMapCreateInfo& createInfo);
     ~ShadowMap();
 
-   
     VkImageView getImageView() const { return depthView; }
     VkImageView getLayerImageView(uint32_t layer) const { return layerViews[layer]; }
     VkSampler getSampler() const { return shadowSampler; }
@@ -46,6 +44,4 @@ protected:
     std::vector<VkImageView> layerViews{};
 };
 
-
-
-}
+} // namespace Rendering

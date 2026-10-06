@@ -10,7 +10,6 @@ namespace Rendering {
 
 class GBuffer {
 public:
-
     static constexpr uint32_t ATTACHMENT_COUNT = 4;
 
     struct CreateInfo {
@@ -32,32 +31,28 @@ public:
     VkImage getMaterialImage(size_t frameIndex) const { return materialImages[frameIndex]; }
 
     std::array<VkImageView, ATTACHMENT_COUNT> getAttachmentViews(size_t frameIndex) const {
-        return {positionViews[frameIndex], normalViews[frameIndex], 
-                albedoViews[frameIndex], materialViews[frameIndex]};
+        return {positionViews[frameIndex], normalViews[frameIndex], albedoViews[frameIndex], materialViews[frameIndex]};
     }
 
-    std::array<VkImageView,MAX_FRAMES_IN_FLIGHT>& getPositionViews() { return positionViews; }
-    std::array<VkImageView,MAX_FRAMES_IN_FLIGHT>& getNormalViews() { return normalViews; }
-    std::array<VkImageView,MAX_FRAMES_IN_FLIGHT>& getAlbedoViews() { return albedoViews; }
-    std::array<VkImageView,MAX_FRAMES_IN_FLIGHT>& getMaterialViews() { return materialViews; }
+    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getPositionViews() { return positionViews; }
+    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getNormalViews() { return normalViews; }
+    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getAlbedoViews() { return albedoViews; }
+    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getMaterialViews() { return materialViews; }
 
     VkSampler getSampler() const { return sampler; }
     VkFormat getPositionFormat() const { return positionFormat; }
     VkFormat getNormalFormat() const { return normalFormat; }
     VkFormat getAlbedoFormat() const { return albedoFormat; }
     VkFormat getMaterialFormat() const { return materialFormat; }
+
 private:
     void setDebugName(VkObjectType objectType, uint64_t handle, const std::string& name);
     void cleanup();
     void findResourcesFormats();
     void createAttachments();
-    void createAttachment(
-        VkFormat format,
-        VkImageUsageFlags usage,
-        std::array<VkImage, MAX_FRAMES_IN_FLIGHT>& images,
-        std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT>& memories,
-        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& views,
-        const std::string& name);
+    void createAttachment(VkFormat format, VkImageUsageFlags usage, std::array<VkImage, MAX_FRAMES_IN_FLIGHT>& images,
+                          std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT>& memories,
+                          std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& views, const std::string& name);
     Device& device;
     uint32_t width;
     uint32_t height;
@@ -86,4 +81,4 @@ private:
     void createSampler();
 };
 
-}
+} // namespace Rendering

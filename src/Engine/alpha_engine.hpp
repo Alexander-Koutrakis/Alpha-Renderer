@@ -15,27 +15,28 @@ using namespace Rendering;
 using namespace Systems;
 using namespace Resources;
 
-    class AlphaEngine {
-        using id_t = unsigned int;
-    public:
-        static constexpr int WIDTH = 1920;
-        static constexpr int HEIGHT = 1080;
-       
-        AlphaEngine() = default;
-        ~AlphaEngine();
-        
-        void run();
-        
-        static float getDeltaTime() {return deltaTime;}
+class AlphaEngine {
+    using id_t = unsigned int;
 
-    private:
-        std::unique_ptr<Window> window;
-        std::unique_ptr<Device> device;
-        std::unique_ptr<Renderer> renderer;      
-        std::unique_ptr<KeyboardMovemenSystem> keyboardMovementSystem;
-        std::unique_ptr<ResourceManager> resourceManager;
-        static float deltaTime;
-        void init();
-        void loadScene();
-        std::future<bool> loadSceneAsync();
-    };
+public:
+    static constexpr int WIDTH = 1920;
+    static constexpr int HEIGHT = 1080;
+
+    AlphaEngine() = default;
+    ~AlphaEngine();
+
+    void run();
+
+    static float getDeltaTime() { return deltaTime; }
+
+private:
+    std::unique_ptr<Window> window;
+    std::unique_ptr<Device> device;
+    std::unique_ptr<Renderer> renderer;
+    std::unique_ptr<KeyboardMovemenSystem> keyboardMovementSystem;
+    std::unique_ptr<ResourceManager> resourceManager;
+    static float deltaTime;
+    void init();
+    void loadScene();
+    std::future<bool> loadSceneAsync();
+};

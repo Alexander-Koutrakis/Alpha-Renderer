@@ -15,7 +15,6 @@ namespace Rendering {
 
 class LightPass {
 public:
-
     struct CreateInfo {
         uint32_t width;
         uint32_t height;
@@ -30,22 +29,18 @@ public:
         VkDescriptorSetLayout shadowMatrixSetLayout;
         VkDescriptorSetLayout enviromentalReflectionsSetLayout;
         VkFormat lightPassFormat;
-        std::array<VkImageView,MAX_FRAMES_IN_FLIGHT>* lightPassResultViewsPtr;
-        std::array<VkImageView,MAX_FRAMES_IN_FLIGHT>* lightIncidentViewsPtr;
+        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* lightPassResultViewsPtr;
+        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* lightIncidentViewsPtr;
     };
 
-    LightPass(
-        Device& device, 
-        SwapChain& swapChain, 
-        const CreateInfo& createInfo);
+    LightPass(Device& device, SwapChain& swapChain, const CreateInfo& createInfo);
     ~LightPass();
 
     LightPass(const LightPass&) = delete;
     LightPass& operator=(const LightPass&) = delete;
 
     void run(FrameContext& frameContext);
-   
-   
+
 private:
     void cleanup();
     void createRenderPass(const CreateInfo& createInfo);
@@ -59,14 +54,13 @@ private:
     void endRenderPass(FrameContext& frameContext);
 
     Device& device;
-    SwapChain& swapChain;    
+    SwapChain& swapChain;
     uint32_t width;
     uint32_t height;
 
     VkRenderPass renderPass{VK_NULL_HANDLE};
     std::unique_ptr<Pipeline> pipeline{nullptr};
     VkPipelineLayout pipelineLayout{VK_NULL_HANDLE};
-
 
     // Framebuffers for rendering
     std::array<VkFramebuffer, MAX_FRAMES_IN_FLIGHT> framebuffers{};
