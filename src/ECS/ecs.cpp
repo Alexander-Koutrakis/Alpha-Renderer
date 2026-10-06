@@ -30,22 +30,18 @@ void ECSManager::destroyEntity(EntityID entity) {
         }
     }
 
-   
-
     // Remove the entity's mask
     entityMasks.erase(entity);
 
     // Remove from entities vector if you're maintaining the entity objects
-    auto entityIt = std::find_if(m_Entities.begin(), m_Entities.end(),
-        [entity](const Entity& e) { return e.getId() == entity; });
+    auto entityIt =
+        std::find_if(m_Entities.begin(), m_Entities.end(), [entity](const Entity& e) { return e.getId() == entity; });
     if (entityIt != m_Entities.end()) {
         m_Entities.erase(entityIt);
     }
 }
 
-
-
-void ECSManager::registerComponents(){
+void ECSManager::registerComponents() {
     registerComponentType<ECS::Transform>(100);
     registerComponentType<ECS::Camera>(1);
     registerComponentType<ECS::SkyboxComponent>(1);

@@ -1,0 +1,42 @@
+---
+Language: Cpp
+BasedOnStyle: LLVM
+Standard: c++17
+
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ColumnLimit: 120
+LineEnding: DeriveLF
+
+NamespaceIndentation: None
+IndentCaseLabels: true
+IndentPPDirectives: None
+AccessModifierOffset: -4
+
+BreakBeforeBraces: Attach
+AllowShortFunctionsOnASingleLine: Inline
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+AllowShortLambdasOnASingleLine: All
+
+PointerAlignment: Left
+ReferenceAlignment: Left
+AlignAfterOpenBracket: Align
+BinPackArguments: true
+BinPackParameters: true
+BreakConstructorInitializers: BeforeColon
+ConstructorInitializerIndentWidth: 4
+PackConstructorInitializers: NextLine
+SpaceBeforeCpp11BracedList: false
+Cpp11BracedListStyle: true
+
+MaxEmptyLinesToKeep: 1
+KeepEmptyLines:
+  AtStartOfBlock: false
+  AtStartOfFile: false
+  AtEndOfFile: false
+
+# Include order can matter here (core.hpp pulls GLFW before GLM), so never reorder.
+SortIncludes: Never
+ReflowComments: false

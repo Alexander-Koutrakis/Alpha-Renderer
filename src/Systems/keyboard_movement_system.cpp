@@ -5,27 +5,22 @@
 using namespace ECS;
 namespace Systems {
 
-KeyboardMovemenSystem::KeyboardMovemenSystem(GLFWwindow* window) 
-    : window{window} {}
+KeyboardMovemenSystem::KeyboardMovemenSystem(GLFWwindow* window) : window{window} {}
 
-KeyboardMovemenSystem::~KeyboardMovemenSystem(){
+KeyboardMovemenSystem::~KeyboardMovemenSystem() {
     std::cout << "KeyboardMovemenSystem destructor called" << std::endl;
 }
 
-
 void KeyboardMovemenSystem::run(const float deltaTime) {
     // Check for cursor toggle
-    auto& ecsManager = ECSManager::getInstance(); 
+    auto& ecsManager = ECSManager::getInstance();
     auto cameraEntity = ecsManager.getFirstComponent<Camera>();
     Transform& transform = *ecsManager.getComponent<Transform>(cameraEntity->owner);
-    handleArrowLook(transform,deltaTime);    
+    handleArrowLook(transform, deltaTime);
     handleKeyboardMovement(transform, deltaTime);
-    
 
     TransformSystem::updateTransform(transform);
 }
-
-
 
 void KeyboardMovemenSystem::handleMouseLook(Transform& transform, float dt) {
     // Get current mouse position
@@ -78,7 +73,7 @@ void KeyboardMovemenSystem::handleArrowLook(Transform& transform, float dt) {
     }
 
     if (yaw != 0.0f || pitch != 0.0f) {
-         // First rotate around world up axis (yaw)
+        // First rotate around world up axis (yaw)
         glm::quat yawQuat = glm::angleAxis(yaw, glm::vec3(0.0f, 1.0f, 0.0f));
         transform.rotation = glm::normalize(yawQuat * transform.rotation);
 
@@ -119,16 +114,14 @@ void KeyboardMovemenSystem::handleKeyboardMovement(ECS::Transform& transform, fl
     if (glm::length(moveDir) > 0.0f) {
         moveDir = glm::normalize(moveDir);
         float currentSpeed = moveSpeed;
-        
+
         // Apply sprint multiplier if sprint key is pressed
         if (glfwGetKey(window, keys.sprint) == GLFW_PRESS) {
             currentSpeed *= sprintMultiplier;
         }
-        
+
         transform.position += moveDir * currentSpeed * dt;
     }
 }
 
-
-
-}
+} // namespace Systems

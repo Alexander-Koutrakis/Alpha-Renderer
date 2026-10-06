@@ -14,28 +14,27 @@ void RenderingResources::setDebugName(VkObjectType objectType, uint64_t handle, 
     nameInfo.objectType = objectType;
     nameInfo.objectHandle = handle;
     nameInfo.pObjectName = name.c_str();
-    
-    auto func = (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(device.getDevice(), "vkSetDebugUtilsObjectNameEXT");
+
+    auto func =
+        (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(device.getDevice(), "vkSetDebugUtilsObjectNameEXT");
     if (func != nullptr) {
         func(device.getDevice(), &nameInfo);
     }
 }
 
-RenderingResources::RenderingResources(Device& device, SwapChain& swapChain)
-    : device(device), swapChain(swapChain) {
-    
+RenderingResources::RenderingResources(Device& device, SwapChain& swapChain) : device(device), swapChain(swapChain) {
     width = swapChain.getExtent().width;
     height = swapChain.getExtent().height;
-    
+
     // Create GBuffer first (it determines its own formats)
     GBuffer::CreateInfo gBufferInfo{};
     gBufferInfo.width = width;
     gBufferInfo.height = height;
     gBuffer = std::make_unique<GBuffer>(device, gBufferInfo);
-    
+
     // Find all resource formats (including getting them from GBuffer)
     findResourcesFormats();
-    
+
     // Create depth resources
     createDepthResources();
     createDepthPyramidResources();
@@ -48,10 +47,10 @@ RenderingResources::RenderingResources(Device& device, SwapChain& swapChain)
     createDescriptorPool();
     createDescriptorSetLayouts();
     loadSMAALUTTextures();
-    createShadowMapResources();      
+    createShadowMapResources();
     createDescriptorSets();
     createShadowMapSamplerDescriptorSets();
-    
+
     // TODO: Replace with proper skybox texture when implemented
     // For now, use a placeholder to avoid validation errors
     initializeSkyboxFromScene();
@@ -66,15 +65,11 @@ RenderingResources::~RenderingResources() {
 void RenderingResources::findResourcesFormats() {
     // Initialize depth format
     depthFormat = device.getDepthFormat();
-    
+
     // Unified HDR format for lighting + post-processing chain
     hdrFormat = device.findSupportedFormat(
-        {VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT},
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT
-    );
-
-    
+        {VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT}, VK_IMAGE_TILING_OPTIMAL,
+        VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
 
     // Get formats from GBuffer to ensure consistency
     positionFormat = gBuffer->getPositionFormat();
@@ -82,42 +77,31 @@ void RenderingResources::findResourcesFormats() {
     albedoFormat = gBuffer->getAlbedoFormat();
     materialFormat = gBuffer->getMaterialFormat();
 
-    revealageFormat = device.findSupportedFormat(
-        {VK_FORMAT_R8_UNORM, VK_FORMAT_R16_UNORM},
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT
-    );
+    revealageFormat =
+        device.findSupportedFormat({VK_FORMAT_R8_UNORM, VK_FORMAT_R16_UNORM}, VK_IMAGE_TILING_OPTIMAL,
+                                   VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
 
     // Depth pyramid min/max float format (sampled + storage) — RG16/32
-    depthPyramidFormat = device.findSupportedFormat(
-        {VK_FORMAT_R16G16_SFLOAT, VK_FORMAT_R32G32_SFLOAT},
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT
-    );
+    depthPyramidFormat =
+        device.findSupportedFormat({VK_FORMAT_R16G16_SFLOAT, VK_FORMAT_R32G32_SFLOAT}, VK_IMAGE_TILING_OPTIMAL,
+                                   VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT | VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT);
 
     // GI indirect buffer format (R16G16B16A16 preferred), must support color attachment, sampled, and storage
     giIndirectFormat = device.findSupportedFormat(
-        {VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT},
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT |
-        VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
-        VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT
-    );
+        {VK_FORMAT_R16G16B16A16_SFLOAT, VK_FORMAT_R32G32B32A32_SFLOAT}, VK_IMAGE_TILING_OPTIMAL,
+        VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT |
+            VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT);
 
     // Post-processing intermediates stay in HDR; tonemap later when writing to the swapchain
     postProcessFormat = hdrFormat;
 
     // SMAA intermediates: ensure the chosen formats support color attachment + sampling
-    smaaEdgeFormat = device.findSupportedFormat(
-        {VK_FORMAT_R8G8_UNORM},
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT
-    );
-    smaaBlendFormat = device.findSupportedFormat(
-        {VK_FORMAT_R8G8B8A8_UNORM},
-        VK_IMAGE_TILING_OPTIMAL,
-        VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT
-    );
+    smaaEdgeFormat =
+        device.findSupportedFormat({VK_FORMAT_R8G8_UNORM}, VK_IMAGE_TILING_OPTIMAL,
+                                   VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
+    smaaBlendFormat =
+        device.findSupportedFormat({VK_FORMAT_R8G8B8A8_UNORM}, VK_IMAGE_TILING_OPTIMAL,
+                                   VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
 
     std::cout << "RenderingResources formats found:" << std::endl;
     std::cout << "  Depth: " << depthFormat << std::endl;
@@ -148,12 +132,7 @@ void RenderingResources::createDepthResources() {
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         // Create depth image
-        device.createImageWithInfo(
-            imageInfo,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            depthImages[i],
-            depthMemories[i]
-        );
+        device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImages[i], depthMemories[i]);
 
         // Create depth image view
         VkImageViewCreateInfo viewInfo{};
@@ -180,11 +159,13 @@ void RenderingResources::createDepthResources() {
     std::cout << "Depth resources created: " << width << "x" << height << " format=" << depthFormat << std::endl;
 }
 
-void RenderingResources::createDepthPyramidResources(){
-    auto computeMipLevels = [&](uint32_t w, uint32_t h)->uint32_t {
+void RenderingResources::createDepthPyramidResources() {
+    auto computeMipLevels = [&](uint32_t w, uint32_t h) -> uint32_t {
         uint32_t maxDim = std::max(w, h);
         uint32_t levels = 1;
-        while ((maxDim >>= 1) > 0) { ++levels; }
+        while ((maxDim >>= 1) > 0) {
+            ++levels;
+        }
         return levels;
     };
 
@@ -204,19 +185,13 @@ void RenderingResources::createDepthPyramidResources(){
         imageInfo.format = depthPyramidFormat;
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT |
-                          VK_IMAGE_USAGE_STORAGE_BIT |
-                          VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+        imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
                           VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        device.createImageWithInfo(
-            imageInfo,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            depthPyramidImages[i],
-            depthPyramidMemories[i]
-        );
+        device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthPyramidImages[i],
+                                   depthPyramidMemories[i]);
 
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -249,18 +224,22 @@ void RenderingResources::createDepthPyramidResources(){
             mipViewInfo.subresourceRange.baseArrayLayer = 0;
             mipViewInfo.subresourceRange.layerCount = 1;
 
-            if (vkCreateImageView(device.getDevice(), &mipViewInfo, nullptr, &depthPyramidMipStorageViews[i][m]) != VK_SUCCESS) {
+            if (vkCreateImageView(device.getDevice(), &mipViewInfo, nullptr, &depthPyramidMipStorageViews[i][m]) !=
+                VK_SUCCESS) {
                 throw std::runtime_error("failed to create depth pyramid per-mip storage image view");
             }
 
-            setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)depthPyramidMipStorageViews[i][m], 
-                        "DepthPyramidMipView_Frame" + std::to_string(i) + "_Mip" + std::to_string(m));
+            setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)depthPyramidMipStorageViews[i][m],
+                         "DepthPyramidMipView_Frame" + std::to_string(i) + "_Mip" + std::to_string(m));
         }
 
         // Set debug names for main pyramid resources
-        setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)depthPyramidImages[i], "DepthPyramidImage_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)depthPyramidViews[i], "DepthPyramidView_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)depthPyramidMemories[i], "DepthPyramidMemory_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)depthPyramidImages[i],
+                     "DepthPyramidImage_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)depthPyramidViews[i],
+                     "DepthPyramidView_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)depthPyramidMemories[i],
+                     "DepthPyramidMemory_Frame" + std::to_string(i));
     }
 
     // One-time init: transition all pyramid images (all mips) to READ_ONLY so passes can assume a known starting layout
@@ -281,15 +260,9 @@ void RenderingResources::createDepthPyramidResources(){
         barrier.subresourceRange.baseArrayLayer = 0;
         barrier.subresourceRange.layerCount = 1;
 
-        vkCmdPipelineBarrier(
-            cmd,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            0,
-            0, nullptr,
-            0, nullptr,
-            1, &barrier
-        );
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+                             VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0,
+                             nullptr, 0, nullptr, 1, &barrier);
     }
     device.endSingleTimeCommands(cmd);
 
@@ -324,104 +297,100 @@ void RenderingResources::createDepthPyramidResources(){
     std::cout << "Depth pyramid created with " << mipLevels << " mips at " << width << "x" << height << std::endl;
 }
 
-void RenderingResources::createLightPassResources(){
-
+void RenderingResources::createLightPassResources() {
     std::cout << "Creating light pass resources" << std::endl;
-     // Create a sampler for the light pass result
-     VkSamplerCreateInfo samplerInfo{};
-     samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-     samplerInfo.magFilter = VK_FILTER_LINEAR;
-     samplerInfo.minFilter = VK_FILTER_LINEAR;
-     samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-     samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-     samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-     samplerInfo.anisotropyEnable = VK_FALSE;
-     samplerInfo.maxAnisotropy = 1.0f;
-     samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-     samplerInfo.unnormalizedCoordinates = VK_FALSE;
-     samplerInfo.compareEnable = VK_FALSE;
-     samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-     samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-     samplerInfo.mipLodBias = 0.0f;
-     samplerInfo.minLod = 0.0f;
-     samplerInfo.maxLod = 0.0f;
- 
-     if (vkCreateSampler(device.getDevice(), &samplerInfo, nullptr, &lightPassSampler) != VK_SUCCESS) {
-         throw std::runtime_error("failed to create light pass sampler!");
-     }
- 
-     std::cout << "Light pass sampler created" << std::endl;
-     // Create light pass render target images
-     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+    // Create a sampler for the light pass result
+    VkSamplerCreateInfo samplerInfo{};
+    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    samplerInfo.magFilter = VK_FILTER_LINEAR;
+    samplerInfo.minFilter = VK_FILTER_LINEAR;
+    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    samplerInfo.anisotropyEnable = VK_FALSE;
+    samplerInfo.maxAnisotropy = 1.0f;
+    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+    samplerInfo.unnormalizedCoordinates = VK_FALSE;
+    samplerInfo.compareEnable = VK_FALSE;
+    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    samplerInfo.mipLodBias = 0.0f;
+    samplerInfo.minLod = 0.0f;
+    samplerInfo.maxLod = 0.0f;
 
-         VkImageCreateInfo imageInfo{};
-         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-         imageInfo.imageType = VK_IMAGE_TYPE_2D;
-         imageInfo.extent.width = width;
-         imageInfo.extent.height = height;
-         imageInfo.extent.depth = 1;
-         imageInfo.mipLevels = 1;
-         imageInfo.arrayLayers = 1;
-         imageInfo.format = hdrFormat;
-         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-         imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
- 
-         device.createImageWithInfo(
-             imageInfo,
-             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-             lightPassResultImages[i],
-             lightPassResultMemories[i]
-         );
+    if (vkCreateSampler(device.getDevice(), &samplerInfo, nullptr, &lightPassSampler) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create light pass sampler!");
+    }
 
-         // Create image view
-         VkImageViewCreateInfo viewInfo{};
-         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-         viewInfo.image = lightPassResultImages[i];
-         viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-         viewInfo.format = hdrFormat;
-         viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-         viewInfo.subresourceRange.baseMipLevel = 0;
-         viewInfo.subresourceRange.levelCount = 1;
-         viewInfo.subresourceRange.baseArrayLayer = 0;
-         viewInfo.subresourceRange.layerCount = 1;
- 
-         if (vkCreateImageView(device.getDevice(), &viewInfo, nullptr, &lightPassResultViews[i]) != VK_SUCCESS) {
-             throw std::runtime_error("failed to create light pass image view!");
-         }
+    std::cout << "Light pass sampler created" << std::endl;
+    // Create light pass render target images
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        VkImageCreateInfo imageInfo{};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.extent.width = width;
+        imageInfo.extent.height = height;
+        imageInfo.extent.depth = 1;
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.format = hdrFormat;
+        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-         // Set debug names
-         setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)lightPassResultImages[i], "LightPassImage_Frame" + std::to_string(i));
-         setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)lightPassResultViews[i], "LightPassView_Frame" + std::to_string(i));
-         setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)lightPassResultMemories[i], "LightPassMemory_Frame" + std::to_string(i));
+        device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, lightPassResultImages[i],
+                                   lightPassResultMemories[i]);
 
-         // Incident diffuse buffer (pre-albedo) – same format/usages
-         device.createImageWithInfo(
-             imageInfo,
-             VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-             lightIncidentImages[i],
-             lightIncidentMemories[i]
-         );
+        // Create image view
+        VkImageViewCreateInfo viewInfo{};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = lightPassResultImages[i];
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = hdrFormat;
+        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        viewInfo.subresourceRange.baseMipLevel = 0;
+        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.baseArrayLayer = 0;
+        viewInfo.subresourceRange.layerCount = 1;
 
-         viewInfo.image = lightIncidentImages[i];
-         if (vkCreateImageView(device.getDevice(), &viewInfo, nullptr, &lightIncidentViews[i]) != VK_SUCCESS) {
-             throw std::runtime_error("failed to create light incident image view!");
-         }
-         setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)lightIncidentImages[i], "LightIncidentImage_Frame" + std::to_string(i));
-         setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)lightIncidentViews[i], "LightIncidentView_Frame" + std::to_string(i));
-         setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)lightIncidentMemories[i], "LightIncidentMemory_Frame" + std::to_string(i));
-     }
+        if (vkCreateImageView(device.getDevice(), &viewInfo, nullptr, &lightPassResultViews[i]) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create light pass image view!");
+        }
 
-     // Set debug name for sampler
-     setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)lightPassSampler, "LightPassSampler");
+        // Set debug names
+        setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)lightPassResultImages[i],
+                     "LightPassImage_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)lightPassResultViews[i],
+                     "LightPassView_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)lightPassResultMemories[i],
+                     "LightPassMemory_Frame" + std::to_string(i));
+
+        // Incident diffuse buffer (pre-albedo) – same format/usages
+        device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, lightIncidentImages[i],
+                                   lightIncidentMemories[i]);
+
+        viewInfo.image = lightIncidentImages[i];
+        if (vkCreateImageView(device.getDevice(), &viewInfo, nullptr, &lightIncidentViews[i]) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create light incident image view!");
+        }
+        setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)lightIncidentImages[i],
+                     "LightIncidentImage_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)lightIncidentViews[i],
+                     "LightIncidentView_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)lightIncidentMemories[i],
+                     "LightIncidentMemory_Frame" + std::to_string(i));
+    }
+
+    // Set debug name for sampler
+    setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)lightPassSampler, "LightPassSampler");
 }
 
 void RenderingResources::cleanup() {
     // Wait for device to be idle before cleanup
     vkDeviceWaitIdle(device.getDevice());
-    
+
     // Clean up descriptor set layouts
     if (materialDescriptorSetLayout != VK_NULL_HANDLE) {
         vkDestroyDescriptorSetLayout(device.getDevice(), materialDescriptorSetLayout, nullptr);
@@ -517,7 +486,7 @@ void RenderingResources::cleanup() {
         vkDestroySampler(device.getDevice(), postProcessSampler, nullptr);
         postProcessSampler = VK_NULL_HANDLE;
     }
-    
+
     // Clean up SMAA LUT textures
     if (smaaAreaSampler != VK_NULL_HANDLE) {
         vkDestroySampler(device.getDevice(), smaaAreaSampler, nullptr);
@@ -578,7 +547,7 @@ void RenderingResources::cleanup() {
             }
         }
         depthPyramidMipStorageViews[i].clear();
-        
+
         if (depthPyramidViews[i] != VK_NULL_HANDLE) {
             vkDestroyImageView(device.getDevice(), depthPyramidViews[i], nullptr);
             depthPyramidViews[i] = VK_NULL_HANDLE;
@@ -747,71 +716,54 @@ void RenderingResources::cleanup() {
     std::cout << "RenderingResources cleaned up completely" << std::endl;
 }
 
-void RenderingResources::createBuffers(){
-    
+void RenderingResources::createBuffers() {
     std::cout << "Creating camera, model, and normal matrix buffers..." << std::endl;
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        cameraUniformBuffers[i] = std::make_unique<Buffer>(
-            device,
-            sizeof(CameraUbo),
-            1,
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-        );
+        cameraUniformBuffers[i] =
+            std::make_unique<Buffer>(device, sizeof(CameraUbo), 1, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         cameraUniformBuffers[i]->map();
 
         modelMatrixBuffers[i] = std::make_unique<Buffer>(
-                device,
-                sizeof(glm::mat4),
-                BASE_INSTANCED_RENDERABLES,
-                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-        );
+            device, sizeof(glm::mat4), BASE_INSTANCED_RENDERABLES, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         modelMatrixBuffers[i]->map();
-            
+
         // Create normal matrix buffer
         normalMatrixBuffers[i] = std::make_unique<Buffer>(
-                device,
-                sizeof(glm::mat4),
-                BASE_INSTANCED_RENDERABLES,
-                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-        );
+            device, sizeof(glm::mat4), BASE_INSTANCED_RENDERABLES, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         normalMatrixBuffers[i]->map();
 
         // Set debug names for buffers
-        setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)cameraUniformBuffers[i]->getBuffer(), "CameraUniformBuffer_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)modelMatrixBuffers[i]->getBuffer(), "ModelMatrixBuffer_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)normalMatrixBuffers[i]->getBuffer(), "NormalMatrixBuffer_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)cameraUniformBuffers[i]->getBuffer(),
+                     "CameraUniformBuffer_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)modelMatrixBuffers[i]->getBuffer(),
+                     "ModelMatrixBuffer_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)normalMatrixBuffers[i]->getBuffer(),
+                     "NormalMatrixBuffer_Frame" + std::to_string(i));
     }
     std::cout << "Camera, model, and normal matrix buffers created successfully." << std::endl;
 
     std::cout << "Creating light array uniform buffers..." << std::endl;
-    VkDeviceSize unifiedLightBufferSize = sizeof(UnifiedLightBuffer); 
+    VkDeviceSize unifiedLightBufferSize = sizeof(UnifiedLightBuffer);
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        lightArrayUniformBuffers[i] = std::make_unique<Buffer>(
-            device,
-            unifiedLightBufferSize,
-            1,
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-        );
+        lightArrayUniformBuffers[i] =
+            std::make_unique<Buffer>(device, unifiedLightBufferSize, 1, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         lightArrayUniformBuffers[i]->map();
-        setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)lightArrayUniformBuffers[i]->getBuffer(), "LightArrayUniformBuffer_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)lightArrayUniformBuffers[i]->getBuffer(),
+                     "LightArrayUniformBuffer_Frame" + std::to_string(i));
     }
     std::cout << "Light array uniform buffers created successfully." << std::endl;
 
     std::cout << "Creating cascade splits buffers..." << std::endl;
     // Add cascade splits buffer creation
-    VkDeviceSize cascadeSplitsBufferSize = sizeof(DirectionalLightCascadesBuffer);  
+    VkDeviceSize cascadeSplitsBufferSize = sizeof(DirectionalLightCascadesBuffer);
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        cascadeSplitsBuffers[i] = std::make_unique<Buffer>(
-            device,
-            cascadeSplitsBufferSize,
-            1,
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-        );
+        cascadeSplitsBuffers[i] =
+            std::make_unique<Buffer>(device, cascadeSplitsBufferSize, 1, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         cascadeSplitsBuffers[i]->map();
     }
     std::cout << "Cascade splits buffers created successfully." << std::endl;
@@ -819,28 +771,21 @@ void RenderingResources::createBuffers(){
     std::cout << "Creating scene lighting buffers..." << std::endl;
     VkDeviceSize sceneLightingBufferSize = sizeof(SceneLightingUbo);
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        sceneLightingBuffers[i] = std::make_unique<Buffer>(
-            device,
-            sceneLightingBufferSize,
-            1,
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-        );
+        sceneLightingBuffers[i] =
+            std::make_unique<Buffer>(device, sceneLightingBufferSize, 1, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         sceneLightingBuffers[i]->map();
-        setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)sceneLightingBuffers[i]->getBuffer(), "SceneLightingBuffer_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)sceneLightingBuffers[i]->getBuffer(),
+                     "SceneLightingBuffer_Frame" + std::to_string(i));
     }
     std::cout << "Scene lighting buffers created successfully." << std::endl;
 
     std::cout << "Creating light matrix buffers..." << std::endl;
     VkDeviceSize bufferSize = sizeof(ShadowcastingLightMatrices);
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        lightMatrixBuffers[i] = std::make_unique<Buffer>(
-            device,
-            bufferSize,
-            1,
-            VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-        );
+        lightMatrixBuffers[i] =
+            std::make_unique<Buffer>(device, bufferSize, 1, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                                     VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         lightMatrixBuffers[i]->map();
     }
     std::cout << "Light matrix buffers created successfully." << std::endl;
@@ -849,12 +794,9 @@ void RenderingResources::createBuffers(){
     VkDeviceSize shadowModelMatrixBuffer = sizeof(glm::mat4);
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         shadowModelMatrixBuffers[i] = std::make_unique<Buffer>(
-            device,
-            shadowModelMatrixBuffer,
-            BASE_INSTANCED_RENDERABLES * MAX_SHADOW_CASCADE_COUNT,
+            device, shadowModelMatrixBuffer, BASE_INSTANCED_RENDERABLES * MAX_SHADOW_CASCADE_COUNT,
             VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-        );
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         shadowModelMatrixBuffers[i]->map();
     }
     std::cout << "Shadow model matrix buffers created successfully." << std::endl;
@@ -863,28 +805,19 @@ void RenderingResources::createBuffers(){
     VkDeviceSize matrixBufferSize = sizeof(glm::mat4);
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         transparencyModelMatrixBuffers[i] = std::make_unique<Buffer>(
-            device,
-            matrixBufferSize,
-            BASE_INSTANCED_RENDERABLES,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-        );
+            device, matrixBufferSize, BASE_INSTANCED_RENDERABLES, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         transparencyModelMatrixBuffers[i]->map();
 
         transparencyNormalMatrixBuffers[i] = std::make_unique<Buffer>(
-            device,
-            matrixBufferSize,
-            BASE_INSTANCED_RENDERABLES,
-            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-        );
+            device, matrixBufferSize, BASE_INSTANCED_RENDERABLES, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         transparencyNormalMatrixBuffers[i]->map();
     }
     std::cout << "Transparency buffers created successfully." << std::endl;
-
 }
 
-void RenderingResources::createDescriptorPool(){
+void RenderingResources::createDescriptorPool() {
     std::cout << "Creating descriptor pool..." << std::endl;
     // Recompute descriptor pool sizes with current pipelines (including RC and depth pyramid)
     std::cout << "Calculating descriptor pool sizes..." << std::endl;
@@ -898,9 +831,7 @@ void RenderingResources::createDescriptorPool(){
     // 18 core sets (models, camera, gbuffer, lights, shadows, transparency, composition,
     // depth pyramid seed, RC build, RC resolve, SMAA edge/weight/blend, color correction, shadow sampler)
     // + per-mip depth pyramid sets.
-    const uint32_t totalDescriptorSets =
-        MAX_FRAMES_IN_FLIGHT * (18 + pyramidExtraSetsPerFrame) +
-        1; // skybox
+    const uint32_t totalDescriptorSets = MAX_FRAMES_IN_FLIGHT * (18 + pyramidExtraSetsPerFrame) + 1; // skybox
 
     // Uniform buffers per frame: camera, light array, cascade splits, scene lighting, light matrix, RC build, RC resolve
     const uint32_t uniformBufferCount = MAX_FRAMES_IN_FLIGHT * 7;
@@ -910,58 +841,50 @@ void RenderingResources::createDescriptorPool(){
 
     // Combined image samplers per frame:
     const uint32_t gbufferSamplers = MAX_FRAMES_IN_FLIGHT * 4;
-    const uint32_t shadowSamplers = MAX_FRAMES_IN_FLIGHT * (MAX_DIRECTIONAL_LIGHTS + MAX_SPOT_LIGHTS + MAX_POINT_LIGHTS);
+    const uint32_t shadowSamplers =
+        MAX_FRAMES_IN_FLIGHT * (MAX_DIRECTIONAL_LIGHTS + MAX_SPOT_LIGHTS + MAX_POINT_LIGHTS);
     const uint32_t compositionSamplers = MAX_FRAMES_IN_FLIGHT * 4;
     const uint32_t depthPyramidSamplers = MAX_FRAMES_IN_FLIGHT * (1 + pyramidExtraSetsPerFrame); // seed + per-mip
     const uint32_t rcBuildSamplers = MAX_FRAMES_IN_FLIGHT * 6; // gbuffer4 + depth + incident
-    const uint32_t rcResolveSamplers = MAX_FRAMES_IN_FLIGHT * (RC_CASCADE_COUNT + 6); // gbuffer4 + radiance array + history + prev pos
+    const uint32_t rcResolveSamplers =
+        MAX_FRAMES_IN_FLIGHT * (RC_CASCADE_COUNT + 6);                // gbuffer4 + radiance array + history + prev pos
     const uint32_t smaaSamplers = MAX_FRAMES_IN_FLIGHT * (1 + 3 + 2); // edge + weight + blend
     const uint32_t colorCorrectionSamplers = MAX_FRAMES_IN_FLIGHT * 1;
     const uint32_t skyboxSamplers = 1;
-    const uint32_t combinedImageSamplerCount =
-        gbufferSamplers +
-        shadowSamplers +
-        compositionSamplers +
-        depthPyramidSamplers +
-        rcBuildSamplers +
-        rcResolveSamplers +
-        smaaSamplers +
-        colorCorrectionSamplers +
-        skyboxSamplers;
+    const uint32_t combinedImageSamplerCount = gbufferSamplers + shadowSamplers + compositionSamplers +
+                                               depthPyramidSamplers + rcBuildSamplers + rcResolveSamplers +
+                                               smaaSamplers + colorCorrectionSamplers + skyboxSamplers;
 
     // Storage images per frame:
     // RC build radiance atlases (N), depth pyramid seed (1), per-mip outputs, RC resolve GI output (1)
     const uint32_t storageImageCount =
         MAX_FRAMES_IN_FLIGHT * (RC_CASCADE_COUNT + 2 + pyramidExtraSetsPerFrame); // +2 = depth seed + gi output
 
-    std::cout << "Pool sizes: " << totalDescriptorSets << " sets, "
-              << uniformBufferCount << " uniform buffers, "
-              << storageBufferCount << " storage buffers, "
-              << combinedImageSamplerCount << " combined image samplers, "
+    std::cout << "Pool sizes: " << totalDescriptorSets << " sets, " << uniformBufferCount << " uniform buffers, "
+              << storageBufferCount << " storage buffers, " << combinedImageSamplerCount << " combined image samplers, "
               << storageImageCount << " storage images" << std::endl;
 
     std::cout << "Building descriptor pool..." << std::endl;
     descriptorPool = DescriptorPool::Builder(device)
-            .setMaxSets(totalDescriptorSets)
-            .addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, uniformBufferCount)
-            .addPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, storageBufferCount)
-            .addPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, storageImageCount)
-            .addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, combinedImageSamplerCount)
-            .build();
+                         .setMaxSets(totalDescriptorSets)
+                         .addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, uniformBufferCount)
+                         .addPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, storageBufferCount)
+                         .addPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, storageImageCount)
+                         .addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, combinedImageSamplerCount)
+                         .build();
     std::cout << "Descriptor pool created successfully." << std::endl;
 }
 
-void RenderingResources::createDescriptorSetLayouts(){
-
+void RenderingResources::createDescriptorSetLayouts() {
     std::cout << "Creating models descriptor set layout..." << std::endl;
     // Create descriptor set layout for instance storage buffers
-    std::array<VkDescriptorSetLayoutBinding, 2> instanceBindings{};     
+    std::array<VkDescriptorSetLayoutBinding, 2> instanceBindings{};
     // Model matrix storage buffer
     instanceBindings[0].binding = 0;
     instanceBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     instanceBindings[0].descriptorCount = 1;
     instanceBindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-        
+
     // Normal matrix storage buffer
     instanceBindings[1].binding = 1;
     instanceBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -973,41 +896,42 @@ void RenderingResources::createDescriptorSetLayouts(){
     instanceLayoutInfo.bindingCount = static_cast<uint32_t>(instanceBindings.size());
     instanceLayoutInfo.pBindings = instanceBindings.data();
 
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &instanceLayoutInfo, nullptr, &modelsDescriptorSetLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(device.getDevice(), &instanceLayoutInfo, nullptr, &modelsDescriptorSetLayout) !=
+        VK_SUCCESS) {
         throw std::runtime_error("Failed to create instance buffer descriptor set layout");
     }
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)modelsDescriptorSetLayout, "ModelsDescriptorSetLayout");
+    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)modelsDescriptorSetLayout,
+                 "ModelsDescriptorSetLayout");
     std::cout << "Models descriptor set layout created successfully." << std::endl;
-
 
     std::cout << "Creating material descriptor set layout..." << std::endl;
     std::array<VkDescriptorSetLayoutBinding, 5> bindings{};
 
-        // Material UBO (binding = 1)
+    // Material UBO (binding = 1)
     bindings[0].binding = 0;
     bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     bindings[0].descriptorCount = 1;
     bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-        // Albedo texture (binding = 2)
+    // Albedo texture (binding = 2)
     bindings[1].binding = 1;
     bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     bindings[1].descriptorCount = 1;
     bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-        // Normal map (binding = 3)
+    // Normal map (binding = 3)
     bindings[2].binding = 2;
     bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     bindings[2].descriptorCount = 1;
     bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-        // Metallic-smoothness map (binding = 4)
+    // Metallic-smoothness map (binding = 4)
     bindings[3].binding = 3;
     bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     bindings[3].descriptorCount = 1;
     bindings[3].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-        // Occlusion map (binding = 5)
+    // Occlusion map (binding = 5)
     bindings[4].binding = 4;
     bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     bindings[4].descriptorCount = 1;
@@ -1018,11 +942,12 @@ void RenderingResources::createDescriptorSetLayouts(){
     setMaterialLayoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
     setMaterialLayoutInfo.pBindings = bindings.data();
 
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &setMaterialLayoutInfo, nullptr, &materialDescriptorSetLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(device.getDevice(), &setMaterialLayoutInfo, nullptr,
+                                    &materialDescriptorSetLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create descriptor set layout for materials");
     }
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)materialDescriptorSetLayout, "MaterialDescriptorSetLayout");
+    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)materialDescriptorSetLayout,
+                 "MaterialDescriptorSetLayout");
     std::cout << "Material descriptor set layout created successfully." << std::endl;
 
     //Create descriptor set layout for camera uniform buffer
@@ -1037,11 +962,13 @@ void RenderingResources::createDescriptorSetLayouts(){
     cameraBufferLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     cameraBufferLayoutInfo.bindingCount = 1;
     cameraBufferLayoutInfo.pBindings = &cameraBufferBinding;
-        
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &cameraBufferLayoutInfo, nullptr, &cameraDescriptorSetLayout) != VK_SUCCESS) {
+
+    if (vkCreateDescriptorSetLayout(device.getDevice(), &cameraBufferLayoutInfo, nullptr, &cameraDescriptorSetLayout) !=
+        VK_SUCCESS) {
         throw std::runtime_error("Failed to create descriptor set layout for set 0!");
     }
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)cameraDescriptorSetLayout, "CameraDescriptorSetLayout");
+    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)cameraDescriptorSetLayout,
+                 "CameraDescriptorSetLayout");
     std::cout << "Camera descriptor set layout created successfully." << std::endl;
 
     std::cout << "Creating GBuffer descriptor set layout..." << std::endl;
@@ -1058,10 +985,12 @@ void RenderingResources::createDescriptorSetLayouts(){
     gBufferLayoutInfo.bindingCount = static_cast<uint32_t>(gBufferBindings.size());
     gBufferLayoutInfo.pBindings = gBufferBindings.data();
 
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &gBufferLayoutInfo, nullptr, &gBufferDescriptorSetLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(device.getDevice(), &gBufferLayoutInfo, nullptr, &gBufferDescriptorSetLayout) !=
+        VK_SUCCESS) {
         throw std::runtime_error("failed to create gbuffer descriptor set layout!");
     }
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)gBufferDescriptorSetLayout, "GBufferDescriptorSetLayout");
+    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)gBufferDescriptorSetLayout,
+                 "GBufferDescriptorSetLayout");
     std::cout << "GBuffer descriptor set layout created successfully." << std::endl;
 
     std::cout << "Creating light array descriptor set layout..." << std::endl;
@@ -1076,10 +1005,12 @@ void RenderingResources::createDescriptorSetLayouts(){
     lightLayoutInfo.bindingCount = 1;
     lightLayoutInfo.pBindings = &lightArrayBinding;
 
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &lightLayoutInfo, nullptr, &lightArrayDescriptorSetLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(device.getDevice(), &lightLayoutInfo, nullptr, &lightArrayDescriptorSetLayout) !=
+        VK_SUCCESS) {
         throw std::runtime_error("failed to create unified light descriptor set layout!");
     }
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)lightArrayDescriptorSetLayout, "LightArrayDescriptorSetLayout");
+    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)lightArrayDescriptorSetLayout,
+                 "LightArrayDescriptorSetLayout");
     std::cout << "Light array descriptor set layout created successfully." << std::endl;
 
     std::cout << "Creating cascade splits descriptor set layout..." << std::endl;
@@ -1094,10 +1025,12 @@ void RenderingResources::createDescriptorSetLayouts(){
     cascadeSplitsLayoutInfo.bindingCount = 1;
     cascadeSplitsLayoutInfo.pBindings = &cascadeSplitsBinding;
 
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &cascadeSplitsLayoutInfo, nullptr, &cascadeSplitsSetLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(device.getDevice(), &cascadeSplitsLayoutInfo, nullptr, &cascadeSplitsSetLayout) !=
+        VK_SUCCESS) {
         throw std::runtime_error("failed to create cascade splits descriptor set layout!");
     }
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)cascadeSplitsSetLayout, "CascadeSplitsDescriptorSetLayout");
+    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)cascadeSplitsSetLayout,
+                 "CascadeSplitsDescriptorSetLayout");
     std::cout << "Cascade splits descriptor set layout created successfully." << std::endl;
 
     std::cout << "Creating scene lighting descriptor set layout..." << std::endl;
@@ -1112,10 +1045,12 @@ void RenderingResources::createDescriptorSetLayouts(){
     sceneLightingLayoutInfo.bindingCount = 1;
     sceneLightingLayoutInfo.pBindings = &sceneLightingBinding;
 
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &sceneLightingLayoutInfo, nullptr, &sceneLightingDescriptorSetLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(device.getDevice(), &sceneLightingLayoutInfo, nullptr,
+                                    &sceneLightingDescriptorSetLayout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create scene lighting descriptor set layout!");
     }
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)sceneLightingDescriptorSetLayout, "SceneLightingDescriptorSetLayout");
+    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)sceneLightingDescriptorSetLayout,
+                 "SceneLightingDescriptorSetLayout");
     std::cout << "Scene lighting descriptor set layout created successfully." << std::endl;
 
     // Create descriptor set layout (shared between both pipelines)
@@ -1124,17 +1059,20 @@ void RenderingResources::createDescriptorSetLayouts(){
     shadowUboBinding.binding = 0;
     shadowUboBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
     shadowUboBinding.descriptorCount = 1;
-    shadowUboBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+    shadowUboBinding.stageFlags =
+        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
     VkDescriptorSetLayoutCreateInfo shadowUbolayoutInfo{};
     shadowUbolayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     shadowUbolayoutInfo.bindingCount = 1;
     shadowUbolayoutInfo.pBindings = &shadowUboBinding;
 
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &shadowUbolayoutInfo, nullptr, &shadowcastinglightMatrixDescriptorSetLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(device.getDevice(), &shadowUbolayoutInfo, nullptr,
+                                    &shadowcastinglightMatrixDescriptorSetLayout) != VK_SUCCESS) {
         throw std::runtime_error("failed to create shadow descriptor set layout!");
     }
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowcastinglightMatrixDescriptorSetLayout, "ShadowLightMatrixDescriptorSetLayout");
+    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowcastinglightMatrixDescriptorSetLayout,
+                 "ShadowLightMatrixDescriptorSetLayout");
     std::cout << "Shadow light matrix descriptor set layout created successfully." << std::endl;
 
     // Create descriptor set layout for shadow map samplers
@@ -1162,11 +1100,12 @@ void RenderingResources::createDescriptorSetLayouts(){
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutInfo.bindingCount = static_cast<uint32_t>(shadowMapLayoutBindings.size());
     layoutInfo.pBindings = shadowMapLayoutBindings.data();
-    
+
     if (vkCreateDescriptorSetLayout(device.getDevice(), &layoutInfo, nullptr, &shadowMapSamplerLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create shadow map sampler descriptor set layout");
     }
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowMapSamplerLayout, "ShadowMapSamplerDescriptorSetLayout");
+    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowMapSamplerLayout,
+                 "ShadowMapSamplerDescriptorSetLayout");
     std::cout << "Shadow map sampler descriptor set layout created successfully." << std::endl;
 
     //Create descriptor set layout for shadow model matrix
@@ -1176,16 +1115,18 @@ void RenderingResources::createDescriptorSetLayouts(){
     shadowModelMatrixBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     shadowModelMatrixBinding.descriptorCount = 1;
     shadowModelMatrixBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    
+
     VkDescriptorSetLayoutCreateInfo shadowModelMatrixLayoutInfo{};
     shadowModelMatrixLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     shadowModelMatrixLayoutInfo.bindingCount = 1;
     shadowModelMatrixLayoutInfo.pBindings = &shadowModelMatrixBinding;
-    
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &shadowModelMatrixLayoutInfo, nullptr, &shadowModelMatrixDescriptorSetLayout) != VK_SUCCESS) {
+
+    if (vkCreateDescriptorSetLayout(device.getDevice(), &shadowModelMatrixLayoutInfo, nullptr,
+                                    &shadowModelMatrixDescriptorSetLayout) != VK_SUCCESS) {
         throw std::runtime_error("Failed to create shadow model matrix descriptor set layout");
     }
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowModelMatrixDescriptorSetLayout, "ShadowModelMatrixDescriptorSetLayout");
+    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowModelMatrixDescriptorSetLayout,
+                 "ShadowModelMatrixDescriptorSetLayout");
     std::cout << "Shadow model matrix descriptor set layout created successfully." << std::endl;
 
     //Create descriptor set layout for skybox
@@ -1195,60 +1136,64 @@ void RenderingResources::createDescriptorSetLayouts(){
     skyboxBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     skyboxBinding.descriptorCount = 1;
     skyboxBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    
+
     VkDescriptorSetLayoutCreateInfo skyboxLayoutInfo{};
     skyboxLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     skyboxLayoutInfo.bindingCount = 1;
     skyboxLayoutInfo.pBindings = &skyboxBinding;
 
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &skyboxLayoutInfo, nullptr, &skyboxDescriptorSetLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(device.getDevice(), &skyboxLayoutInfo, nullptr, &skyboxDescriptorSetLayout) !=
+        VK_SUCCESS) {
         throw std::runtime_error("Failed to create skybox descriptor set layout");
     }
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)skyboxDescriptorSetLayout, "SkyboxDescriptorSetLayout");
+    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)skyboxDescriptorSetLayout,
+                 "SkyboxDescriptorSetLayout");
     std::cout << "Skybox descriptor set layout created successfully." << std::endl;
 
     //Create descriptor set layout for transparency model matrix
-      std::cout << "Creating transparency model descriptor set layout..." << std::endl;
-      std::array<VkDescriptorSetLayoutBinding, 2> transparencyInstanceBindings{};     
-      // Model matrix storage buffer
-      transparencyInstanceBindings[0].binding = 0;
-      transparencyInstanceBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-      transparencyInstanceBindings[0].descriptorCount = 1;
-      transparencyInstanceBindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-          
-      // Normal matrix storage buffer
-      transparencyInstanceBindings[1].binding = 1;
-      transparencyInstanceBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-      transparencyInstanceBindings[1].descriptorCount = 1;
-      transparencyInstanceBindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-  
-      VkDescriptorSetLayoutCreateInfo transparencyInstanceLayoutInfo{};
-      transparencyInstanceLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-      transparencyInstanceLayoutInfo.bindingCount = static_cast<uint32_t>(transparencyInstanceBindings.size());
-      transparencyInstanceLayoutInfo.pBindings = transparencyInstanceBindings.data();
-  
-      if (vkCreateDescriptorSetLayout(device.getDevice(), &transparencyInstanceLayoutInfo, nullptr, &transparencyModelDescriptorSetLayout) != VK_SUCCESS) {
-          throw std::runtime_error("Failed to create transparency instance buffer descriptor set layout");
-      }
-      setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)transparencyModelDescriptorSetLayout, "TransparencyModelDescriptorSetLayout");
-      std::cout << "Transparency model descriptor set layout created successfully." << std::endl;
+    std::cout << "Creating transparency model descriptor set layout..." << std::endl;
+    std::array<VkDescriptorSetLayoutBinding, 2> transparencyInstanceBindings{};
+    // Model matrix storage buffer
+    transparencyInstanceBindings[0].binding = 0;
+    transparencyInstanceBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    transparencyInstanceBindings[0].descriptorCount = 1;
+    transparencyInstanceBindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    // Normal matrix storage buffer
+    transparencyInstanceBindings[1].binding = 1;
+    transparencyInstanceBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    transparencyInstanceBindings[1].descriptorCount = 1;
+    transparencyInstanceBindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutCreateInfo transparencyInstanceLayoutInfo{};
+    transparencyInstanceLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    transparencyInstanceLayoutInfo.bindingCount = static_cast<uint32_t>(transparencyInstanceBindings.size());
+    transparencyInstanceLayoutInfo.pBindings = transparencyInstanceBindings.data();
+
+    if (vkCreateDescriptorSetLayout(device.getDevice(), &transparencyInstanceLayoutInfo, nullptr,
+                                    &transparencyModelDescriptorSetLayout) != VK_SUCCESS) {
+        throw std::runtime_error("Failed to create transparency instance buffer descriptor set layout");
+    }
+    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)transparencyModelDescriptorSetLayout,
+                 "TransparencyModelDescriptorSetLayout");
+    std::cout << "Transparency model descriptor set layout created successfully." << std::endl;
 
     // Create descriptor set layout for composition textures
     std::cout << "Creating composition descriptor set layout..." << std::endl;
     std::array<VkDescriptorSetLayoutBinding, 4> compositionBindings{};
-    
+
     // Binding 0: Opaque render result (from LightPass)
     compositionBindings[0].binding = 0;
     compositionBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     compositionBindings[0].descriptorCount = 1;
     compositionBindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    
+
     // Binding 1: Transparency accumulation buffer
     compositionBindings[1].binding = 1;
     compositionBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     compositionBindings[1].descriptorCount = 1;
     compositionBindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    
+
     // Binding 2: Transparency revealage buffer
     compositionBindings[2].binding = 2;
     compositionBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
@@ -1266,10 +1211,12 @@ void RenderingResources::createDescriptorSetLayouts(){
     compositionLayoutInfo.bindingCount = static_cast<uint32_t>(compositionBindings.size());
     compositionLayoutInfo.pBindings = compositionBindings.data();
 
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &compositionLayoutInfo, nullptr, &compositionSetLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(device.getDevice(), &compositionLayoutInfo, nullptr, &compositionSetLayout) !=
+        VK_SUCCESS) {
         throw std::runtime_error("failed to create composition descriptor set layout!");
     }
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)compositionSetLayout, "CompositionDescriptorSetLayout");
+    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)compositionSetLayout,
+                 "CompositionDescriptorSetLayout");
     std::cout << "Composition descriptor set layout created successfully." << std::endl;
 
     // SMAA edge descriptor set layout (compositionColor input)
@@ -1285,7 +1232,8 @@ void RenderingResources::createDescriptorSetLayouts(){
     smaaEdgeLayoutInfo.bindingCount = 1;
     smaaEdgeLayoutInfo.pBindings = &smaaEdgeBinding;
 
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &smaaEdgeLayoutInfo, nullptr, &smaaEdgeSetLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(device.getDevice(), &smaaEdgeLayoutInfo, nullptr, &smaaEdgeSetLayout) !=
+        VK_SUCCESS) {
         throw std::runtime_error("failed to create SMAA edge descriptor set layout!");
     }
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)smaaEdgeSetLayout, "SMAAEdgeDescriptorSetLayout");
@@ -1314,7 +1262,8 @@ void RenderingResources::createDescriptorSetLayouts(){
     smaaWeightLayoutInfo.bindingCount = static_cast<uint32_t>(smaaWeightBindings.size());
     smaaWeightLayoutInfo.pBindings = smaaWeightBindings.data();
 
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &smaaWeightLayoutInfo, nullptr, &smaaWeightSetLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(device.getDevice(), &smaaWeightLayoutInfo, nullptr, &smaaWeightSetLayout) !=
+        VK_SUCCESS) {
         throw std::runtime_error("failed to create SMAA weight descriptor set layout!");
     }
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)smaaWeightSetLayout, "SMAAWeightDescriptorSetLayout");
@@ -1338,7 +1287,8 @@ void RenderingResources::createDescriptorSetLayouts(){
     smaaBlendLayoutInfo.bindingCount = static_cast<uint32_t>(smaaBlendBindings.size());
     smaaBlendLayoutInfo.pBindings = smaaBlendBindings.data();
 
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &smaaBlendLayoutInfo, nullptr, &smaaBlendSetLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(device.getDevice(), &smaaBlendLayoutInfo, nullptr, &smaaBlendSetLayout) !=
+        VK_SUCCESS) {
         throw std::runtime_error("failed to create SMAA blend descriptor set layout!");
     }
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)smaaBlendSetLayout, "SMAABlendDescriptorSetLayout");
@@ -1357,10 +1307,12 @@ void RenderingResources::createDescriptorSetLayouts(){
     colorCorrectLayoutInfo.bindingCount = 1;
     colorCorrectLayoutInfo.pBindings = &colorCorrectBinding;
 
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &colorCorrectLayoutInfo, nullptr, &colorCorrectionSetLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(device.getDevice(), &colorCorrectLayoutInfo, nullptr, &colorCorrectionSetLayout) !=
+        VK_SUCCESS) {
         throw std::runtime_error("failed to create color correction descriptor set layout!");
     }
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)colorCorrectionSetLayout, "ColorCorrectionDescriptorSetLayout");
+    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)colorCorrectionSetLayout,
+                 "ColorCorrectionDescriptorSetLayout");
     std::cout << "Color correction descriptor set layout created successfully." << std::endl;
 
     // RC Build descriptor set layout
@@ -1449,7 +1401,8 @@ void RenderingResources::createDescriptorSetLayouts(){
     rcResolveLayoutInfo.bindingCount = static_cast<uint32_t>(rcResolveBindings.size());
     rcResolveLayoutInfo.pBindings = rcResolveBindings.data();
 
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &rcResolveLayoutInfo, nullptr, &rcResolveSetLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(device.getDevice(), &rcResolveLayoutInfo, nullptr, &rcResolveSetLayout) !=
+        VK_SUCCESS) {
         throw std::runtime_error("failed to create RC resolve descriptor set layout!");
     }
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)rcResolveSetLayout, "RCResolveDescriptorSetLayout");
@@ -1474,47 +1427,49 @@ void RenderingResources::createDescriptorSetLayouts(){
     pyrLayoutInfo.bindingCount = static_cast<uint32_t>(pyrBindings.size());
     pyrLayoutInfo.pBindings = pyrBindings.data();
 
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &pyrLayoutInfo, nullptr, &depthPyramidSetLayout) != VK_SUCCESS) {
+    if (vkCreateDescriptorSetLayout(device.getDevice(), &pyrLayoutInfo, nullptr, &depthPyramidSetLayout) !=
+        VK_SUCCESS) {
         throw std::runtime_error("failed to create depth pyramid descriptor set layout!");
     }
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)depthPyramidSetLayout, "DepthPyramidDescriptorSetLayout");
+    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)depthPyramidSetLayout,
+                 "DepthPyramidDescriptorSetLayout");
     std::cout << "Depth pyramid descriptor set layout created successfully." << std::endl;
-
 }
 
-void RenderingResources::createDescriptorSets(){
-
+void RenderingResources::createDescriptorSets() {
     std::cout << "Creating descriptor sets..." << std::endl;
-     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++){
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         std::cout << "Creating descriptor sets for frame " << i << std::endl;
-        
+
         //Create descriptor set for instance buffer
         std::cout << "  Creating models descriptor set..." << std::endl;
         VkDescriptorBufferInfo modelBufferInfo = modelMatrixBuffers[i]->descriptorInfo();
-        VkDescriptorBufferInfo normalBufferInfo = normalMatrixBuffers[i]->descriptorInfo();     
+        VkDescriptorBufferInfo normalBufferInfo = normalMatrixBuffers[i]->descriptorInfo();
         if (!DescriptorWriter(modelsDescriptorSetLayout, *descriptorPool)
-            .writeBuffer(0, &modelBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-            .writeBuffer(1, &normalBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-            .build(modelsDescriptorSets[i])) {
+                 .writeBuffer(0, &modelBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                 .writeBuffer(1, &normalBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                 .build(modelsDescriptorSets[i])) {
             throw std::runtime_error("Failed to create instance buffer descriptor set");
         }
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)modelsDescriptorSets[i], "ModelsDescriptorSet_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)modelsDescriptorSets[i],
+                     "ModelsDescriptorSet_Frame" + std::to_string(i));
         std::cout << "  Models descriptor set created successfully." << std::endl;
 
         //Create descriptor set for camera buffer
         std::cout << "  Creating camera descriptor set..." << std::endl;
         VkDescriptorBufferInfo cameraBufferInfo = cameraUniformBuffers[i]->descriptorInfo();
         if (!DescriptorWriter(cameraDescriptorSetLayout, *descriptorPool)
-            .writeBuffer(0, &cameraBufferInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-            .build(cameraDescriptorSets[i])) {
+                 .writeBuffer(0, &cameraBufferInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
+                 .build(cameraDescriptorSets[i])) {
             throw std::runtime_error("Failed to create camera buffer descriptor set");
         }
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)cameraDescriptorSets[i], "CameraDescriptorSet_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)cameraDescriptorSets[i],
+                     "CameraDescriptorSet_Frame" + std::to_string(i));
         std::cout << "  Camera descriptor set created successfully." << std::endl;
 
-       //Create descriptor set for gbuffer
+        //Create descriptor set for gbuffer
         std::cout << "  Creating GBuffer descriptor set..." << std::endl;
-        
+
         // First allocate the descriptor set
         VkDescriptorSetAllocateInfo allocInfoGBuffer{};
         allocInfoGBuffer.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1525,13 +1480,17 @@ void RenderingResources::createDescriptorSets(){
         if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoGBuffer, &gBufferDescriptorSets[i]) != VK_SUCCESS) {
             throw std::runtime_error("Failed to allocate GBuffer descriptor set");
         }
-        
+
         // Then prepare the image infos and update the descriptor set
         std::array<VkDescriptorImageInfo, 4> gbufferImageInfos;
-        gbufferImageInfos[0] = {gBuffer->getSampler(), gBuffer->getPositionView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-        gbufferImageInfos[1] = {gBuffer->getSampler(), gBuffer->getNormalView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-        gbufferImageInfos[2] = {gBuffer->getSampler(), gBuffer->getAlbedoView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-        gbufferImageInfos[3] = {gBuffer->getSampler(), gBuffer->getMaterialView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        gbufferImageInfos[0] = {gBuffer->getSampler(), gBuffer->getPositionView(i),
+                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        gbufferImageInfos[1] = {gBuffer->getSampler(), gBuffer->getNormalView(i),
+                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        gbufferImageInfos[2] = {gBuffer->getSampler(), gBuffer->getAlbedoView(i),
+                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        gbufferImageInfos[3] = {gBuffer->getSampler(), gBuffer->getMaterialView(i),
+                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
 
         std::array<VkWriteDescriptorSet, 4> gbufferDescriptorWrites{};
         for (size_t j = 0; j < gbufferDescriptorWrites.size(); j++) {
@@ -1543,13 +1502,10 @@ void RenderingResources::createDescriptorSets(){
             gbufferDescriptorWrites[j].pImageInfo = &gbufferImageInfos[j];
         }
 
-        vkUpdateDescriptorSets(
-            device.getDevice(),
-            static_cast<uint32_t>(gbufferDescriptorWrites.size()),
-            gbufferDescriptorWrites.data(),
-            0, nullptr
-        );
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)gBufferDescriptorSets[i], "GBufferDescriptorSet_Frame" + std::to_string(i));
+        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(gbufferDescriptorWrites.size()),
+                               gbufferDescriptorWrites.data(), 0, nullptr);
+        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)gBufferDescriptorSets[i],
+                     "GBufferDescriptorSet_Frame" + std::to_string(i));
         std::cout << "  GBuffer descriptor set created successfully." << std::endl;
 
         //Create descriptor set for light array buffer
@@ -1560,7 +1516,8 @@ void RenderingResources::createDescriptorSets(){
         allocInfoUnifiedLight.descriptorSetCount = 1;
         allocInfoUnifiedLight.pSetLayouts = &lightArrayDescriptorSetLayout;
 
-        if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoUnifiedLight, &lightArrayDescriptorSets[i]) != VK_SUCCESS) {
+        if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoUnifiedLight, &lightArrayDescriptorSets[i]) !=
+            VK_SUCCESS) {
             throw std::runtime_error("Failed to allocate light array buffer descriptor set");
         }
         VkDescriptorBufferInfo bufferInfoUnifiedLight{};
@@ -1577,7 +1534,8 @@ void RenderingResources::createDescriptorSets(){
         writeUnifiedLight.pBufferInfo = &bufferInfoUnifiedLight;
 
         vkUpdateDescriptorSets(device.getDevice(), 1, &writeUnifiedLight, 0, nullptr);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)lightArrayDescriptorSets[i], "LightArrayDescriptorSet_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)lightArrayDescriptorSets[i],
+                     "LightArrayDescriptorSet_Frame" + std::to_string(i));
         std::cout << "  Light array descriptor set created successfully." << std::endl;
 
         //Create descriptor set for cascade splits buffer
@@ -1588,7 +1546,8 @@ void RenderingResources::createDescriptorSets(){
         allocInfoCascadeSplits.descriptorSetCount = 1;
         allocInfoCascadeSplits.pSetLayouts = &cascadeSplitsSetLayout;
 
-        if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoCascadeSplits, &cascadeSplitsDescriptorSets[i]) != VK_SUCCESS) {
+        if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoCascadeSplits, &cascadeSplitsDescriptorSets[i]) !=
+            VK_SUCCESS) {
             throw std::runtime_error("Failed to allocate cascade splits buffer descriptor set");
         }
 
@@ -1608,7 +1567,6 @@ void RenderingResources::createDescriptorSets(){
         vkUpdateDescriptorSets(device.getDevice(), 1, &writeCascadeSplits, 0, nullptr);
         std::cout << "  Cascade splits descriptor set created successfully." << std::endl;
 
-
         //Create descriptor set for scene lighting buffer
         std::cout << "  Creating scene lighting descriptor set..." << std::endl;
         VkDescriptorSetAllocateInfo allocInfoSceneLightingUbo{};
@@ -1617,7 +1575,8 @@ void RenderingResources::createDescriptorSets(){
         allocInfoSceneLightingUbo.descriptorSetCount = 1;
         allocInfoSceneLightingUbo.pSetLayouts = &sceneLightingDescriptorSetLayout;
 
-        if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoSceneLightingUbo, &sceneLightingDescriptorSets[i]) != VK_SUCCESS) {
+        if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoSceneLightingUbo, &sceneLightingDescriptorSets[i]) !=
+            VK_SUCCESS) {
             throw std::runtime_error("Failed to allocate scene lighting descriptor set");
         }
 
@@ -1665,11 +1624,11 @@ void RenderingResources::createDescriptorSets(){
         //Create descriptor set for transparency model matrix
         std::cout << "  Creating transparency model matrix descriptor set..." << std::endl;
         VkDescriptorBufferInfo transparencyModelBufferInfo = transparencyModelMatrixBuffers[i]->descriptorInfo();
-        VkDescriptorBufferInfo transparencyNormalBufferInfo = transparencyNormalMatrixBuffers[i]->descriptorInfo();     
+        VkDescriptorBufferInfo transparencyNormalBufferInfo = transparencyNormalMatrixBuffers[i]->descriptorInfo();
         if (!DescriptorWriter(transparencyModelDescriptorSetLayout, *descriptorPool)
-            .writeBuffer(0, &transparencyModelBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-            .writeBuffer(1, &transparencyNormalBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-            .build(transparencyModelMatrixDescriptorSets[i])) {
+                 .writeBuffer(0, &transparencyModelBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                 .writeBuffer(1, &transparencyNormalBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
+                 .build(transparencyModelMatrixDescriptorSets[i])) {
             throw std::runtime_error("Failed to create transparency instance buffer descriptor set");
         }
         std::cout << "  Transparency model matrix descriptor set created successfully." << std::endl;
@@ -1687,17 +1646,17 @@ void RenderingResources::createDescriptorSets(){
 
         // Prepare image infos
         std::array<VkDescriptorImageInfo, 4> compositionImageInfos;
-        
+
         // Opaque render result from light pass
         compositionImageInfos[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         compositionImageInfos[0].imageView = lightPassResultViews[i];
         compositionImageInfos[0].sampler = lightPassSampler;
-        
+
         // Transparency accumulation buffer
         compositionImageInfos[1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         compositionImageInfos[1].imageView = accumulationViews[i];
         compositionImageInfos[1].sampler = lightPassSampler;
-        
+
         // Transparency revealage buffer
         compositionImageInfos[2].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         compositionImageInfos[2].imageView = revealageViews[i];
@@ -1720,13 +1679,10 @@ void RenderingResources::createDescriptorSets(){
         }
 
         // Update descriptor sets
-        vkUpdateDescriptorSets(
-            device.getDevice(),
-            static_cast<uint32_t>(compositionDescriptorWrites.size()),
-            compositionDescriptorWrites.data(),
-            0, nullptr
-        );
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)compositionDescriptorSets[i], "CompositionDescriptorSet_Frame" + std::to_string(i));
+        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(compositionDescriptorWrites.size()),
+                               compositionDescriptorWrites.data(), 0, nullptr);
+        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)compositionDescriptorSets[i],
+                     "CompositionDescriptorSet_Frame" + std::to_string(i));
         std::cout << "  Composition descriptor set created successfully." << std::endl;
 
         // Create descriptor set for SMAA edge pass
@@ -1755,7 +1711,8 @@ void RenderingResources::createDescriptorSets(){
         smaaEdgeWrite.pImageInfo = &smaaEdgeInput;
 
         vkUpdateDescriptorSets(device.getDevice(), 1, &smaaEdgeWrite, 0, nullptr);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)smaaEdgeDescriptorSets[i], "SMAAEdgeDescriptorSet_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)smaaEdgeDescriptorSets[i],
+                     "SMAAEdgeDescriptorSet_Frame" + std::to_string(i));
         std::cout << "  SMAA edge descriptor set created successfully." << std::endl;
 
         // Create descriptor set for SMAA weight pass
@@ -1766,7 +1723,8 @@ void RenderingResources::createDescriptorSets(){
         smaaWeightAlloc.descriptorSetCount = 1;
         smaaWeightAlloc.pSetLayouts = &smaaWeightSetLayout;
 
-        if (vkAllocateDescriptorSets(device.getDevice(), &smaaWeightAlloc, &smaaWeightDescriptorSets[i]) != VK_SUCCESS) {
+        if (vkAllocateDescriptorSets(device.getDevice(), &smaaWeightAlloc, &smaaWeightDescriptorSets[i]) !=
+            VK_SUCCESS) {
             throw std::runtime_error("Failed to allocate SMAA weight descriptor set");
         }
 
@@ -1807,13 +1765,10 @@ void RenderingResources::createDescriptorSets(){
         smaaWeightWrites[2].descriptorCount = 1;
         smaaWeightWrites[2].pImageInfo = &searchInfo;
 
-        vkUpdateDescriptorSets(
-            device.getDevice(),
-            static_cast<uint32_t>(smaaWeightWrites.size()),
-            smaaWeightWrites.data(),
-            0, nullptr
-        );
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)smaaWeightDescriptorSets[i], "SMAAWeightDescriptorSet_Frame" + std::to_string(i));
+        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(smaaWeightWrites.size()),
+                               smaaWeightWrites.data(), 0, nullptr);
+        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)smaaWeightDescriptorSets[i],
+                     "SMAAWeightDescriptorSet_Frame" + std::to_string(i));
         std::cout << "  SMAA weight descriptor set created successfully." << std::endl;
 
         // Create descriptor set for SMAA blend pass
@@ -1853,13 +1808,10 @@ void RenderingResources::createDescriptorSets(){
         smaaBlendWrites[1].descriptorCount = 1;
         smaaBlendWrites[1].pImageInfo = &blendWeights;
 
-        vkUpdateDescriptorSets(
-            device.getDevice(),
-            static_cast<uint32_t>(smaaBlendWrites.size()),
-            smaaBlendWrites.data(),
-            0, nullptr
-        );
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)smaaBlendDescriptorSets[i], "SMAABlendDescriptorSet_Frame" + std::to_string(i));
+        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(smaaBlendWrites.size()),
+                               smaaBlendWrites.data(), 0, nullptr);
+        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)smaaBlendDescriptorSets[i],
+                     "SMAABlendDescriptorSet_Frame" + std::to_string(i));
         std::cout << "  SMAA blend descriptor set created successfully." << std::endl;
 
         // Create descriptor set for color correction pass
@@ -1870,7 +1822,8 @@ void RenderingResources::createDescriptorSets(){
         colorCorrectAlloc.descriptorSetCount = 1;
         colorCorrectAlloc.pSetLayouts = &colorCorrectionSetLayout;
 
-        if (vkAllocateDescriptorSets(device.getDevice(), &colorCorrectAlloc, &colorCorrectionDescriptorSets[i]) != VK_SUCCESS) {
+        if (vkAllocateDescriptorSets(device.getDevice(), &colorCorrectAlloc, &colorCorrectionDescriptorSets[i]) !=
+            VK_SUCCESS) {
             throw std::runtime_error("Failed to allocate color correction descriptor set");
         }
 
@@ -1888,7 +1841,8 @@ void RenderingResources::createDescriptorSets(){
         colorCorrectWrite.pImageInfo = &postAAInfo;
 
         vkUpdateDescriptorSets(device.getDevice(), 1, &colorCorrectWrite, 0, nullptr);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)colorCorrectionDescriptorSets[i], "ColorCorrectionDescriptorSet_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)colorCorrectionDescriptorSets[i],
+                     "ColorCorrectionDescriptorSet_Frame" + std::to_string(i));
         std::cout << "  Color correction descriptor set created successfully." << std::endl;
 
         // Create descriptor set for depth pyramid build (src depth + dst pyramid mip0)
@@ -1929,8 +1883,10 @@ void RenderingResources::createDescriptorSets(){
         pyrWrites[1].descriptorCount = 1;
         pyrWrites[1].pImageInfo = &dstPyrInfo;
 
-        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(pyrWrites.size()), pyrWrites.data(), 0, nullptr);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)depthPyramidDescriptorSets[i], "DepthPyramidDescriptorSet_Frame" + std::to_string(i));
+        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(pyrWrites.size()), pyrWrites.data(), 0,
+                               nullptr);
+        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)depthPyramidDescriptorSets[i],
+                     "DepthPyramidDescriptorSet_Frame" + std::to_string(i));
 
         // Allocate per-mip descriptor sets (mips 1..N-1) for the downsample loop
         depthPyramidMipDescriptorSets[i].resize(depthPyramidMipLevels[i]);
@@ -1940,12 +1896,13 @@ void RenderingResources::createDescriptorSets(){
             allocInfoMip.descriptorPool = descriptorPool->getDescriptorPool();
             allocInfoMip.descriptorSetCount = 1;
             allocInfoMip.pSetLayouts = &depthPyramidSetLayout;
-            if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoMip, &depthPyramidMipDescriptorSets[i][m]) != VK_SUCCESS) {
+            if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoMip, &depthPyramidMipDescriptorSets[i][m]) !=
+                VK_SUCCESS) {
                 throw std::runtime_error("Failed to allocate depth pyramid per-mip descriptor set");
             }
-            setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)depthPyramidMipDescriptorSets[i][m], 
-                        "DepthPyramidMipDescriptorSet_Frame" + std::to_string(i) + "_Mip" + std::to_string(m));
-            
+            setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)depthPyramidMipDescriptorSets[i][m],
+                         "DepthPyramidMipDescriptorSet_Frame" + std::to_string(i) + "_Mip" + std::to_string(m));
+
             // Write the descriptor set immediately after allocation to avoid validation errors
             // Source: previous mip level (m-1) as sampled input
             // Note: The source mip will be in SHADER_READ_ONLY_OPTIMAL at dispatch time (transitioned by setMipLevelBarriers)
@@ -1953,14 +1910,14 @@ void RenderingResources::createDescriptorSets(){
             srcMipInfo.sampler = depthPyramidSampler;
             srcMipInfo.imageView = depthPyramidMipStorageViews[i][m - 1];
             srcMipInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            
+
             // Destination: current mip level (m) as storage output
             // Note: The destination mip will be in GENERAL at dispatch time (transitioned by setMipLevelBarriers)
             VkDescriptorImageInfo dstMipInfo{};
             dstMipInfo.sampler = VK_NULL_HANDLE;
             dstMipInfo.imageView = depthPyramidMipStorageViews[i][m];
             dstMipInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-            
+
             std::array<VkWriteDescriptorSet, 2> mipWrites{};
             mipWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             mipWrites[0].dstSet = depthPyramidMipDescriptorSets[i][m];
@@ -1968,21 +1925,20 @@ void RenderingResources::createDescriptorSets(){
             mipWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             mipWrites[0].descriptorCount = 1;
             mipWrites[0].pImageInfo = &srcMipInfo;
-            
+
             mipWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             mipWrites[1].dstSet = depthPyramidMipDescriptorSets[i][m];
             mipWrites[1].dstBinding = 1;
             mipWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
             mipWrites[1].descriptorCount = 1;
             mipWrites[1].pImageInfo = &dstMipInfo;
-            
-            vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(mipWrites.size()), mipWrites.data(), 0, nullptr);
+
+            vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(mipWrites.size()), mipWrites.data(), 0,
+                                   nullptr);
         }
         std::cout << "  Depth pyramid descriptor set created successfully." << std::endl;
 
-        
         std::cout << "Descriptor sets for frame " << i << " completed successfully." << std::endl;
-
     }
 
     // RC build/resolve descriptor sets per frame
@@ -2001,32 +1957,71 @@ void RenderingResources::createDescriptorSets(){
         VkDescriptorBufferInfo camUbo = cameraUniformBuffers[i]->descriptorInfo();
         // GBuffer images
         std::array<VkDescriptorImageInfo, 4> gbInfos{};
-        gbInfos[0] = { gBuffer->getSampler(), gBuffer->getPositionView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-        gbInfos[1] = { gBuffer->getSampler(), gBuffer->getNormalView(i),   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-        gbInfos[2] = { gBuffer->getSampler(), gBuffer->getAlbedoView(i),   VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-        gbInfos[3] = { gBuffer->getSampler(), gBuffer->getMaterialView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        gbInfos[0] = {gBuffer->getSampler(), gBuffer->getPositionView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        gbInfos[1] = {gBuffer->getSampler(), gBuffer->getNormalView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        gbInfos[2] = {gBuffer->getSampler(), gBuffer->getAlbedoView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        gbInfos[3] = {gBuffer->getSampler(), gBuffer->getMaterialView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
         // Depth pyramid must use point sampling; light pass can use linear.
-        VkDescriptorImageInfo depthPyrInfo{ depthPyramidSampler, depthPyramidViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
-        VkDescriptorImageInfo lightPassInfo{ lightPassSampler, lightIncidentViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL };
+        VkDescriptorImageInfo depthPyrInfo{depthPyramidSampler, depthPyramidViews[i],
+                                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+        VkDescriptorImageInfo lightPassInfo{lightPassSampler, lightIncidentViews[i],
+                                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
         // RC atlases as storage image arrays
         std::vector<VkDescriptorImageInfo> radStorageInfos(RC_CASCADE_COUNT);
         for (uint32_t c = 0; c < RC_CASCADE_COUNT; ++c) {
-            radStorageInfos[c] = { VK_NULL_HANDLE, rcRadianceViews[c][i], VK_IMAGE_LAYOUT_GENERAL };
+            radStorageInfos[c] = {VK_NULL_HANDLE, rcRadianceViews[c][i], VK_IMAGE_LAYOUT_GENERAL};
         }
 
         std::vector<VkWriteDescriptorSet> writesBuild;
         writesBuild.reserve(1 + 4 + 1 + 1 + 2);
 
-        VkWriteDescriptorSet w0{}; w0.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET; w0.dstSet = rcBuildDescriptorSets[i]; w0.dstBinding = 0; w0.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; w0.descriptorCount = 1; w0.pBufferInfo = &camUbo; writesBuild.push_back(w0);
+        VkWriteDescriptorSet w0{};
+        w0.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        w0.dstSet = rcBuildDescriptorSets[i];
+        w0.dstBinding = 0;
+        w0.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        w0.descriptorCount = 1;
+        w0.pBufferInfo = &camUbo;
+        writesBuild.push_back(w0);
         for (uint32_t b = 0; b < 4; ++b) {
-            VkWriteDescriptorSet w{}; w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET; w.dstSet = rcBuildDescriptorSets[i]; w.dstBinding = 1 + b; w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; w.descriptorCount = 1; w.pImageInfo = &gbInfos[b]; writesBuild.push_back(w);
+            VkWriteDescriptorSet w{};
+            w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            w.dstSet = rcBuildDescriptorSets[i];
+            w.dstBinding = 1 + b;
+            w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            w.descriptorCount = 1;
+            w.pImageInfo = &gbInfos[b];
+            writesBuild.push_back(w);
         }
-        VkWriteDescriptorSet w5{}; w5.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET; w5.dstSet = rcBuildDescriptorSets[i]; w5.dstBinding = 5; w5.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; w5.descriptorCount = 1; w5.pImageInfo = &depthPyrInfo; writesBuild.push_back(w5);
-        VkWriteDescriptorSet w6{}; w6.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET; w6.dstSet = rcBuildDescriptorSets[i]; w6.dstBinding = 6; w6.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; w6.descriptorCount = 1; w6.pImageInfo = &lightPassInfo; writesBuild.push_back(w6);
-        VkWriteDescriptorSet w7{}; w7.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET; w7.dstSet = rcBuildDescriptorSets[i]; w7.dstBinding = 7; w7.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE; w7.descriptorCount = RC_CASCADE_COUNT; w7.pImageInfo = radStorageInfos.data(); writesBuild.push_back(w7);
+        VkWriteDescriptorSet w5{};
+        w5.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        w5.dstSet = rcBuildDescriptorSets[i];
+        w5.dstBinding = 5;
+        w5.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        w5.descriptorCount = 1;
+        w5.pImageInfo = &depthPyrInfo;
+        writesBuild.push_back(w5);
+        VkWriteDescriptorSet w6{};
+        w6.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        w6.dstSet = rcBuildDescriptorSets[i];
+        w6.dstBinding = 6;
+        w6.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        w6.descriptorCount = 1;
+        w6.pImageInfo = &lightPassInfo;
+        writesBuild.push_back(w6);
+        VkWriteDescriptorSet w7{};
+        w7.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        w7.dstSet = rcBuildDescriptorSets[i];
+        w7.dstBinding = 7;
+        w7.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        w7.descriptorCount = RC_CASCADE_COUNT;
+        w7.pImageInfo = radStorageInfos.data();
+        writesBuild.push_back(w7);
 
-        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(writesBuild.size()), writesBuild.data(), 0, nullptr);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)rcBuildDescriptorSets[i], "RCBuildDescriptorSet_Frame" + std::to_string(i));
+        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(writesBuild.size()), writesBuild.data(), 0,
+                               nullptr);
+        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)rcBuildDescriptorSets[i],
+                     "RCBuildDescriptorSet_Frame" + std::to_string(i));
 
         // RC Resolve
         VkDescriptorSetAllocateInfo allocRCResolve{};
@@ -2046,10 +2041,13 @@ void RenderingResources::createDescriptorSets(){
         std::vector<VkDescriptorImageInfo> radSampleInfos(RC_CASCADE_COUNT);
         for (uint32_t c = 0; c < RC_CASCADE_COUNT; ++c) {
             // Atlases are kept in GENERAL during build+resolve; sample from GENERAL to avoid layout mismatches.
-            radSampleInfos[c] = { lightPassSampler, rcRadianceViews[c][i], VK_IMAGE_LAYOUT_GENERAL };
+            radSampleInfos[c] = {lightPassSampler, rcRadianceViews[c][i], VK_IMAGE_LAYOUT_GENERAL};
         }
         // Output GI storage image
-        VkDescriptorImageInfo giOut{}; giOut.imageLayout = VK_IMAGE_LAYOUT_GENERAL; giOut.imageView = giIndirectViews[i]; giOut.sampler = VK_NULL_HANDLE;
+        VkDescriptorImageInfo giOut{};
+        giOut.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        giOut.imageView = giIndirectViews[i];
+        giOut.sampler = VK_NULL_HANDLE;
 
         // GI history: use previous frame's GI output for temporal accumulation
         // Frame i uses frame (i-1+MAX_FRAMES_IN_FLIGHT) % MAX_FRAMES_IN_FLIGHT as history
@@ -2067,17 +2065,63 @@ void RenderingResources::createDescriptorSets(){
 
         std::vector<VkWriteDescriptorSet> writesResolve;
         writesResolve.reserve(1 + 4 + 2 + 1 + 1 + 1);
-        VkWriteDescriptorSet r0{}; r0.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET; r0.dstSet = rcResolveDescriptorSets[i]; r0.dstBinding = 0; r0.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER; r0.descriptorCount = 1; r0.pBufferInfo = &camUboResolve; writesResolve.push_back(r0);
-        for (uint32_t b = 0; b < 4; ++b) { VkWriteDescriptorSet r{}; r.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET; r.dstSet = rcResolveDescriptorSets[i]; r.dstBinding = 1 + b; r.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; r.descriptorCount = 1; r.pImageInfo = &gbInfosResolve[b]; writesResolve.push_back(r);}        
-        VkWriteDescriptorSet r5{}; r5.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET; r5.dstSet = rcResolveDescriptorSets[i]; r5.dstBinding = 5; r5.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; r5.descriptorCount = RC_CASCADE_COUNT; r5.pImageInfo = radSampleInfos.data(); writesResolve.push_back(r5);
-        VkWriteDescriptorSet r7{}; r7.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET; r7.dstSet = rcResolveDescriptorSets[i]; r7.dstBinding = 7; r7.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE; r7.descriptorCount = 1; r7.pImageInfo = &giOut; writesResolve.push_back(r7);
-        VkWriteDescriptorSet r8{}; r8.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET; r8.dstSet = rcResolveDescriptorSets[i]; r8.dstBinding = 8; r8.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; r8.descriptorCount = 1; r8.pImageInfo = &giHistoryInfo; writesResolve.push_back(r8);
-        VkWriteDescriptorSet r9{}; r9.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET; r9.dstSet = rcResolveDescriptorSets[i]; r9.dstBinding = 9; r9.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER; r9.descriptorCount = 1; r9.pImageInfo = &prevPosInfo; writesResolve.push_back(r9);
+        VkWriteDescriptorSet r0{};
+        r0.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        r0.dstSet = rcResolveDescriptorSets[i];
+        r0.dstBinding = 0;
+        r0.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        r0.descriptorCount = 1;
+        r0.pBufferInfo = &camUboResolve;
+        writesResolve.push_back(r0);
+        for (uint32_t b = 0; b < 4; ++b) {
+            VkWriteDescriptorSet r{};
+            r.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            r.dstSet = rcResolveDescriptorSets[i];
+            r.dstBinding = 1 + b;
+            r.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            r.descriptorCount = 1;
+            r.pImageInfo = &gbInfosResolve[b];
+            writesResolve.push_back(r);
+        }
+        VkWriteDescriptorSet r5{};
+        r5.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        r5.dstSet = rcResolveDescriptorSets[i];
+        r5.dstBinding = 5;
+        r5.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        r5.descriptorCount = RC_CASCADE_COUNT;
+        r5.pImageInfo = radSampleInfos.data();
+        writesResolve.push_back(r5);
+        VkWriteDescriptorSet r7{};
+        r7.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        r7.dstSet = rcResolveDescriptorSets[i];
+        r7.dstBinding = 7;
+        r7.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        r7.descriptorCount = 1;
+        r7.pImageInfo = &giOut;
+        writesResolve.push_back(r7);
+        VkWriteDescriptorSet r8{};
+        r8.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        r8.dstSet = rcResolveDescriptorSets[i];
+        r8.dstBinding = 8;
+        r8.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        r8.descriptorCount = 1;
+        r8.pImageInfo = &giHistoryInfo;
+        writesResolve.push_back(r8);
+        VkWriteDescriptorSet r9{};
+        r9.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        r9.dstSet = rcResolveDescriptorSets[i];
+        r9.dstBinding = 9;
+        r9.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        r9.descriptorCount = 1;
+        r9.pImageInfo = &prevPosInfo;
+        writesResolve.push_back(r9);
 
-        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(writesResolve.size()), writesResolve.data(), 0, nullptr);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)rcResolveDescriptorSets[i], "RCResolveDescriptorSet_Frame" + std::to_string(i));
+        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(writesResolve.size()), writesResolve.data(), 0,
+                               nullptr);
+        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)rcResolveDescriptorSets[i],
+                     "RCResolveDescriptorSet_Frame" + std::to_string(i));
     }
-    
+
     // Create skybox descriptor set (single set, not per frame)
     std::cout << "Creating skybox descriptor set..." << std::endl;
     // Note: We need a skybox texture to properly populate this, for now just allocate the set
@@ -2092,11 +2136,9 @@ void RenderingResources::createDescriptorSets(){
     }
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)skyboxDescriptorSet, "SkyboxDescriptorSet");
     std::cout << "Skybox descriptor set allocated successfully (requires texture to populate)." << std::endl;
-      
 }
 
-void RenderingResources::createShadowMapSamplerDescriptorSets(){
-    
+void RenderingResources::createShadowMapSamplerDescriptorSets() {
     // Allocate descriptor sets for each frame
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         VkDescriptorSetAllocateInfo allocInfoShadowMapSampler{};
@@ -2105,22 +2147,21 @@ void RenderingResources::createShadowMapSamplerDescriptorSets(){
         allocInfoShadowMapSampler.descriptorSetCount = 1;
         allocInfoShadowMapSampler.pSetLayouts = &shadowMapSamplerLayout;
 
-        if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoShadowMapSampler, &shadowMapSamplerSets[i]) != VK_SUCCESS) {
+        if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoShadowMapSampler, &shadowMapSamplerSets[i]) !=
+            VK_SUCCESS) {
             throw std::runtime_error("Failed to allocate shadow map sampler descriptor set");
         }
     }
-    
+
     // Update descriptor sets for each frame with frame-specific shadow maps
     for (size_t frameIndex = 0; frameIndex < MAX_FRAMES_IN_FLIGHT; frameIndex++) {
         // Prepare image infos for directional lights - use frame-specific shadow maps
         std::vector<VkDescriptorImageInfo> directionalImageInfos;
         for (size_t lightIndex = 0; lightIndex < MAX_DIRECTIONAL_LIGHTS; lightIndex++) {
             if (directionalMaps[lightIndex][frameIndex]) {
-                directionalImageInfos.push_back({
-                    directionalMaps[lightIndex][frameIndex]->getSampler(),
-                    directionalMaps[lightIndex][frameIndex]->getImageView(),
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                });
+                directionalImageInfos.push_back({directionalMaps[lightIndex][frameIndex]->getSampler(),
+                                                 directionalMaps[lightIndex][frameIndex]->getImageView(),
+                                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
             }
         }
 
@@ -2128,11 +2169,9 @@ void RenderingResources::createShadowMapSamplerDescriptorSets(){
         std::vector<VkDescriptorImageInfo> spotImageInfos;
         for (size_t lightIndex = 0; lightIndex < MAX_SPOT_LIGHTS; lightIndex++) {
             if (spotlightMaps[lightIndex][frameIndex]) {
-                spotImageInfos.push_back({
-                    spotlightMaps[lightIndex][frameIndex]->getSampler(),
-                    spotlightMaps[lightIndex][frameIndex]->getImageView(),
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                });
+                spotImageInfos.push_back({spotlightMaps[lightIndex][frameIndex]->getSampler(),
+                                          spotlightMaps[lightIndex][frameIndex]->getImageView(),
+                                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
             }
         }
 
@@ -2140,17 +2179,15 @@ void RenderingResources::createShadowMapSamplerDescriptorSets(){
         std::vector<VkDescriptorImageInfo> pointImageInfos;
         for (size_t lightIndex = 0; lightIndex < MAX_POINT_LIGHTS; lightIndex++) {
             if (pointlightMaps[lightIndex][frameIndex]) {
-                pointImageInfos.push_back({
-                    pointlightMaps[lightIndex][frameIndex]->getSampler(),
-                    pointlightMaps[lightIndex][frameIndex]->getImageView(),
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
-                });
+                pointImageInfos.push_back({pointlightMaps[lightIndex][frameIndex]->getSampler(),
+                                           pointlightMaps[lightIndex][frameIndex]->getImageView(),
+                                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
             }
         }
 
         // Write descriptor sets for this frame
         std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
-        
+
         // Directional lights
         descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         descriptorWrites[0].dstSet = shadowMapSamplerSets[frameIndex];
@@ -2176,19 +2213,12 @@ void RenderingResources::createShadowMapSamplerDescriptorSets(){
         descriptorWrites[2].pImageInfo = pointImageInfos.data();
 
         // Update the descriptor sets for this frame
-        vkUpdateDescriptorSets(
-            device.getDevice(),
-            static_cast<uint32_t>(descriptorWrites.size()),
-            descriptorWrites.data(),
-            0,
-            nullptr
-        );
+        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(descriptorWrites.size()),
+                               descriptorWrites.data(), 0, nullptr);
     }
-
 }
 
-void RenderingResources::createShadowMapResources(){
-
+void RenderingResources::createShadowMapResources() {
     // Create shadow maps for directional lights - one per frame per light
     for (size_t lightIndex = 0; lightIndex < MAX_DIRECTIONAL_LIGHTS; lightIndex++) {
         for (size_t frameIndex = 0; frameIndex < MAX_FRAMES_IN_FLIGHT; frameIndex++) {
@@ -2196,7 +2226,7 @@ void RenderingResources::createShadowMapResources(){
             createInfo.width = DIRECTIONAL_SHADOW_MAP_RES;
             createInfo.height = DIRECTIONAL_SHADOW_MAP_RES;
             createInfo.arrayLayers = MAX_SHADOW_CASCADE_COUNT;
-            createInfo.depthFormat = depthFormat;       
+            createInfo.depthFormat = depthFormat;
             directionalMaps[lightIndex][frameIndex] = std::make_unique<ShadowMap>(device, createInfo);
         }
     }
@@ -2213,7 +2243,7 @@ void RenderingResources::createShadowMapResources(){
         }
     }
 
-     // Create shadow maps for point lights (cubemaps) - one per frame per light
+    // Create shadow maps for point lights (cubemaps) - one per frame per light
     for (size_t lightIndex = 0; lightIndex < MAX_POINT_LIGHTS; lightIndex++) {
         for (size_t frameIndex = 0; frameIndex < MAX_FRAMES_IN_FLIGHT; frameIndex++) {
             ShadowMap::ShadowMapCreateInfo createInfo{};
@@ -2221,15 +2251,14 @@ void RenderingResources::createShadowMapResources(){
             createInfo.height = POINT_SHADOW_MAP_RES;
             createInfo.arrayLayers = 6;
             createInfo.depthFormat = depthFormat;
-            
+
             pointlightMaps[lightIndex][frameIndex] = std::make_unique<ShadowMap>(device, createInfo);
         }
     }
 }
 
-void RenderingResources::createTransparencyResources(){
+void RenderingResources::createTransparencyResources() {
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-
         VkImageCreateInfo accumulationImageInfo{};
         accumulationImageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         accumulationImageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -2245,12 +2274,8 @@ void RenderingResources::createTransparencyResources(){
         accumulationImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         accumulationImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        device.createImageWithInfo(
-            accumulationImageInfo,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            accumulationImages[i],
-            accumulationMemories[i]
-        );
+        device.createImageWithInfo(accumulationImageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, accumulationImages[i],
+                                   accumulationMemories[i]);
 
         VkImageViewCreateInfo accumulationViewInfo{};
         accumulationViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -2263,10 +2288,10 @@ void RenderingResources::createTransparencyResources(){
         accumulationViewInfo.subresourceRange.baseArrayLayer = 0;
         accumulationViewInfo.subresourceRange.layerCount = 1;
 
-        if (vkCreateImageView(device.getDevice(), &accumulationViewInfo, nullptr, &accumulationViews[i]) != VK_SUCCESS) {
+        if (vkCreateImageView(device.getDevice(), &accumulationViewInfo, nullptr, &accumulationViews[i]) !=
+            VK_SUCCESS) {
             throw std::runtime_error("failed to create accumulation image view!");
         }
-
 
         // Create revealage texture (R8)
         VkImageCreateInfo revealageImageInfo{};
@@ -2284,12 +2309,8 @@ void RenderingResources::createTransparencyResources(){
         revealageImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         revealageImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        device.createImageWithInfo(
-            revealageImageInfo,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            revealageImages[i],
-            revealageMemories[i]
-        );
+        device.createImageWithInfo(revealageImageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, revealageImages[i],
+                                   revealageMemories[i]);
 
         VkImageViewCreateInfo revealageViewInfo{};
         revealageViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -2307,19 +2328,21 @@ void RenderingResources::createTransparencyResources(){
         }
 
         // Set debug names for transparency resources
-        setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)accumulationImages[i], "AccumulationImage_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)accumulationViews[i], "AccumulationView_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)accumulationMemories[i], "AccumulationMemory_Frame" + std::to_string(i));
-        
+        setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)accumulationImages[i],
+                     "AccumulationImage_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)accumulationViews[i],
+                     "AccumulationView_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)accumulationMemories[i],
+                     "AccumulationMemory_Frame" + std::to_string(i));
+
         setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)revealageImages[i], "RevealageImage_Frame" + std::to_string(i));
         setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)revealageViews[i], "RevealageView_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)revealageMemories[i], "RevealageMemory_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)revealageMemories[i],
+                     "RevealageMemory_Frame" + std::to_string(i));
     }
-
-
 }
 
-void RenderingResources::createGIResources(){
+void RenderingResources::createGIResources() {
     // Create per-frame GI indirect images and views
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         VkImageCreateInfo imageInfo{};
@@ -2333,18 +2356,12 @@ void RenderingResources::createGIResources(){
         imageInfo.format = giIndirectFormat;
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                          VK_IMAGE_USAGE_SAMPLED_BIT |
-                          VK_IMAGE_USAGE_STORAGE_BIT;
+        imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        device.createImageWithInfo(
-            imageInfo,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            giIndirectImages[i],
-            giIndirectMemories[i]
-        );
+        device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, giIndirectImages[i],
+                                   giIndirectMemories[i]);
 
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -2363,8 +2380,10 @@ void RenderingResources::createGIResources(){
 
         // Set debug names
         setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)giIndirectImages[i], "GIIndirectImage_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)giIndirectViews[i], "GIIndirectView_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)giIndirectMemories[i], "GIIndirectMemory_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)giIndirectViews[i],
+                     "GIIndirectView_Frame" + std::to_string(i));
+        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)giIndirectMemories[i],
+                     "GIIndirectMemory_Frame" + std::to_string(i));
     }
 
     // One-time init: transition GI images to GENERAL for compute writes
@@ -2385,15 +2404,8 @@ void RenderingResources::createGIResources(){
         barrier.subresourceRange.baseArrayLayer = 0;
         barrier.subresourceRange.layerCount = 1;
 
-        vkCmdPipelineBarrier(
-            cmd,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-            VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-            0,
-            0, nullptr,
-            0, nullptr,
-            1, &barrier
-        );
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0,
+                             nullptr, 0, nullptr, 1, &barrier);
     }
     device.endSingleTimeCommands(cmd);
 }
@@ -2421,7 +2433,8 @@ void RenderingResources::createPostProcessResources() {
     }
     setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)postProcessSampler, "PostProcessSampler");
 
-    auto makeColorImage = [&](VkFormat format, VkImage& image, VkDeviceMemory& memory, VkImageView& view, const std::string& name) {
+    auto makeColorImage = [&](VkFormat format, VkImage& image, VkDeviceMemory& memory, VkImageView& view,
+                              const std::string& name) {
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
         imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -2437,12 +2450,7 @@ void RenderingResources::createPostProcessResources() {
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-        device.createImageWithInfo(
-            imageInfo,
-            VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-            image,
-            memory
-        );
+        device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, memory);
 
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -2465,8 +2473,8 @@ void RenderingResources::createPostProcessResources() {
     };
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-        makeColorImage(postProcessFormat, compositionColorImages[i], compositionColorMemories[i], compositionColorViews[i],
-                       "CompositionColor_Frame" + std::to_string(i));
+        makeColorImage(postProcessFormat, compositionColorImages[i], compositionColorMemories[i],
+                       compositionColorViews[i], "CompositionColor_Frame" + std::to_string(i));
         makeColorImage(smaaEdgeFormat, smaaEdgeImages[i], smaaEdgeMemories[i], smaaEdgeViews[i],
                        "SMAAEdge_Frame" + std::to_string(i));
         makeColorImage(smaaBlendFormat, smaaBlendImages[i], smaaBlendMemories[i], smaaBlendViews[i],
@@ -2478,22 +2486,16 @@ void RenderingResources::createPostProcessResources() {
 
 void RenderingResources::loadSMAALUTTextures() {
     // Helper lambda for creating SMAA LUT images (no mipmaps, no transfer src)
-    auto createSMAAImage = [&](uint32_t w, uint32_t h, VkFormat format, const void* data,
-                               VkImage& outImage, VkDeviceMemory& outMemory, 
-                               VkImageView& outView, const std::string& name) {
+    auto createSMAAImage = [&](uint32_t w, uint32_t h, VkFormat format, const void* data, VkImage& outImage,
+                               VkDeviceMemory& outMemory, VkImageView& outView, const std::string& name) {
         VkDeviceSize imageSize = w * h * ((format == VK_FORMAT_R8G8_UNORM) ? 2 : 1);
-        
+
         // Create staging buffer
-        Buffer stagingBuffer{
-            device,
-            imageSize,
-            1,
-            VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-        };
+        Buffer stagingBuffer{device, imageSize, 1, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT};
         stagingBuffer.map(imageSize);
         stagingBuffer.writeToBuffer(data, imageSize);
-        
+
         // Create image with exactly 1 mip level
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -2501,7 +2503,7 @@ void RenderingResources::loadSMAALUTTextures() {
         imageInfo.extent.width = w;
         imageInfo.extent.height = h;
         imageInfo.extent.depth = 1;
-        imageInfo.mipLevels = 1;  // Critical: no mipmaps for SMAA LUTs
+        imageInfo.mipLevels = 1; // Critical: no mipmaps for SMAA LUTs
         imageInfo.arrayLayers = 1;
         imageInfo.format = format;
         imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
@@ -2509,12 +2511,12 @@ void RenderingResources::loadSMAALUTTextures() {
         imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
         imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        
+
         device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, outImage, outMemory);
-        
+
         // Transition to transfer destination
         VkCommandBuffer cmd = device.beginSingleTimeCommands();
-        
+
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
         barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
@@ -2529,11 +2531,10 @@ void RenderingResources::loadSMAALUTTextures() {
         barrier.subresourceRange.layerCount = 1;
         barrier.srcAccessMask = 0;
         barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-        
-        vkCmdPipelineBarrier(cmd,
-            VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-            0, 0, nullptr, 0, nullptr, 1, &barrier);
-        
+
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0,
+                             nullptr, 1, &barrier);
+
         // Copy buffer to image
         VkBufferImageCopy region{};
         region.bufferOffset = 0;
@@ -2545,22 +2546,21 @@ void RenderingResources::loadSMAALUTTextures() {
         region.imageSubresource.layerCount = 1;
         region.imageOffset = {0, 0, 0};
         region.imageExtent = {w, h, 1};
-        
-        vkCmdCopyBufferToImage(cmd, stagingBuffer.getBuffer(), outImage, 
-                               VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
-        
+
+        vkCmdCopyBufferToImage(cmd, stagingBuffer.getBuffer(), outImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1,
+                               &region);
+
         // Transition to shader read optimal
         barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
         barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
         barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
         barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        
-        vkCmdPipelineBarrier(cmd,
-            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            0, 0, nullptr, 0, nullptr, 1, &barrier);
-        
+
+        vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
+                             0, nullptr, 1, &barrier);
+
         device.endSingleTimeCommands(cmd);
-        
+
         // Create image view
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -2572,20 +2572,20 @@ void RenderingResources::loadSMAALUTTextures() {
         viewInfo.subresourceRange.levelCount = 1;
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount = 1;
-        
+
         if (vkCreateImageView(device.getDevice(), &viewInfo, nullptr, &outView) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create SMAA LUT image view");
         }
-        
+
         setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)outImage, name + "_Image");
         setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)outView, name + "_View");
         setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)outMemory, name + "_Memory");
     };
-    
+
     // Create Area texture (160x560, R8G8, linear filtering, clamp)
-    createSMAAImage(AREATEX_WIDTH, AREATEX_HEIGHT, VK_FORMAT_R8G8_UNORM, areaTexBytes,
-                    smaaAreaImage, smaaAreaMemory, smaaAreaView, "SMAA_Area");
-    
+    createSMAAImage(AREATEX_WIDTH, AREATEX_HEIGHT, VK_FORMAT_R8G8_UNORM, areaTexBytes, smaaAreaImage, smaaAreaMemory,
+                    smaaAreaView, "SMAA_Area");
+
     // Create sampler for Area texture: LINEAR filtering, CLAMP_TO_EDGE
     {
         VkSamplerCreateInfo samplerInfo{};
@@ -2605,23 +2605,23 @@ void RenderingResources::loadSMAALUTTextures() {
         samplerInfo.mipLodBias = 0.0f;
         samplerInfo.minLod = 0.0f;
         samplerInfo.maxLod = 0.0f;
-        
+
         if (vkCreateSampler(device.getDevice(), &samplerInfo, nullptr, &smaaAreaSampler) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create SMAA Area sampler");
         }
         setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)smaaAreaSampler, "SMAA_Area_Sampler");
     }
-    
+
     // Create Search texture (64x16, R8, POINT/NEAREST filtering, clamp)
-    createSMAAImage(SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT, VK_FORMAT_R8_UNORM, searchTexBytes,
-                    smaaSearchImage, smaaSearchMemory, smaaSearchView, "SMAA_Search");
-    
+    createSMAAImage(SEARCHTEX_WIDTH, SEARCHTEX_HEIGHT, VK_FORMAT_R8_UNORM, searchTexBytes, smaaSearchImage,
+                    smaaSearchMemory, smaaSearchView, "SMAA_Search");
+
     // Create sampler for Search texture: NEAREST filtering, CLAMP_TO_EDGE
     // The search texture must use point sampling for correct lookups
     {
         VkSamplerCreateInfo samplerInfo{};
         samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_NEAREST;  // Critical: POINT sampling
+        samplerInfo.magFilter = VK_FILTER_NEAREST; // Critical: POINT sampling
         samplerInfo.minFilter = VK_FILTER_NEAREST;
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
         samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -2636,27 +2636,27 @@ void RenderingResources::loadSMAALUTTextures() {
         samplerInfo.mipLodBias = 0.0f;
         samplerInfo.minLod = 0.0f;
         samplerInfo.maxLod = 0.0f;
-        
+
         if (vkCreateSampler(device.getDevice(), &samplerInfo, nullptr, &smaaSearchSampler) != VK_SUCCESS) {
             throw std::runtime_error("Failed to create SMAA Search sampler");
         }
         setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)smaaSearchSampler, "SMAA_Search_Sampler");
     }
-    
-    std::cout << "SMAA LUT textures loaded (Area: " << AREATEX_WIDTH << "x" << AREATEX_HEIGHT 
+
+    std::cout << "SMAA LUT textures loaded (Area: " << AREATEX_WIDTH << "x" << AREATEX_HEIGHT
               << ", Search: " << SEARCHTEX_WIDTH << "x" << SEARCHTEX_HEIGHT << ")" << std::endl;
 }
 
-void RenderingResources::createRCAtlases(){
+void RenderingResources::createRCAtlases() {
     // Allocate per-cascade atlases (radiance: R16G16B16A16; β packed into alpha)
     for (uint32_t cascade = 0; cascade < RC_CASCADE_COUNT; ++cascade) {
-        const uint32_t stridePx = RC_PROBE_STRIDE0_PX << cascade;     // Δp_i = 2^i
-        const uint32_t tileSize = RC_BASE_TILE_SIZE << cascade;        // tile_i = base * 2^i
+        const uint32_t stridePx = RC_PROBE_STRIDE0_PX << cascade; // Δp_i = 2^i
+        const uint32_t tileSize = RC_BASE_TILE_SIZE << cascade;   // tile_i = base * 2^i
 
         const uint32_t probesX = (width + stridePx - 1) / stridePx;
         const uint32_t probesY = (height + stridePx - 1) / stridePx;
 
-        const uint32_t atlasWidth  = std::max(1u, probesX * tileSize);
+        const uint32_t atlasWidth = std::max(1u, probesX * tileSize);
         const uint32_t atlasHeight = std::max(1u, probesY * tileSize);
 
         for (size_t frame = 0; frame < MAX_FRAMES_IN_FLIGHT; ++frame) {
@@ -2676,12 +2676,8 @@ void RenderingResources::createRCAtlases(){
             radInfo.samples = VK_SAMPLE_COUNT_1_BIT;
             radInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
-            device.createImageWithInfo(
-                radInfo,
-                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-                rcRadianceImages[cascade][frame],
-                rcRadianceMemories[cascade][frame]
-            );
+            device.createImageWithInfo(radInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, rcRadianceImages[cascade][frame],
+                                       rcRadianceMemories[cascade][frame]);
 
             VkImageViewCreateInfo radView{};
             radView.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -2694,18 +2690,21 @@ void RenderingResources::createRCAtlases(){
             radView.subresourceRange.baseArrayLayer = 0;
             radView.subresourceRange.layerCount = 1;
 
-            if (vkCreateImageView(device.getDevice(), &radView, nullptr, &rcRadianceViews[cascade][frame]) != VK_SUCCESS) {
+            if (vkCreateImageView(device.getDevice(), &radView, nullptr, &rcRadianceViews[cascade][frame]) !=
+                VK_SUCCESS) {
                 throw std::runtime_error("failed to create RC radiance atlas view");
             }
 
             // Set debug names
             std::string cascadeFrameStr = "Cascade" + std::to_string(cascade) + "_Frame" + std::to_string(frame);
-            setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)rcRadianceImages[cascade][frame], "RCRadianceImage_" + cascadeFrameStr);
-            setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)rcRadianceViews[cascade][frame], "RCRadianceView_" + cascadeFrameStr);
-            setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)rcRadianceMemories[cascade][frame], "RCRadianceMemory_" + cascadeFrameStr);
+            setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)rcRadianceImages[cascade][frame],
+                         "RCRadianceImage_" + cascadeFrameStr);
+            setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)rcRadianceViews[cascade][frame],
+                         "RCRadianceView_" + cascadeFrameStr);
+            setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)rcRadianceMemories[cascade][frame],
+                         "RCRadianceMemory_" + cascadeFrameStr);
 
-            std::cout << "RC atlas c=" << cascade << " f=" << frame
-                      << " size=" << atlasWidth << "x" << atlasHeight
+            std::cout << "RC atlas c=" << cascade << " f=" << frame << " size=" << atlasWidth << "x" << atlasHeight
                       << " stridePx=" << stridePx << " tile=" << tileSize << std::endl;
         }
     }
@@ -2729,32 +2728,25 @@ void RenderingResources::createRCAtlases(){
             barrier.subresourceRange.baseArrayLayer = 0;
             barrier.subresourceRange.layerCount = 1;
 
-            vkCmdPipelineBarrier(
-                cmd,
-                VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                0,
-                0, nullptr,
-                0, nullptr,
-                1, &barrier
-            );
+            vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0,
+                                 nullptr, 0, nullptr, 1, &barrier);
         }
     }
     device.endSingleTimeCommands(cmd);
 }
 
-std::array<FrameContext, MAX_FRAMES_IN_FLIGHT> RenderingResources::createFrameContexts(){
+std::array<FrameContext, MAX_FRAMES_IN_FLIGHT> RenderingResources::createFrameContexts() {
     std::array<FrameContext, MAX_FRAMES_IN_FLIGHT> contexts;
-    
+
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         FrameContext& ctx = contexts[i];
-        
+
         // Core frame data
         ctx.frameIndex = i;
-        ctx.commandBuffer = VK_NULL_HANDLE;  // Will be set by Renderer
-        ctx.extent = {0, 0};                 // Will be set by Renderer
+        ctx.commandBuffer = VK_NULL_HANDLE; // Will be set by Renderer
+        ctx.extent = {0, 0};                // Will be set by Renderer
         ctx.frameTime = 0.0f;               // Will be set by Renderer
-        
+
         // Descriptor sets
         ctx.cameraDescriptorSet = cameraDescriptorSets[i];
         ctx.modelsDescriptorSet = modelsDescriptorSets[i];
@@ -2765,7 +2757,7 @@ std::array<FrameContext, MAX_FRAMES_IN_FLIGHT> RenderingResources::createFrameCo
         ctx.lightMatrixDescriptorSet = lightMatrixDescriptorSets[i];
         ctx.shadowModelMatrixDescriptorSet = shadowModelMatrixDescriptorSets[i];
         ctx.shadowMapSamplerDescriptorSet = shadowMapSamplerSets[i];
-        ctx.skyboxDescriptorSet = skyboxDescriptorSet;  // Single set, not per frame
+        ctx.skyboxDescriptorSet = skyboxDescriptorSet; // Single set, not per frame
         ctx.transparencyModelDescriptorSet = transparencyModelMatrixDescriptorSets[i];
         ctx.compositionDescriptorSet = compositionDescriptorSets[i];
         ctx.depthPyramidDescriptorSet = depthPyramidDescriptorSets[i];
@@ -2775,7 +2767,7 @@ std::array<FrameContext, MAX_FRAMES_IN_FLIGHT> RenderingResources::createFrameCo
         ctx.smaaWeightDescriptorSet = smaaWeightDescriptorSets[i];
         ctx.smaaBlendDescriptorSet = smaaBlendDescriptorSets[i];
         ctx.colorCorrectionDescriptorSet = colorCorrectionDescriptorSets[i];
-        
+
         // Buffers
         ctx.cameraUniformBuffer = cameraUniformBuffers[i].get();
         ctx.modelMatrixBuffer = modelMatrixBuffers[i].get();
@@ -2787,7 +2779,7 @@ std::array<FrameContext, MAX_FRAMES_IN_FLIGHT> RenderingResources::createFrameCo
         ctx.shadowModelMatrixBuffer = shadowModelMatrixBuffers[i].get();
         ctx.transparencyModelMatrixBuffer = transparencyModelMatrixBuffers[i].get();
         ctx.transparencyNormalMatrixBuffer = transparencyNormalMatrixBuffers[i].get();
-        
+
         // Depth resources
         ctx.depthView = depthViews[i];
         ctx.depthImage = depthImages[i];
@@ -2797,16 +2789,16 @@ std::array<FrameContext, MAX_FRAMES_IN_FLIGHT> RenderingResources::createFrameCo
         ctx.depthPyramidMipLevels = depthPyramidMipLevels[i];
         ctx.depthPyramidMipStorageViews = depthPyramidMipStorageViews[i];
         ctx.depthPyramidMipDescriptorSets = depthPyramidMipDescriptorSets[i];
-        
+
         // Light pass resources
         ctx.lightPassResultView = lightPassResultViews[i];
-        ctx.lightPassSampler = lightPassSampler;  // Single sampler, not per frame
+        ctx.lightPassSampler = lightPassSampler; // Single sampler, not per frame
         ctx.lightIncidentView = lightIncidentViews[i];
-        
+
         // Transparency resources
         ctx.accumulationView = accumulationViews[i];
         ctx.revealageView = revealageViews[i];
-        
+
         // GI indirect buffer
         ctx.giIndirectView = giIndirectViews[i];
         ctx.giIndirectImage = giIndirectImages[i];
@@ -2825,10 +2817,10 @@ std::array<FrameContext, MAX_FRAMES_IN_FLIGHT> RenderingResources::createFrameCo
         uint32_t historyIndex = (i + MAX_FRAMES_IN_FLIGHT - 1) % MAX_FRAMES_IN_FLIGHT;
         ctx.giHistoryView = giIndirectViews[historyIndex];
         ctx.giHistorySampler = lightPassSampler;
-        
+
         // Initialize temporal frame index
         ctx.temporalFrameIndex = 0;
-        
+
         // GBuffer resources
         ctx.gBufferPositionView = gBuffer->getPositionView(i);
         ctx.gBufferNormalView = gBuffer->getNormalView(i);
@@ -2838,7 +2830,7 @@ std::array<FrameContext, MAX_FRAMES_IN_FLIGHT> RenderingResources::createFrameCo
         ctx.gBufferNormalImage = gBuffer->getNormalImage(i);
         ctx.gBufferAlbedoImage = gBuffer->getAlbedoImage(i);
         ctx.gbufferMaterialImage = gBuffer->getMaterialImage(i);
-        
+
         // RC atlas views for this frame
         for (uint32_t cascade = 0; cascade < RC_CASCADE_COUNT; ++cascade) {
             ctx.rcRadianceViews[cascade] = rcRadianceViews[cascade][i];
@@ -2854,7 +2846,7 @@ std::array<FrameContext, MAX_FRAMES_IN_FLIGHT> RenderingResources::createFrameCo
         for (size_t j = 0; j < MAX_POINT_LIGHTS; j++) {
             ctx.pointShadowMaps[j] = pointlightMaps[j][i].get(); // [lightIndex][frameIndex]
         }
-        
+
         // Material batches (will be populated by Renderer during updates)
         ctx.opaqueMaterialBatchCount = 0;
     }
@@ -2881,16 +2873,13 @@ void RenderingResources::updateSkyboxDescriptorSet(VkImageView skyboxImageView, 
 
 void RenderingResources::initializeSkyboxFromScene() {
     std::cout << "Initializing skybox from scene..." << std::endl;
-    
+
     // Get the scene environment lighting
     const Scene::EnvironmentLighting& envLighting = Scene::Scene::getInstance().getEnvironmentLighting();
-    
+
     if (envLighting.skyboxTexture != nullptr) {
         // Use the actual skybox cubemap from the scene
-        updateSkyboxDescriptorSet(
-            envLighting.skyboxTexture->getImageView(),
-            envLighting.skyboxTexture->getSampler()
-        );
+        updateSkyboxDescriptorSet(envLighting.skyboxTexture->getImageView(), envLighting.skyboxTexture->getSampler());
         std::cout << "Skybox initialized from scene environment lighting." << std::endl;
     } else {
         // Fallback to placeholder if no skybox texture is found
@@ -2902,4 +2891,4 @@ void RenderingResources::initializeSkyboxFromScene() {
     }
 }
 
-} // namespace Rendering 
+} // namespace Rendering

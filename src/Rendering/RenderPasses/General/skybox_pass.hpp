@@ -18,49 +18,44 @@
 #include <array>
 
 namespace ECS {
-    struct SkyboxComponent;
+struct SkyboxComponent;
 }
 
-namespace Rendering{
+namespace Rendering {
 
-    class SkyboxPass{
-        public:
-            struct CreateInfo {
-                uint32_t width;
-                uint32_t height;
-                VkDescriptorSetLayout cameraDescriptorSetLayout;
-                VkDescriptorSetLayout skyboxDescriptorSetLayout;
-                VkFormat albedoFormat;
-                std::array<VkImageView,MAX_FRAMES_IN_FLIGHT>* albedoViewsPtr;
-                std::array<VkImageView,MAX_FRAMES_IN_FLIGHT>* depthViewsPtr;
-            };
-
-            SkyboxPass(
-                Device& device,
-                const CreateInfo& createInfo);
-            ~SkyboxPass();
-            void run(FrameContext& frameContext);
-        private:
-            void cleanup();
-            void createRenderPass(const CreateInfo& createInfo);
-            void createPipeline(const CreateInfo& createInfo);
-            void createFramebuffers(const CreateInfo& createInfo);
-
-            void beginRenderPass(FrameContext& frameContext);
-            void endRenderPass(FrameContext& frameContext);
-            void setBarriers(FrameContext& frameContext);            
-            Device& device;
-            VkRenderPass renderPass{VK_NULL_HANDLE}; 
-            std::unique_ptr<Pipeline> pipeline{nullptr};
-            VkPipelineLayout pipelineLayout{VK_NULL_HANDLE};
-            uint32_t width;
-            uint32_t height;
-
-
-            // Framebuffers for rendering
-            std::array<VkFramebuffer, MAX_FRAMES_IN_FLIGHT> framebuffers{};
-
-            
+class SkyboxPass {
+public:
+    struct CreateInfo {
+        uint32_t width;
+        uint32_t height;
+        VkDescriptorSetLayout cameraDescriptorSetLayout;
+        VkDescriptorSetLayout skyboxDescriptorSetLayout;
+        VkFormat albedoFormat;
+        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* albedoViewsPtr;
+        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* depthViewsPtr;
     };
-}
 
+    SkyboxPass(Device& device, const CreateInfo& createInfo);
+    ~SkyboxPass();
+    void run(FrameContext& frameContext);
+
+private:
+    void cleanup();
+    void createRenderPass(const CreateInfo& createInfo);
+    void createPipeline(const CreateInfo& createInfo);
+    void createFramebuffers(const CreateInfo& createInfo);
+
+    void beginRenderPass(FrameContext& frameContext);
+    void endRenderPass(FrameContext& frameContext);
+    void setBarriers(FrameContext& frameContext);
+    Device& device;
+    VkRenderPass renderPass{VK_NULL_HANDLE};
+    std::unique_ptr<Pipeline> pipeline{nullptr};
+    VkPipelineLayout pipelineLayout{VK_NULL_HANDLE};
+    uint32_t width;
+    uint32_t height;
+
+    // Framebuffers for rendering
+    std::array<VkFramebuffer, MAX_FRAMES_IN_FLIGHT> framebuffers{};
+};
+} // namespace Rendering

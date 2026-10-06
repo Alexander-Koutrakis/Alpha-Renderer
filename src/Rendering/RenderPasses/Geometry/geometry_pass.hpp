@@ -16,7 +16,6 @@ using namespace ECS;
 namespace Rendering {
 
 class GeometryPass {
-
 public:
     struct CreateInfo {
         uint32_t width;
@@ -30,15 +29,15 @@ public:
         VkFormat albedoFormat;
         VkFormat materialFormat;
         GBuffer* gBuffer;
-        std::array<VkImageView,MAX_FRAMES_IN_FLIGHT>* depthViewsPtr;
+        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* depthViewsPtr;
     };
 
     GeometryPass(Device& device, const CreateInfo& createInfo);
     ~GeometryPass();
 
-   
     VkRenderPass getRenderPass() const { return renderPass; }
     void run(FrameContext& frameContext);
+
 private:
     void cleanup();
 
@@ -50,19 +49,17 @@ private:
     void beginRenderPass(FrameContext& frameContext);
     void endRenderPass(FrameContext& frameContext);
     void setBarriers(FrameContext& frameContext);
- 
+
     Device& device;
     uint32_t width;
     uint32_t height;
 
     VkRenderPass renderPass{VK_NULL_HANDLE};
-   
+
     std::unique_ptr<Pipeline> pipeline{nullptr};
-    
+
     VkPipelineLayout pipelineLayout{VK_NULL_HANDLE};
-    std::array<VkFramebuffer,MAX_FRAMES_IN_FLIGHT> framebuffers{};  
-
-
+    std::array<VkFramebuffer, MAX_FRAMES_IN_FLIGHT> framebuffers{};
 };
 
-}
+} // namespace Rendering

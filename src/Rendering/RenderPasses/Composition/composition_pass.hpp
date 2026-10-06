@@ -23,10 +23,7 @@ public:
         std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* targetViews;
     };
 
-    CompositionPass(
-        Device& device,
-        const CreateInfo& createInfo
-    );
+    CompositionPass(Device& device, const CreateInfo& createInfo);
     ~CompositionPass();
 
     CompositionPass(const CompositionPass&) = delete;
@@ -57,4 +54,4 @@ private:
     std::array<VkFramebuffer, MAX_FRAMES_IN_FLIGHT> framebuffers{};
 };
 
-} // namespace Rendering 
+} // namespace Rendering

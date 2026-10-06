@@ -12,11 +12,7 @@ struct ComputePipelineConfigInfo {
 
 class ComputePipeline {
 public:
-    ComputePipeline(
-        Device& device,
-        const std::string& computeFilepath,
-        const ComputePipelineConfigInfo& configInfo
-    );
+    ComputePipeline(Device& device, const std::string& computeFilepath, const ComputePipelineConfigInfo& configInfo);
     ~ComputePipeline();
 
     ComputePipeline(const ComputePipeline&) = delete;
@@ -26,7 +22,8 @@ public:
     VkPipelineLayout getPipelineLayout() const { return pipelineLayout; }
 
     // Dispatch helper
-    void dispatch(VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ = 1) const;
+    void dispatch(VkCommandBuffer commandBuffer, uint32_t groupCountX, uint32_t groupCountY,
+                  uint32_t groupCountZ = 1) const;
 
 private:
     static std::vector<char> readFile(const std::string& filepath);

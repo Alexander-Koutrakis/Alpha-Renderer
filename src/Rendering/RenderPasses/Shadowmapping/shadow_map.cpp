@@ -4,8 +4,8 @@
 namespace Rendering {
 
 ShadowMap::ShadowMap(Device& device, const ShadowMapCreateInfo& createInfo)
-    : device{device}, 
-      width{createInfo.width}, 
+    : device{device},
+      width{createInfo.width},
       height{createInfo.height},
       arrayLayers{createInfo.arrayLayers},
       depthFormat{createInfo.depthFormat} {
@@ -48,7 +48,6 @@ void ShadowMap::cleanup() {
         vkFreeMemory(device.getDevice(), depthMemory, nullptr);
         depthMemory = VK_NULL_HANDLE;
     }
-
 }
 
 void ShadowMap::createResources() {
@@ -66,18 +65,13 @@ void ShadowMap::createResources() {
     imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
     imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    
+
     // Add flags for cubemap if necessary
     if (arrayLayers == 6) {
         imageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
     }
 
-    device.createImageWithInfo(
-        imageInfo,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        depthImage,
-        depthMemory
-    );
+    device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthMemory);
 
     // Transition image to SHADER_READ_ONLY_OPTIMAL layout right after creation
     VkCommandBuffer commandBuffer = device.beginSingleTimeCommands();
@@ -97,15 +91,8 @@ void ShadowMap::createResources() {
     barrier.srcAccessMask = 0;
     barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
-    vkCmdPipelineBarrier(
-        commandBuffer,
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-        0,
-        0, nullptr,
-        0, nullptr,
-        1, &barrier
-    );
+    vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0,
+                         nullptr, 0, nullptr, 1, &barrier);
 
     device.endSingleTimeCommands(commandBuffer);
 
@@ -135,12 +122,12 @@ void ShadowMap::createSampler() {
 }
 
 void ShadowMap::createImageView() {
-    
     VkImageViewCreateInfo viewInfo{};
     viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewInfo.image = depthImage;
-    viewInfo.viewType = (arrayLayers == 6) ? VK_IMAGE_VIEW_TYPE_CUBE : 
-                        (arrayLayers > 1) ? VK_IMAGE_VIEW_TYPE_2D_ARRAY :VK_IMAGE_VIEW_TYPE_2D;
+    viewInfo.viewType = (arrayLayers == 6)  ? VK_IMAGE_VIEW_TYPE_CUBE
+                        : (arrayLayers > 1) ? VK_IMAGE_VIEW_TYPE_2D_ARRAY
+                                            : VK_IMAGE_VIEW_TYPE_2D;
     viewInfo.format = depthFormat;
     viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
     viewInfo.subresourceRange.baseMipLevel = 0;

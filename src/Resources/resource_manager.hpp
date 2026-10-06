@@ -26,13 +26,13 @@ public:
     void addTexture(const std::string& name, std::unique_ptr<Rendering::Texture> texture);
     void addMaterial(const std::string& name, std::unique_ptr<Rendering::Material> material);
     void addCubemap(const std::string& name, std::unique_ptr<Rendering::Texture> cubemap);
-    
+
     // Resource retrieval
     Rendering::Mesh* getMesh(const std::string& name);
     Rendering::Texture* getTexture(const std::string& name);
     Rendering::Material* getMaterial(const std::string& name);
     Rendering::Texture* getCubemap(const std::string& name);
-    
+
     // Resource unloading
     void unloadMesh(const std::string& name);
     void unloadTexture(const std::string& name);
@@ -45,8 +45,9 @@ public:
     void unloadAllCubemaps();
     void cleanup();
 
-    DescriptorPool* getPBRMaterialPool() { return pbrMaterialDescriptorPool.get();}
-    VkDescriptorSetLayout getPBRDescriptorSetLayout()const{ return pbrDescriptorSetLayout;}
+    DescriptorPool* getPBRMaterialPool() { return pbrMaterialDescriptorPool.get(); }
+    VkDescriptorSetLayout getPBRDescriptorSetLayout() const { return pbrDescriptorSetLayout; }
+
 private:
     void createMaterialDescriptorPool();
     void createPBRDescriptorSetLayout();

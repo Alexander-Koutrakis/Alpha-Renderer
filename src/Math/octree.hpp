@@ -12,16 +12,15 @@
 
 namespace Math {
 
-    // Forward declarations
-    class OctreeObject;
-    struct Settings {
-                uint32_t maxDepth = 8;           // Maximum tree depth
-                uint32_t maxObjectsPerNode = 16;  // Maximum objects before splitting
-                float minNodeSize = 1.0f;        // Minimum size of node before stopping subdivision
-            };
+// Forward declarations
+class OctreeObject;
+struct Settings {
+    uint32_t maxDepth = 8;           // Maximum tree depth
+    uint32_t maxObjectsPerNode = 16; // Maximum objects before splitting
+    float minNodeSize = 1.0f;        // Minimum size of node before stopping subdivision
+};
 
-template <typename T>
-class Octree {
+template <typename T> class Octree {
 public:
     struct Settings {
         uint32_t maxDepth = 8;
@@ -34,8 +33,7 @@ public:
 
     class OctreeObject {
     public:
-        OctreeObject(T* data, const AABB& bounds) 
-            : data(data), bounds(bounds), currentNode(nullptr) {}
+        OctreeObject(T* data, const AABB& bounds) : data(data), bounds(bounds), currentNode(nullptr) {}
 
         T* getData() const { return data; }
         const AABB& getBounds() const { return bounds; }
@@ -83,10 +81,10 @@ public:
     OctreeObject* createObject(T* data, const AABB& bounds);
     void removeObject(OctreeObject* object);
     void updateObject(OctreeObject* object, const AABB& newBounds);
-    
+
     std::vector<T*> getVisibleObjects(const ViewFrustum& frustum) const;
     std::vector<T*> getIntersectingObjects(const AABB& bounds) const;
-    
+
     void clear();
 
     // Make these public so Node can access them

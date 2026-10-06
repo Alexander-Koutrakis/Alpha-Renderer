@@ -7,12 +7,12 @@
 
 namespace Rendering {
 
-    struct ShaderStageInfo {
-        VkShaderStageFlagBits stage;
-        std::string spirvFilepath;
-    };
+struct ShaderStageInfo {
+    VkShaderStageFlagBits stage;
+    std::string spirvFilepath;
+};
 
-	struct PipelineConfigInfo {
+struct PipelineConfigInfo {
     PipelineConfigInfo() = default;
     PipelineConfigInfo(const PipelineConfigInfo& other) {
         // Copy all members
@@ -31,7 +31,7 @@ namespace Rendering {
         renderPass = other.renderPass;
         subpass = other.subpass;
     }
-    
+
     PipelineConfigInfo& operator=(const PipelineConfigInfo& other) {
         if (this != &other) {
             bindingDescriptions = other.bindingDescriptions;
@@ -69,21 +69,14 @@ namespace Rendering {
     uint32_t subpass = 0;
 };
 
-
-	class Pipeline {
+class Pipeline {
 public:
-    Pipeline(
-        Device& device,
-        const std::optional<std::string>& vertFilepath,
-        const std::optional<std::string>& geometryFilepath,
-        const std::optional<std::string>& fragFilepath,
-        const PipelineConfigInfo& configInfo);
+    Pipeline(Device& device, const std::optional<std::string>& vertFilepath,
+             const std::optional<std::string>& geometryFilepath, const std::optional<std::string>& fragFilepath,
+             const PipelineConfigInfo& configInfo);
 
     // New flexible constructor: pass any subset/order of shader stages
-    Pipeline(
-        Device& device,
-        const std::vector<ShaderStageInfo>& shaderStages,
-        const PipelineConfigInfo& configInfo);
+    Pipeline(Device& device, const std::vector<ShaderStageInfo>& shaderStages, const PipelineConfigInfo& configInfo);
 
     ~Pipeline();
 
@@ -98,20 +91,16 @@ public:
 private:
     static std::vector<char> readFile(const std::string& filepath);
 
-    void createGraphicsPipeline(
-        const std::optional<std::string>& vertFilepath,
-        const std::optional<std::string>& geometryFilepath,
-        const std::optional<std::string>& fragFilepath,
-        const PipelineConfigInfo& configInfo);
+    void createGraphicsPipeline(const std::optional<std::string>& vertFilepath,
+                                const std::optional<std::string>& geometryFilepath,
+                                const std::optional<std::string>& fragFilepath, const PipelineConfigInfo& configInfo);
 
-    void createGraphicsPipeline(
-        const std::vector<ShaderStageInfo>& shaderStages,
-        const PipelineConfigInfo& configInfo);
+    void createGraphicsPipeline(const std::vector<ShaderStageInfo>& shaderStages, const PipelineConfigInfo& configInfo);
 
     void createShaderModule(const std::vector<char>& code, VkShaderModule* shaderModule);
-    
+
     Device& device;
     VkPipeline graphicsPipeline;
-    VkPipelineLayout pipelineLayout;  // Store just the layout instead of entire config
+    VkPipelineLayout pipelineLayout; // Store just the layout instead of entire config
 };
-}  // namespace lve 
+} // namespace Rendering

@@ -18,9 +18,9 @@ build:
 shaders:
     ./scripts/check_shaders.ps1
 
-# clang-format conformance. Fails until .clang-format exists (Phase 1).
+# clang-format conformance.
 format-check:
-    if (-not (Test-Path .clang-format)) { Write-Error "format-check: .clang-format missing (Phase 1)"; exit 1 }
+    if (-not (Test-Path .clang-format)) { Write-Error "format-check: .clang-format missing"; exit 1 }
     $files = Get-ChildItem src -Recurse -Include *.cpp,*.hpp,*.inl | ForEach-Object FullName; clang-format --dry-run -Werror $files
 
 # Toolchain sanity check.
