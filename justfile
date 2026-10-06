@@ -20,7 +20,7 @@ shaders:
 
 # clang-format conformance.
 format-check:
-    if (-not (Test-Path .clang-format)) { Write-Error "format-check: .clang-format missing "; exit 1 }
+    if (-not (Test-Path .clang-format)) { Write-Error "format-check: .clang-format missing"; exit 1 }
     $files = Get-ChildItem src -Recurse -Include *.cpp,*.hpp,*.inl | ForEach-Object FullName; clang-format --dry-run -Werror $files
 
 # Toolchain sanity check.
