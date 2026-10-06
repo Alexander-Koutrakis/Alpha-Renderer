@@ -1,0 +1,35 @@
+# The single verification gate. Run `just check` before claiming anything is done.
+# Placeholders below fail loudly on purpose: an unconfigured gate must never look green.
+set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
+
+default:
+    @just --list
+
+# Everything that must be green. Unit tests are added in Phase 6 (see PLAN.md);
+# until then there is no `test` recipe rather than a fake green one.
+check: build shaders format-check
+
+# Configure and build with warnings visible (Ninja + MinGW, Debug).
+build:
+    cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+    cmake --build build
+
+# Compile every shader with glslc and validate with spirv-val.
+shaders:
+    ./scripts/check_shaders.ps1
+
+# clang-format conformance. Fails until .clang-format exists (Phase 1).
+format-check:
+    if (-not (Test-Path .clang-format)) { Write-Error "format-check: .clang-format missing (Phase 1)"; exit 1 }
+    $files = Get-ChildItem src -Recurse -Include *.cpp,*.hpp,*.inl | ForEach-Object FullName; clang-format --dry-run -Werror $files
+
+# Toolchain sanity check.
+doctor:
+    just --version
+    uv --version
+    git --version
+    cmake --version
+    clang-format --version
+    clang-tidy --version
+    glslc --version
+    spirv-val --version
