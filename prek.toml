@@ -1,0 +1,25 @@
+# prek hooks (https://prek.j178.dev). Install both stages once per clone:
+#   prek install --hook-type pre-commit --hook-type pre-push
+# Fast subset on commit, the full gate on push. Hooks only run checks; they change nothing.
+default_install_hook_types = ["pre-commit", "pre-push"]
+
+[[repos]]
+repo = "local"
+
+[[repos.hooks]]
+id = "fast-lint"
+name = "fast lint (just lint)"
+entry = "just lint"
+language = "system"
+pass_filenames = false
+always_run = true
+stages = ["pre-commit"]
+
+[[repos.hooks]]
+id = "full-check"
+name = "full gate (just check)"
+entry = "just check"
+language = "system"
+pass_filenames = false
+always_run = true
+stages = ["pre-push"]

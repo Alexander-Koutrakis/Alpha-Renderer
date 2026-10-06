@@ -1,12 +1,12 @@
-# Alpha Renderer: CV polish plan
+# Alpha Renderer: engineering quality plan
 
-Goal: make the repo something a hiring graphics engineer can clone, build, read and trust.
+Goal: treat this as a professional, maintainable codebase: anyone can clone it, build it, read it and trust the checks.
 Baseline (2026-10-06, `main` @ a5baa24): builds with GCC 15 + Ninja, 0 warnings, 21/21 shaders pass
 `glslc` + `spirv-val` (Vulkan 1.3). ~20k lines C++/GLSL. No `.clang-format`, `.clang-tidy`, CI, tests, `justfile`.
 
 ## Ground rules
 
-- One private local branch per phase, named `polish/<phase>`. Nothing is pushed.
+- One private local branch per phase, named after the phase (`tooling`, `format`, `init`, ...). Nothing is pushed.
 - Each phase ends with: build clean, 0 new warnings, shaders validate, then **you** approve the merge to `main`
   (fast-forward or `--no-ff`, your pick). No merge happens without that approval.
 - Every phase is verified with real output (build log, `glslc`/`spirv-val`, and for anything touching rendering a
@@ -59,12 +59,12 @@ Compile and validate clean. Visual/logic issues, highest first:
 ## Phases
 
 ### Phase 0: Skills and tooling (your step 3)
-Branch `polish/tooling`. Install/enable Vulkan, C++ and GLSL skills (list candidates, you choose; installs are your call).
+Branch `tooling`. Install/enable Vulkan, C++ and GLSL skills (list candidates, you choose; installs are your call).
 Add `justfile` with `check` (configure, build, shader gate, format check), `AGENTS.md`/`CLAUDE.md` with the project rules.
 Exit: `just check` runs on the untouched code and passes.
 
 ### Phase 1: clang-format (your step: format the codebase)
-Branch `polish/format`.
+Branch `format`.
 - Add `.clang-format`. Proposed: `BasedOnStyle: LLVM`, 4-space indent, 120 columns, `PointerAlignment: Left`,
   `IndentCaseLabels`, `NamespaceIndentation: None`, `SortIncludes: CaseInsensitive` with explicit include blocks,
   `LineEnding: DeriveLF`. (The tree is `* text=auto`, so the working copy is CRLF and the index is LF.)
@@ -75,7 +75,7 @@ Branch `polish/format`.
 - Exit: `clang-format --dry-run -Werror` over `src/` is clean; build output unchanged (same 0 warnings); disassembly-level change is nil because the commit is whitespace-only.
 
 ### Phase 2: Initialization hardening (your step: uninitialized values)
-Branch `polish/init`.
+Branch `init`.
 - Default member initializers everywhere flagged (handles `= VK_NULL_HANDLE`, scalars `{}`, matrices `{1.0f}`, arrays `{}`).
 - `PipelineConfigInfo`: give each state struct its `sType`; replace the hand-written copy with value-safe wiring at `build()` time.
 - `FrameContext` and the arrays that hold it: value-initialize; delete dead `frameSceneBounds`.
@@ -85,7 +85,7 @@ Branch `polish/init`.
 - Exit: build clean, tidy clean on touched files, scene still renders identically (screenshot diff).
 
 ### Phase 3: Vulkan struct descriptors (your step: "structs everywhere")
-Branch `polish/structs`. Introduce small value structs plus helpers, migrating callers and deleting the old paths as we go:
+Branch `structs`. Introduce small value structs plus helpers, migrating callers and deleting the old paths as we go:
 - `ImageBarrierDesc` + `cmdTransition()` (31 sites), `DescriptorWriter` (~55 sites), `ImageDesc`/`ImageViewDesc`, `SamplerDesc` presets,
   `PipelineLayoutDesc`, `RenderPassDesc` (or a decision to move to dynamic rendering, which I would raise with you before starting).
 - Reuse the existing `XPass::CreateInfo` convention so the whole codebase reads one way.
@@ -93,7 +93,7 @@ Branch `polish/structs`. Introduce small value structs plus helpers, migrating c
 - Exit: build clean, screenshot diff vs baseline per slice, validation layers on with zero errors (needs Phase 4 step 1 first, or a local toggle).
 
 ### Phase 4: Correctness and hygiene
-Branch `polish/hygiene`.
+Branch `hygiene`.
 1. Validation: CMake option / `NDEBUG`-driven, severity-filtered callback. Run once and report the validation-layer output.
 2. GPU selection by score (discrete > integrated, must be suitable), remove NVIDIA gate.
 3. `VK_CHECK` with `VkResult` name + file/line; apply to the unchecked submit/fence/begin/end calls.
@@ -104,24 +104,24 @@ Branch `polish/hygiene`.
 - Exit: build clean, validation clean, run from a different working directory works (after asset path fix in Phase 6, or noted).
 
 ### Phase 5: Shaders
-Branch `polish/shaders`.
+Branch `shaders`.
 - Behavior-neutral first: shared `common/*.glsl` via `GL_GOOGLE_include_directive` (needs `-I` in CMake and the shader gate), delete confirmed duplicates, naming/typos, `max()` guards for NaN hazards.
 - Behavior-changing fixes as separate commits, each with before/after screenshots: transparency UBO mismatch, squared specular,
   WBOIT weight, spot shadow space, IBL Fresnel, sky test, downsample bounds, RC normal check, RC temporal normal, RC push-constant block.
 - Exit: 21/21 shaders `glslc` + `spirv-val` clean, no new warnings, screenshot comparisons attached.
 
 ### Phase 6: Build portability, CI, docs, tests
-Branch `polish/portable`.
+Branch `portable`.
 - CMake: `find_package` for glfw3/glm/KTX (or FetchContent), `find_program`/`Vulkan::glslc`, `CMakePresets.json`, target renamed, asset/shader paths relative to the executable, `CONFIGURE_DEPENDS` glob.
 - GitHub Actions (Windows + Linux) that configure, build and compile shaders. Needs your OK to add (it is outward-facing once pushed).
 - README: real prerequisites, build/run commands, controls, GPU requirements, fix broken `src/` doc links and `assets` vs `Assets`, drop the stb_image claim, add a timings table if we measure.
 - Tests: doctest/Catch2 via CTest for ECS, octree, view frustum, AABB.
 
-### Phase 7 (optional, only if you want more CV weight)
+### Phase 7 (optional, optional, larger refactors)
 Split `rendering_resources.cpp` into per-pass resource owners; data-driven pass order in `renderer.cpp`; per-pass GPU timestamps.
 
 ## Open decisions for you
-1. Dynamic rendering and `vkCmdPipelineBarrier2` (Vulkan 1.3) vs keeping render passes: big change, big CV signal. Default: keep render passes in Phase 3, revisit in Phase 7.
+1. Dynamic rendering and `vkCmdPipelineBarrier2` (Vulkan 1.3) vs keeping render passes: big change, modern-Vulkan payoff. Default: keep render passes in Phase 3, revisit in Phase 7.
 2. Phase 6 dependency strategy: system packages vs FetchContent/vcpkg. Default: FetchContent for GLM/GLFW, system KTX.
 3. Merge style per phase: fast-forward or `--no-ff`.
 4. Whether to ship behavior-changing shader fixes in this pass or list them as known issues.
