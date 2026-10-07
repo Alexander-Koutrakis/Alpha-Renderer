@@ -416,8 +416,7 @@ vec3 calculateUnifiedLight(
     vec3 halfVector = normalize(lightDirection + viewDir);
     
     vec3 diffuse = kD * albedo / PI;
-    vec3 specularBRDF = cookTorranceBRDF(normal, viewDir, lightDirection, halfVector, F0, roughness, NdotL, NdotV);
-    vec3 specular = specularBRDF * specularBRDF;
+    vec3 specular = cookTorranceBRDF(normal, viewDir, lightDirection, halfVector, F0, roughness, NdotL, NdotV);
     
     vec3 lightColor = light.colorAndIntensity.rgb * light.colorAndIntensity.a;
     
