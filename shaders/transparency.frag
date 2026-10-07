@@ -269,15 +269,20 @@ float findShadowForSpotLight(Light light, vec3 worldPos, vec3 normal) {
     }
     
     vec3 lightPos = light.positionAndData.xyz;
-    vec3 lightDir = normalize(lightPos - worldPos);
+    vec3 toLight = lightPos - worldPos;
+    vec3 lightDir = normalize(toLight);
     float NdotL = max(dot(normal, lightDir), 0.0);
     
     if (NdotL <= 0.0) {
         return 0.0;
     }
     
+    // The spot shadow map stores radial distance / range (see shadowmap.frag), not NDC depth.
+    float lightRange = max(light.directionAndRange.w, 0.001);
     float invNdotL = 1.0 - saturate(NdotL);
     float bias = BASE_DEPTH_BIAS + invNdotL * MAX_SHADOW_BIAS;
+    float normalizedBias = bias / lightRange;
+    float fragmentDepth = saturate(length(toLight) / lightRange);
     
     vec2 texelSize = 1.0 / vec2(textureSize(spotShadowMaps[light.shadowmapIndex], 0).xy);
     float radius = 1.5;
@@ -293,7 +298,7 @@ float findShadowForSpotLight(Light light, vec3 worldPos, vec3 normal) {
     for(int i = 0; i < 16; i++) {
         vec2 offset = rotationMatrix * poissonDisk[i] * radius * texelSize;
         float pcfDepth = texture(spotShadowMaps[light.shadowmapIndex], shadowCoord.xy + offset).r;
-        shadow += (shadowCoord.z - bias) > pcfDepth ? 0.0 : 1.0;
+        shadow += (fragmentDepth - normalizedBias) > pcfDepth ? 0.0 : 1.0;
     }
     
     shadow /= 16.0;
