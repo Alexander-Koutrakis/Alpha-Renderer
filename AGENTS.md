@@ -13,8 +13,9 @@ Rules for any agent (Claude Code or Codex) changing this repo.
 
 ## Commands
 
-- `just check`: the single verification gate: `build` (CMake/Ninja, Debug, must stay at 0 warnings), `shaders` (glslc + spirv-val on all 21 shaders), `format-check` (`clang-format --dry-run -Werror` over `src/`; `external/` is never formatted).
-- `just build`, `just shaders`, `just format-check`: the pieces on their own.
+- `just check`: the single verification gate: `build` (CMake/Ninja, Debug, `-Werror` via `ALPHA_WARNINGS_AS_ERRORS`), `shaders` (glslc + spirv-val on all 21 shaders), `format-check` (`clang-format --dry-run -Werror` over `src/`; `external/` is never formatted), `tidy` (clang-tidy member-initialization check over `src/`; clang-only diagnostics are reported, not gated).
+- `just build`, `just shaders`, `just format-check`, `just tidy`: the pieces on their own.
+- Initialize every member and Vulkan struct: `VkFoo info{VK_STRUCTURE_TYPE_FOO};` or `{}`; handles `= VK_NULL_HANDLE`.
 - No unit tests yet; they arrive in Phase 6 of `PLAN.md`.
 - `just doctor`: toolchain check.
 

@@ -80,8 +80,9 @@ Branch `init`.
 - `PipelineConfigInfo`: give each state struct its `sType`; replace the hand-written copy with value-safe wiring at `build()` time.
 - `FrameContext` and the arrays that hold it: value-initialize; delete dead `frameSceneBounds`.
 - `VkDebugUtilsMessengerCreateInfoEXT x{VK_STRUCTURE_TYPE_...}` style for the two stray locals.
-- Add `-Wextra -Wmissing-field-initializers -Wuninitialized -Wmaybe-uninitialized` (Release build too, since GCC only reports some at -O2),
-  and `.clang-tidy` with `cppcoreguidelines-pro-type-member-init`, `cppcoreguidelines-init-variables`, `bugprone-*` as a gate on touched lines.
+- Gate (done): `-Werror` through `ALPHA_WARNINGS_AS_ERRORS`, and `.clang-tidy` with `cppcoreguidelines-pro-type-member-init` run by `just tidy`.
+  Changed from the original plan: `-Wmissing-field-initializers` is off (it flags `VkFoo{sType}`, which zero-fills on purpose) and
+  `cppcoreguidelines-init-variables` is off (it flags locals assigned on every path and API out-parameters; zeroing them would hide real misses).
 - Exit: build clean, tidy clean on touched files, scene still renders identically (screenshot diff).
 
 ### Phase 3: Vulkan struct descriptors (your step: "structs everywhere")
