@@ -143,8 +143,10 @@ Slices, each its own commit; build and verification after each:
   *Pre-slice grep result (2026-10-07):* none of the layout create-infos set `pNext`, `flags`, binding flags or
   `pImmutableSamplers`. Descriptor types used in layouts: `COMBINED_IMAGE_SAMPLER`, `STORAGE_BUFFER`, `STORAGE_IMAGE`,
   `UNIFORM_BUFFER` only. So `layoutBinding` + `createDescriptorSetLayout` need no extra overload.
-  *Baseline call log on `main` logic (before any migration):* 334 descriptor calls = 21 layouts, 90 set allocations,
-  223 writes; two captures are byte-identical, so the log is deterministic.
+  *Baseline call log (unmigrated code):* 341 descriptor calls = 22 layouts, 91 set allocations, 228 writes. The 22nd
+  layout is ImGui's own (the harness wraps every translation unit, including the vendored ImGui backend). Two captures
+  are byte-identical. An earlier 334-call baseline was truncated by stderr buffering; the harness now unbuffers stderr
+  and rejects a truncated last line.
 - **B. Writer + sets.** Rework `DescriptorWriter` (copy semantics, types, arrays). Migrate the ~20 allocate-and-write
   blocks, the `w0..w7` blocks, the writes in `light_pass.cpp` / `shadow_pass.cpp`, then the 5 existing users.
   Remove the legacy raw-struct paths.
