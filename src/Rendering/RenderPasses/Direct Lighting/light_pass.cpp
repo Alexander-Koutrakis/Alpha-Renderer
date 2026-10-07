@@ -67,15 +67,9 @@ void LightPass::run(FrameContext& frameContext) {
 }
 
 void LightPass::createRenderPass(const CreateInfo& createInfo) {
-    VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = createInfo.lightPassFormat;
-    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkAttachmentDescription colorAttachment =
+        attachmentDescription(createInfo.lightPassFormat, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+                              VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     VkAttachmentDescription incidentAttachment = colorAttachment;
 
@@ -111,18 +105,7 @@ void LightPass::createRenderPass(const CreateInfo& createInfo) {
 
     std::array<VkAttachmentDescription, 2> attachments{colorAttachment, incidentAttachment};
 
-    VkRenderPassCreateInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-    renderPassInfo.pAttachments = attachments.data();
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-    renderPassInfo.pDependencies = dependencies.data();
-
-    if (vkCreateRenderPass(device.getDevice(), &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create light pass render pass!");
-    }
+    renderPass = Rendering::createRenderPass(device.getDevice(), attachments, subpass, dependencies);
 }
 
 void LightPass::createFramebuffers(const CreateInfo& createInfo) {

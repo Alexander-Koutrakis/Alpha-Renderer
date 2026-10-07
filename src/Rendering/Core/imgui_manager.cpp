@@ -47,15 +47,10 @@ void ImGuiManager::createDescriptorPool() {
 
 void ImGuiManager::createRenderPass(SwapChain& swapChain) {
     // Create a simple render pass for ImGui that renders directly to the swap chain
-    VkAttachmentDescription attachment{};
-    attachment.format = swapChain.getSwapChainImageFormat();
-    attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD; // Load existing content (our rendered scene)
-    attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    // Load existing content (our rendered scene)
+    VkAttachmentDescription attachment = attachmentDescription(
+        swapChain.getSwapChainImageFormat(), VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
     VkAttachmentReference colorAttachmentRef{};
     colorAttachmentRef.attachment = 0;
@@ -74,18 +69,7 @@ void ImGuiManager::createRenderPass(SwapChain& swapChain) {
     dependency.srcAccessMask = 0;
     dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-    VkRenderPassCreateInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = 1;
-    renderPassInfo.pAttachments = &attachment;
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = 1;
-    renderPassInfo.pDependencies = &dependency;
-
-    if (vkCreateRenderPass(device.getDevice(), &renderPassInfo, nullptr, &imguiRenderPass) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create ImGui render pass!");
-    }
+    imguiRenderPass = Rendering::createRenderPass(device.getDevice(), attachment, subpass, dependency);
 }
 
 void ImGuiManager::createFramebuffers(SwapChain& swapChain) {

@@ -20,4 +20,35 @@ VkFramebuffer createFramebuffer(VkDevice device, VkRenderPass renderPass, ArrayV
     return framebuffer;
 }
 
+VkAttachmentDescription attachmentDescription(VkFormat format, VkAttachmentLoadOp loadOp, VkAttachmentStoreOp storeOp,
+                                              VkImageLayout initialLayout, VkImageLayout finalLayout) {
+    VkAttachmentDescription description{};
+    description.format = format;
+    description.samples = VK_SAMPLE_COUNT_1_BIT;
+    description.loadOp = loadOp;
+    description.storeOp = storeOp;
+    description.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    description.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    description.initialLayout = initialLayout;
+    description.finalLayout = finalLayout;
+    return description;
+}
+
+VkRenderPass createRenderPass(VkDevice device, ArrayView<VkAttachmentDescription> attachments,
+                              const VkSubpassDescription& subpass, ArrayView<VkSubpassDependency> dependencies) {
+    VkRenderPassCreateInfo info{VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO};
+    info.attachmentCount = static_cast<uint32_t>(attachments.size());
+    info.pAttachments = attachments.begin();
+    info.subpassCount = 1;
+    info.pSubpasses = &subpass;
+    info.dependencyCount = static_cast<uint32_t>(dependencies.size());
+    info.pDependencies = dependencies.begin();
+
+    VkRenderPass renderPass = VK_NULL_HANDLE;
+    if (vkCreateRenderPass(device, &info, nullptr, &renderPass) != VK_SUCCESS) {
+        throw std::runtime_error("failed to create render pass!");
+    }
+    return renderPass;
+}
+
 } // namespace Rendering
