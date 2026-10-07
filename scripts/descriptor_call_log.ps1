@@ -8,6 +8,8 @@
 # The same script captures the image/view creation log (scripts/image_call_log/image_log.hpp):
 #   ./scripts/descriptor_call_log.ps1 -Out build/image-log-main.txt -Header scripts/image_call_log/image_log.hpp -Prefix ILOG -CompleteLine '\.\s*$' -BuildDir build/image-log
 #
+# And the sampler log: -Header scripts/sampler_call_log/sampler_log.hpp -Prefix SLOG -CompleteLine '\.\s*$' -BuildDir build/sampler-log
+#
 # Builds a separate scratch tree (build/descriptor-log, git-ignored) with descriptor_log.hpp force-included, starts the
 # app, waits until it has created every descriptor, stops it, and keeps only the DSLOG lines. The product build is not touched.
 param(

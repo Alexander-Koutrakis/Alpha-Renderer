@@ -1,6 +1,7 @@
 #include "texture.hpp"
 #include "Rendering/Core/barriers.hpp"
 #include "Rendering/Core/images.hpp"
+#include "Rendering/Core/samplers.hpp"
 #include <stdexcept>
 #include "Rendering/Core/buffer.hpp"
 #include <cmath>
@@ -109,29 +110,10 @@ void Texture::createTextureImageView() {
 }
 
 void Texture::createTextureSampler() {
-    VkSamplerCreateInfo samplerInfo{};
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-
     // Use standard settings for regular textures
-    samplerInfo.magFilter = VK_FILTER_LINEAR;
-    samplerInfo.minFilter = VK_FILTER_LINEAR;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    samplerInfo.anisotropyEnable = VK_TRUE;
-    samplerInfo.maxAnisotropy = device.deviceProperties.limits.maxSamplerAnisotropy;
-    samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-    samplerInfo.compareEnable = VK_FALSE;
-    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-    samplerInfo.mipLodBias = -0.5f;
-    samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = static_cast<float>(mipLevels);
-
-    if (vkCreateSampler(device.getDevice(), &samplerInfo, nullptr, &sampler) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create texture sampler!");
-    }
+    sampler = createSampler(device.getDevice(), VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR,
+                            VK_SAMPLER_ADDRESS_MODE_REPEAT, VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+                            static_cast<float>(mipLevels), device.deviceProperties.limits.maxSamplerAnisotropy, -0.5f);
 }
 
 void Texture::transitionImageLayout(VkImage vkImage, VkImageLayout oldLayout, VkImageLayout newLayout,
@@ -376,41 +358,11 @@ void Texture::createCubemapView() {
                                 VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels, 0, 6);
 }
 void Texture::createCubemapSampler() {
-    VkSamplerCreateInfo samplerInfo{};
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-
-    // Linear filtering for magnification and minification
-    samplerInfo.magFilter = VK_FILTER_LINEAR;
-    samplerInfo.minFilter = VK_FILTER_LINEAR;
-
-    // Important for cubemaps: use clamp to edge to prevent sampling beyond face edges
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-
-    // Enable anisotropic filtering for better quality at angles
-    samplerInfo.anisotropyEnable = VK_TRUE;
-    samplerInfo.maxAnisotropy = device.deviceProperties.limits.maxSamplerAnisotropy;
-
-    // Border color isn't used with clamp to edge, but set it just in case
-    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-
-    // Use normalized coordinates
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-
-    // No comparison operations
-    samplerInfo.compareEnable = VK_FALSE;
-    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-
-    // Mipmap settings
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    samplerInfo.mipLodBias = 0.0f;
-    samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = static_cast<float>(mipLevels);
-
-    if (vkCreateSampler(device.getDevice(), &samplerInfo, nullptr, &sampler) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create cubemap sampler!");
-    }
+    // Linear filtering and clamp to edge, which keeps cubemap sampling from reading beyond face edges;
+    // anisotropic filtering for better quality at angles
+    sampler = createSampler(device.getDevice(), VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR,
+                            VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+                            static_cast<float>(mipLevels), device.deviceProperties.limits.maxSamplerAnisotropy);
 }
 
 uint32_t Texture::getFormatSize(VkFormat format) {
