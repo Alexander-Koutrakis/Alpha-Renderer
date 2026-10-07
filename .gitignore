@@ -42,3 +42,12 @@ Makefile
 
 # Worktrees
 .worktrees/
+
+# Local only: plans, handoffs, findings, task cards, agent rules and skills.
+# Only README.md files and real documentation are tracked.
+*.md
+!README.md
+/findings/
+/.claude/
+/.agents/
+/skills/
