@@ -5,39 +5,24 @@
 
 // std
 #include <memory>
-#include <unordered_map>
+#include <initializer_list>
 #include <vector>
 
 namespace Rendering {
 
-class DescriptorSetLayout {
-public:
-    class Builder {
-    public:
-        Builder(Device& device) : device{device} {}
+// A native Vulkan layout binding with named parameters. A plain VkDescriptorSetLayoutBinding is positional
+// ({binding, type, count, stages, samplers}) and count/stages are both uint32_t, so a swap would compile silently.
+inline VkDescriptorSetLayoutBinding layoutBinding(uint32_t binding, VkDescriptorType type, VkShaderStageFlags stages,
+                                                  uint32_t count = 1) {
+    return {binding, type, count, stages, nullptr};
+}
 
-        Builder& addBinding(uint32_t binding, VkDescriptorType descriptorType, VkShaderStageFlags stageFlags,
-                            uint32_t count = 1);
-        std::unique_ptr<DescriptorSetLayout> build() const;
-
-    private:
-        Device& device;
-        std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> bindings{};
-    };
-
-    DescriptorSetLayout(Device& device, std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> bindings);
-    ~DescriptorSetLayout();
-
-    DescriptorSetLayout(const DescriptorSetLayout&) = delete;
-    DescriptorSetLayout& operator=(const DescriptorSetLayout&) = delete;
-
-    VkDescriptorSetLayout getDescriptorSetLayout() const { return descriptorSetLayout; }
-
-private:
-    Device& device;
-    VkDescriptorSetLayout descriptorSetLayout{VK_NULL_HANDLE};
-    std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> bindings;
-};
+// Creates a descriptor set layout from bindings, in the order given. Throws on failure. The caller owns the handle,
+// names it and destroys it.
+VkDescriptorSetLayout createDescriptorSetLayout(Device& device, const VkDescriptorSetLayoutBinding* bindings,
+                                                uint32_t bindingCount);
+VkDescriptorSetLayout createDescriptorSetLayout(Device& device,
+                                                std::initializer_list<VkDescriptorSetLayoutBinding> bindings);
 
 class DescriptorPool {
 public:
