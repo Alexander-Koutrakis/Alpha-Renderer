@@ -1,4 +1,5 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
 //=============================================================================
 // DEFERRED DIRECT LIGHTING PASS
 //=============================================================================
@@ -54,14 +55,9 @@
 //=============================================================================
 // CONSTANTS
 //=============================================================================
-const int MAX_LIGHTS = 128;
-const int MAX_CASCADE_COUNT = 4;
-const int MAX_SHADOWCASTING_DIRECTIONAL = 4;
-const int MAX_SHADOWCASTING_SPOT = 8;
-const int MAX_SHADOWCASTING_POINT = 8;
-const int MAX_SHADOWCASTING_LIGHT_MATRICES = 64;
-const float PI = 3.14159265359;
-const float EPSILON = 0.0000001;
+#include "light.glsl"
+#include "brdf.glsl"
+
 const float BASE_DEPTH_BIAS = 0.005;
 const float MAX_SHADOW_BIAS = 0.15;
 const vec3 ambientColor = vec3(0.02, 0.02, 0.02);
@@ -76,18 +72,6 @@ layout(location = 1) out vec4 outIncident;
 //=============================================================================
 // STRUCTURES
 //=============================================================================
-struct Light {
-    vec4 positionAndData;       // xyz=position, w=0 for directional, 1 for punctual
-    vec4 colorAndIntensity;     // rgb=color, a=intensity
-    vec4 directionAndRange;     // xyz=direction, w=range
-    vec4 attenuationParams;     // x=invRangeSqr, y=unused, zw=spotAngleParams
-    int lightType;              // 0=directional, 1=spot, 2=point
-    int lightMatrixOffset;
-    int shadowmapIndex;
-    int isCastingShadow;
-    float shadowStrength;
-};
-
 //=============================================================================
 // UNIFORMS
 //=============================================================================
@@ -126,18 +110,6 @@ layout(set = 6, binding = 0) uniform DirectionalLightCascadeSplits {
 //=============================================================================
 // UTILITY FUNCTIONS
 //=============================================================================
-float saturate(float x) {
-    return clamp(x, 0.0, 1.0);
-}
-
-float exposureMultiplier(float ev) {
-    return exp2(ev);
-}
-
-float rand(vec2 co) {
-    return fract(sin(dot(co.xy, vec2(12.9898, 78.233))) * 43758.5453);
-}
-
 // Interleaved Gradient Noise by Jorge Jimenez
 // Produces structured noise that's much less visually objectionable than white noise
 // and integrates well with TAA
@@ -154,20 +126,6 @@ vec2 VogelDiskSample(int sampleIndex, int sampleCount, float rotation) {
     float theta = float(sampleIndex) * goldenAngle + rotation;
     return vec2(cos(theta), sin(theta)) * r;
 }
-
-// Poisson disk for PCF shadow sampling
-vec2 poissonDisk[16] = vec2[](
-    vec2(-0.94201624, -0.39906216), vec2(0.94558609, -0.76890725),
-    vec2(-0.094184101, -0.92938870), vec2(0.34495938, 0.29387760),
-    vec2(-0.91588581, 0.45771432), vec2(-0.81544232, -0.87912464),
-    vec2(-0.38277543, 0.27676845), vec2(0.97484398, 0.75648379),
-    vec2(0.44323325, -0.97511554), vec2(0.53742981, -0.47373420),
-    vec2(-0.26496911, -0.41893023), vec2(0.79197514, 0.19090188),
-    vec2(-0.24188840, 0.99706507), vec2(-0.81409955, 0.91437590),
-    vec2(0.19984126, 0.78641367), vec2(0.14383161, -0.14100790)
-);
-
-#define BEYOND_SHADOW_FAR(shadowCoord) (shadowCoord.z <= 0.0 || shadowCoord.z >= 1.0)
 
 //=============================================================================
 // SHADOW FUNCTIONS
@@ -527,39 +485,6 @@ float calculateShadow(Light light, vec3 worldPos, vec3 normal) {
 // Physically-based specular BRDF using GGX/Trowbridge-Reitz distribution
 //=============================================================================
 
-/// GGX/Trowbridge-Reitz Normal Distribution Function
-/// Models the statistical distribution of microfacet normals
-float NormalDistributionFunction(vec3 normal, vec3 halfVector, float roughness) {
-    float a = max(roughness * roughness, 0.045 * 0.045);
-    float a2 = a * a;
-    float NdotH = max(dot(normal, halfVector), 0.0);
-    float NdotH2 = NdotH * NdotH;
-    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
-    return a2 / (PI * denom * denom + EPSILON);
-}
-
-/// Fresnel-Schlick approximation with roughness
-/// Models how reflectivity changes at grazing angles
-vec3 FresnelSchlickRoughness(float VdotH, vec3 F0, float roughness) {
-    float Fc = pow(1.0 - VdotH, 5.0);
-    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * Fc;
-}
-
-/// Schlick-GGX Geometry function (single direction)
-float GeometrySchlickGGX(float NdotV, float roughness) {
-    float r = (roughness + 1.0);
-    float k = (r * r) / 8.0;
-    return NdotV / (NdotV * (1.0 - k) + k + EPSILON);
-}
-
-/// Smith's Geometry function - combines shadowing and masking
-/// Models microfacet self-shadowing from both view and light directions
-float GeometrySmith(vec3 normal, vec3 viewDir, vec3 lightDir, float roughness) {
-    float NdotV = max(dot(normal, viewDir), 0.0);
-    float NdotL = max(dot(normal, lightDir), 0.0);
-    return GeometrySchlickGGX(NdotV, roughness) * GeometrySchlickGGX(NdotL, roughness);
-}
-
 /// Simple energy-compensation term so rough specular lobes don't lose too much energy
 float SpecularEnergyCompensation(float roughness) {
     float r2 = roughness * roughness;
@@ -593,18 +518,6 @@ vec3 calculateIBLSpecular(vec3 normal, vec3 viewDir, vec3 albedo, float roughnes
     return prefilteredColor * F * energyComp;
 }
 
-/// Full Cook-Torrance specular BRDF
-/// Combines D (distribution), F (fresnel), G (geometry) terms
-vec3 cookTorranceBRDF(vec3 normal, vec3 viewDir, vec3 lightDir, vec3 halfVector,
-                      vec3 F0, float roughness, float NdotL, float NdotV) {
-    float VdotH = max(dot(viewDir, halfVector), 0.0);
-    float D = NormalDistributionFunction(normal, halfVector, roughness);
-    vec3 F = FresnelSchlickRoughness(VdotH, F0, roughness);
-    float G = GeometrySmith(normal, viewDir, lightDir, roughness);
-    float denom = 4.0 * max(NdotL, 0.0) * max(NdotV, 0.0) + EPSILON;
-    return (D * G * F) / denom;
-}
-
 //=============================================================================
 // LIGHT ATTENUATION
 // Controls how light intensity falls off with distance
@@ -629,14 +542,6 @@ float DistanceAttenuation(float distanceSqr, vec2 distanceAndSpotAttenuation) {
     smoothFactor = smoothFactor * smoothFactor;
     
     return lightAtten * smoothFactor;
-}
-
-/// Spot light angular attenuation
-/// Uses precomputed scale/offset for inner/outer cone falloff
-float AngleAttenuation(vec3 spotDirection, vec3 lightDirection, vec2 spotAttenuation) {
-    float SdotL = dot(spotDirection, lightDirection);
-    float atten = saturate(SdotL * spotAttenuation.x + spotAttenuation.y);
-    return atten * atten;
 }
 
 /// Unified attenuation for all light types

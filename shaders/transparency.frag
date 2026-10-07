@@ -1,4 +1,5 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
 //=============================================================================
 // WEIGHTED BLENDED ORDER-INDEPENDENT TRANSPARENCY
 //=============================================================================
@@ -42,15 +43,9 @@
 //
 //=============================================================================
 
-// Constants matching direct_light.frag
-const int MAX_LIGHTS = 128;
-const int MAX_CASCADE_COUNT = 4;
-const int MAX_SHADOWCASTING_DIRECTIONAL = 4;
-const int MAX_SHADOWCASTING_SPOT = 8;
-const int MAX_SHADOWCASTING_POINT = 8;
-const int MAX_SHADOWCASTING_LIGHT_MATRICES = 64;
-const float PI = 3.14159265359;
-const float EPSILON = 0.0000001;
+#include "light.glsl"
+#include "brdf.glsl"
+
 const float BASE_AMBIENT_INTENSITY = 0.05;
 const float BASE_DEPTH_BIAS = 0.005;
 const float MAX_SHADOW_BIAS = 0.1;
@@ -61,19 +56,6 @@ layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec2 fragUV;
 layout(location = 3) in vec3 fragTangent;
 layout(location = 4) in vec3 fragBitangent;
-
-// Unified Light structure (matches direct_light.frag and C++ Light struct)
-struct Light {
-    vec4 positionAndData;       // xyz=pos, w=unused
-    vec4 colorAndIntensity;     // rgb=color, a=intensity
-    vec4 directionAndRange;     // xyz=direction, w=range
-    vec4 attenuationParams;     // distance/angle attenuation params
-    int lightType;              // 0 = directional, 1 = spot, 2 = point
-    int lightMatrixOffset;      // offset into the shadowcastingLightMatrices array
-    int shadowmapIndex;         // index into the shadowmap array
-    int isCastingShadow;        // 0 = no, 1 = yes
-    float shadowStrength;
-};
 
 // Set 0: Camera UBO (shared with vertex shader)
 layout(set = 0, binding = 0) uniform CameraUBO {
@@ -140,11 +122,6 @@ layout(set = 7, binding = 0) uniform DirectionalLightCascadeSplits {
 layout(location = 0) out vec4 accum;   // RGB = Color*weight, A = weight
 layout(location = 1) out float reveal; // Used to modulate the transparency weight
 
-// ----- MATH FUNCTIONS -----
-float saturate(float x) {
-    return clamp(x, 0.0, 1.0);
-}
-
 // ----- PBR FUNCTIONS -----
 vec3 calculateNormal() {
     vec3 N = normalize(fragNormal);
@@ -164,56 +141,6 @@ vec3 calculateNormal() {
     );
     
     return normalize(TBN * tangentSpaceNormal);
-}
-
-// Normal Distribution Function - GGX/Trowbridge-Reitz
-float NormalDistributionFunction(vec3 normal, vec3 halfVector, float roughness) {
-    float a = max(roughness * roughness, 0.045 * 0.045);
-    float a2 = a * a;
-    float NdotH = max(dot(normal, halfVector), 0.0);
-    float NdotH2 = NdotH * NdotH;
-    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
-    return a2 / (PI * denom * denom + EPSILON);
-}
-
-// Fresnel-Schlick with roughness
-vec3 FresnelSchlickRoughness(float VdotH, vec3 F0, float roughness) {
-    float Fc = pow(1.0 - VdotH, 5.0);
-    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * Fc;
-}
-
-// Geometry function - Schlick-GGX
-float GeometrySchlickGGX(float NdotV, float roughness) {
-    float r = (roughness + 1.0);
-    float k = (r * r) / 8.0;
-    return NdotV / (NdotV * (1.0 - k) + k + EPSILON);
-}
-
-float GeometrySmith(vec3 normal, vec3 viewDir, vec3 lightDir, float roughness) {
-    float NdotV = max(dot(normal, viewDir), 0.0);
-    float NdotL = max(dot(normal, lightDir), 0.0);
-    float ggx1 = GeometrySchlickGGX(NdotV, roughness);
-    float ggx2 = GeometrySchlickGGX(NdotL, roughness);
-    return ggx1 * ggx2;
-}
-
-// Cook-Torrance BRDF
-vec3 cookTorranceBRDF(
-    vec3 normal, 
-    vec3 viewDir, 
-    vec3 lightDir, 
-    vec3 halfVector,
-    vec3 F0,
-    float roughness, 
-    float NdotL, 
-    float NdotV
-) {
-    float VdotH = max(dot(viewDir, halfVector), 0.0);
-    float D = NormalDistributionFunction(normal, halfVector, roughness);
-    vec3 F = FresnelSchlickRoughness(VdotH, F0, roughness);
-    float G = GeometrySmith(normal, viewDir, lightDir, roughness);
-    float denom = 4.0 * max(NdotL, 0.0) * max(NdotV, 0.0) + EPSILON;
-    return (D * G * F) / denom;
 }
 
 // ----- PSEUDO-RANDOM FUNCTIONS -----
@@ -242,8 +169,6 @@ vec2 poissonDisk[16] = vec2[](
 );
 
 // ----- SHADOW CALCULATIONS (matching direct_light.frag) -----
-#define BEYOND_SHADOW_FAR(shadowCoord) (shadowCoord.z <= 0.0 || shadowCoord.z >= 1.0)
-
 int findCascade(float viewDepth, vec4 cascadeSplits) {
     if (viewDepth < cascadeSplits.x) return 0;
     if (viewDepth < cascadeSplits.y) return 1;
@@ -453,12 +378,6 @@ float DistanceAttenuation(float distanceSqr, vec2 distanceAndRangeSqr) {
     
     float hasRange = step(EPSILON, distanceAndRangeSqr.x);
     return mix(1.0, lightAtten * smoothFactor, hasRange);
-}
-
-float AngleAttenuation(vec3 spotDirection, vec3 lightDirection, vec2 spotAttenuation) {
-    float SdotL = dot(spotDirection, lightDirection);
-    float atten = saturate(SdotL * spotAttenuation.x + spotAttenuation.y);
-    return atten * atten;
 }
 
 // ----- UNIFIED LIGHT CALCULATION -----

@@ -18,6 +18,10 @@ build:
 shaders:
     ./scripts/check_shaders.ps1
 
+# Behavior-neutral check: compare every shader against a base ref (default main). Use scripts/shader_equiv.ps1 -Expect for intended changes.
+shader-equiv base="main":
+    ./scripts/shader_equiv.ps1 -BaseRef {{base}}
+
 # clang-format conformance.
 format-check:
     if (-not (Test-Path .clang-format)) { Write-Error "format-check: .clang-format missing"; exit 1 }
