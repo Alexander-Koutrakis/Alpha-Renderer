@@ -3,6 +3,7 @@ project(AlphaRenderer LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # ---------------------------------------
 # Compiler warnings
@@ -137,6 +138,16 @@ target_include_directories(main PRIVATE
   ${GLM_INCLUDE_DIR}
   ${KTX_INCLUDE_DIR}
 )
+
+# `VkFoo info{VK_STRUCTURE_TYPE_FOO};` deliberately zero-fills every other member, which
+# -Wmissing-field-initializers would flag on every Vulkan struct, so it is off for our code.
+option(ALPHA_WARNINGS_AS_ERRORS "Treat compiler warnings in our own code as errors" OFF)
+if(NOT MSVC)
+  target_compile_options(main PRIVATE -Wno-missing-field-initializers)
+  if(ALPHA_WARNINGS_AS_ERRORS)
+    target_compile_options(main PRIVATE -Werror)
+  endif()
+endif()
 
 target_link_libraries(main PRIVATE
   Vulkan::Vulkan

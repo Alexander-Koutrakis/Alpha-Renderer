@@ -7,11 +7,11 @@ default:
 
 # Everything that must be green. Unit tests are added in Phase 6 (see PLAN.md);
 # until then there is no `test` recipe rather than a fake green one.
-check: build shaders format-check
+check: build shaders format-check tidy
 
 # Configure and build with warnings visible (Ninja + MinGW, Debug).
 build:
-    cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug
+    cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DALPHA_WARNINGS_AS_ERRORS=ON
     cmake --build build
 
 # Compile every shader with glslc and validate with spirv-val.
@@ -22,6 +22,10 @@ shaders:
 format-check:
     if (-not (Test-Path .clang-format)) { Write-Error "format-check: .clang-format missing"; exit 1 }
     $files = Get-ChildItem src -Recurse -Include *.cpp,*.hpp,*.inl | ForEach-Object FullName; clang-format --dry-run -Werror $files
+
+# clang-tidy initialization checks over src/ (needs build/compile_commands.json from `just build`).
+tidy: build
+    ./scripts/run_tidy.ps1
 
 # Toolchain sanity check.
 doctor:

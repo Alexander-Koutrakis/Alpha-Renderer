@@ -1,0 +1,13 @@
+---
+# Initialization checks only for now; the scope grows with later phases (see PLAN.md).
+# cppcoreguidelines-init-variables is intentionally off: it flags locals that are assigned on
+# every path or filled by a Vulkan/GLFW out-parameter, and zeroing those would hide a real
+# missed path from the compiler's own -Wmaybe-uninitialized.
+Checks: >
+  -*,
+  cppcoreguidelines-pro-type-member-init
+WarningsAsErrors: 'cppcoreguidelines-*'
+HeaderFilterRegex: '.*[/\]src[/\].*'
+CheckOptions:
+  - key: cppcoreguidelines-pro-type-member-init.UseAssignment
+    value: true
