@@ -1,5 +1,4 @@
 #include "Scene/scene.hpp"
-#include <iostream>
 
 using namespace ECS;
 using namespace Systems;

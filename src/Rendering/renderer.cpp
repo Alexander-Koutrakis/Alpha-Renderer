@@ -3,7 +3,6 @@ class AlphaEngine;
 #include "renderer.hpp"
 #include "Core/vk_check.hpp"
 #include "Engine/alpha_engine.hpp"
-#include <iostream>
 #include <array>
 
 using namespace ECS;

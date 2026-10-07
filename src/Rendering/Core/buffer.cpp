@@ -6,7 +6,7 @@
  */
 
 #include "buffer.hpp"
-#include <iostream>
+#include "Engine/log.hpp"
 // std
 #include <cassert>
 #include <cstring>
@@ -60,7 +60,7 @@ VkResult Buffer::map(VkDeviceSize size, VkDeviceSize offset) {
     assert(buffer && memory && "Called map on buffer before create");
     VkResult result = vkMapMemory(device.getDevice(), memory, offset, size, 0, &mapped);
     if (result != VK_SUCCESS) {
-        std::cerr << "Failed to map memory: VkResult = " << result << std::endl;
+        Log::error("Failed to map memory: VkResult = ", result);
     }
     return result;
 }

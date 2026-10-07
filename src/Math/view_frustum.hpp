@@ -3,7 +3,6 @@
 #include "core.hpp"
 #include <array>
 #include "AABB.hpp"
-#include <iostream>
 
 namespace Math {
 

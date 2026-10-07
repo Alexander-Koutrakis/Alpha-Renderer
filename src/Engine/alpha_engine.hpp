@@ -32,7 +32,7 @@ private:
     std::unique_ptr<Window> window;
     std::unique_ptr<Device> device;
     std::unique_ptr<Renderer> renderer;
-    std::unique_ptr<KeyboardMovemenSystem> keyboardMovementSystem;
+    std::unique_ptr<KeyboardMovementSystem> keyboardMovementSystem;
     std::unique_ptr<ResourceManager> resourceManager;
     static float deltaTime;
     void init();

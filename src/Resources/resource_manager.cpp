@@ -1,6 +1,5 @@
 #include "resource_manager.hpp"
 #include <stdexcept>
-#include <iostream>
 namespace Resources {
 
 ResourceManager::ResourceManager(Device& device) : device(device) {

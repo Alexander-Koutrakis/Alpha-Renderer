@@ -2,7 +2,6 @@
 #include <cassert>
 #include <stdexcept>
 #include <mutex>
-#include <iostream>
 namespace Rendering {
 
 // Initialize static members

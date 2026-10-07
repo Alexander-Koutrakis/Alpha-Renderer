@@ -1,5 +1,4 @@
 #include "bounding_box_system.hpp"
-#include <iostream>
 namespace Systems {
 
 void BoundingBoxSystem::getWorldBounds(AABB& worldBounds, const AABB& localBounds, const glm::mat4& transform) {

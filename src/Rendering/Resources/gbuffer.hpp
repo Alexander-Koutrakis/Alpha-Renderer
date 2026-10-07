@@ -5,7 +5,6 @@
 #include "Rendering/Core/swapchain.hpp"
 #include "Rendering/rendering_constants.hpp"
 #include <stdexcept>
-#include <iostream>
 namespace Rendering {
 
 class GBuffer {

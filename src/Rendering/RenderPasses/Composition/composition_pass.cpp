@@ -40,8 +40,6 @@ void CompositionPass::cleanup() {
         vkDestroyRenderPass(device.getDevice(), renderPass, nullptr);
         renderPass = VK_NULL_HANDLE;
     }
-
-    std::cout << "Composition pass cleaned up" << std::endl;
 }
 
 void CompositionPass::createRenderPass() {

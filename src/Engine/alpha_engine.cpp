@@ -2,7 +2,6 @@
 #include "Rendering/Core/vk_check.hpp"
 
 #include <chrono>
-#include <iostream>
 
 // Define deltaTime here
 float AlphaEngine::deltaTime = 0.0f;
@@ -54,7 +53,7 @@ void AlphaEngine::init() {
 
     renderer = std::make_unique<Renderer>(*window, *device);
 
-    keyboardMovementSystem = std::make_unique<KeyboardMovemenSystem>(window->getGLFWwindow());
+    keyboardMovementSystem = std::make_unique<KeyboardMovementSystem>(window->getGLFWwindow());
 }
 
 void AlphaEngine::loadScene() {

@@ -4,7 +4,6 @@
 #include "Rendering/Core/render_passes.hpp"
 #include <stdexcept>
 #include <array>
-#include <iostream>
 #include <vector>
 
 using namespace ECS;
@@ -33,8 +32,6 @@ void TransparencyPass::cleanup() {
     }
 
     vkDestroyRenderPass(device.getDevice(), renderPass, nullptr);
-
-    std::cout << "Transparency pass cleaned up" << std::endl;
 }
 
 void TransparencyPass::createRenderPass(const CreateInfo& createInfo) {

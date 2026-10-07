@@ -1,4 +1,5 @@
 #include "swapchain.hpp"
+#include "Engine/log.hpp"
 #include "vk_check.hpp"
 #include "images.hpp"
 
@@ -6,7 +7,6 @@
 #include <array>
 #include <cstdlib>
 #include <cstring>
-#include <iostream>
 #include <limits>
 #include <set>
 #include <stdexcept>
@@ -48,7 +48,6 @@ SwapChain::~SwapChain() {
         vkDestroySemaphore(device.getDevice(), imageAvailableSemaphores[i], nullptr);
         vkDestroyFence(device.getDevice(), inFlightFences[i], nullptr);
     }
-    std::cout << "Swapchain cleaned up" << std::endl;
 }
 
 VkResult SwapChain::acquireNextImage(uint32_t frameIndex, uint32_t* imageIndex) {
@@ -201,11 +200,11 @@ VkSurfaceFormatKHR SwapChain::chooseSwapSurfaceFormat(const std::vector<VkSurfac
 VkPresentModeKHR SwapChain::chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) {
     for (const auto& availablePresentMode : availablePresentModes) {
         if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR) {
-            std::cout << "Present mode: Mailbox" << std::endl;
+            Log::info("Present mode: Mailbox");
             return availablePresentMode;
         }
     }
-    std::cout << "Present mode: V-Sync" << std::endl;
+    Log::info("Present mode: V-Sync");
     return VK_PRESENT_MODE_FIFO_KHR;
 }
 

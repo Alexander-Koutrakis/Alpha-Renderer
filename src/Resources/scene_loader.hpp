@@ -38,8 +38,7 @@ private:
     void cacheMeshes(const std::vector<std::string>& meshPaths);
     void cacheTextures(const std::vector<std::string>& colorTexturePaths, VkFormat format);
     void cacheCompressedTextures(const std::vector<std::string>& pngPaths,
-                                 ktx_transcode_fmt_e targetFormat = KTX_TTF_BC7_RGBA,
-                                 const std::string& label = "Compressed textures");
+                                 ktx_transcode_fmt_e targetFormat = KTX_TTF_BC7_RGBA);
     void cacheMaterials(const std::vector<std::string>& materialPaths);
     void createEntityFromUnityData(const Resources::DeserializedGameObject& gameObject);
     void createScene(const Resources::DeserializedScene& deserializedScene);

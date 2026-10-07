@@ -1,17 +1,12 @@
 #include "keyboard_movement_system.hpp"
 #include <algorithm>
-#include <iostream>
 
 using namespace ECS;
 namespace Systems {
 
-KeyboardMovemenSystem::KeyboardMovemenSystem(GLFWwindow* window) : window{window} {}
+KeyboardMovementSystem::KeyboardMovementSystem(GLFWwindow* window) : window{window} {}
 
-KeyboardMovemenSystem::~KeyboardMovemenSystem() {
-    std::cout << "KeyboardMovemenSystem destructor called" << std::endl;
-}
-
-void KeyboardMovemenSystem::run(const float deltaTime) {
+void KeyboardMovementSystem::run(const float deltaTime) {
     // Check for cursor toggle
     auto& ecsManager = ECSManager::getInstance();
     auto cameraEntity = ecsManager.getFirstComponent<Camera>();
@@ -22,7 +17,7 @@ void KeyboardMovemenSystem::run(const float deltaTime) {
     TransformSystem::updateTransform(transform);
 }
 
-void KeyboardMovemenSystem::handleMouseLook(Transform& transform, float dt) {
+void KeyboardMovementSystem::handleMouseLook(Transform& transform, float dt) {
     // Get current mouse position
     double currentMouseX, currentMouseY;
     glfwGetCursorPos(window, &currentMouseX, &currentMouseY);
@@ -55,7 +50,7 @@ void KeyboardMovemenSystem::handleMouseLook(Transform& transform, float dt) {
     glm::quat pitchQuat = glm::angleAxis(pitch, rightAxis);
     transform.rotation = glm::normalize(pitchQuat * transform.rotation);
 }
-void KeyboardMovemenSystem::handleArrowLook(Transform& transform, float dt) {
+void KeyboardMovementSystem::handleArrowLook(Transform& transform, float dt) {
     float yaw = 0.0f;
     float pitch = 0.0f;
 
@@ -83,7 +78,7 @@ void KeyboardMovemenSystem::handleArrowLook(Transform& transform, float dt) {
         transform.rotation = glm::normalize(pitchQuat * transform.rotation);
     }
 }
-void KeyboardMovemenSystem::handleKeyboardMovement(ECS::Transform& transform, float dt) {
+void KeyboardMovementSystem::handleKeyboardMovement(ECS::Transform& transform, float dt) {
     glm::vec3 moveDir{0.0f};
 
     // Forward/Backward

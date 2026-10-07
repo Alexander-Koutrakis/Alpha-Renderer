@@ -1,9 +1,9 @@
 #include "device.hpp"
+#include "Engine/log.hpp"
 #include "vk_check.hpp"
 
 // std headers
 #include <cstring>
-#include <iostream>
 #include <set>
 #include <unordered_set>
 
@@ -14,8 +14,11 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityF
                                                     VkDebugUtilsMessageTypeFlagsEXT /*messageType*/,
                                                     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
                                                     void* /*pUserData*/) {
-    const char* severity = (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) ? "error" : "warning";
-    std::cerr << "validation layer: [" << severity << "] " << pCallbackData->pMessage << std::endl;
+    if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+        Log::error("validation layer: ", pCallbackData->pMessage);
+    } else {
+        Log::warn("validation layer: ", pCallbackData->pMessage);
+    }
 
     return VK_FALSE;
 }
@@ -61,7 +64,6 @@ Device::Device(Window& window) : window{window} {
 }
 
 Device::~Device() {
-    std::cout << "Device destructor called" << std::endl;
     vkDestroyCommandPool(device_, commandPool, nullptr);
     vkDestroyDevice(device_, nullptr);
 
@@ -108,7 +110,7 @@ void Device::createInstance() {
         throw std::runtime_error("failed to create instance!");
     }
 
-    hasGflwRequiredInstanceExtensions();
+    hasGlfwRequiredInstanceExtensions();
 }
 
 static int deviceTypeRank(VkPhysicalDeviceType type) {
@@ -154,7 +156,7 @@ void Device::pickPhysicalDevice() {
     }
 
     vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
-    std::cout << "physical device: " << deviceProperties.deviceName << std::endl;
+    Log::info("physical device: ", deviceProperties.deviceName);
 }
 
 void Device::createLogicalDevice() {
@@ -295,23 +297,23 @@ std::vector<const char*> Device::getRequiredExtensions() {
     return extensions;
 }
 
-void Device::hasGflwRequiredInstanceExtensions() {
+void Device::hasGlfwRequiredInstanceExtensions() {
     uint32_t extensionCount = 0;
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
     std::vector<VkExtensionProperties> extensions(extensionCount);
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
 
-    std::cout << "available extensions:" << std::endl;
+    Log::debug("available extensions:");
     std::unordered_set<std::string> available;
     for (const auto& extension : extensions) {
-        std::cout << "\t" << extension.extensionName << std::endl;
+        Log::debug("\t", extension.extensionName);
         available.insert(extension.extensionName);
     }
 
-    std::cout << "required extensions:" << std::endl;
+    Log::debug("required extensions:");
     auto requiredExtensions = getRequiredExtensions();
     for (const auto& required : requiredExtensions) {
-        std::cout << "\t" << required << std::endl;
+        Log::debug("\t", required);
         if (available.find(required) == available.end()) {
             throw std::runtime_error("Missing required glfw extension");
         }

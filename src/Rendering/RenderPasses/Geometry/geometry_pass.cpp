@@ -4,7 +4,6 @@
 #include "Rendering/Core/render_passes.hpp"
 #include <array>
 #include <stdexcept>
-#include <iostream>
 #include <vector>
 
 namespace Rendering {
@@ -36,8 +35,6 @@ void GeometryPass::cleanup() {
     if (renderPass != VK_NULL_HANDLE) {
         vkDestroyRenderPass(device.getDevice(), renderPass, nullptr);
     }
-
-    std::cout << "Geometry pass cleaned up" << std::endl;
 }
 
 void GeometryPass::createRenderPass(const CreateInfo& createInfo) {
