@@ -39,12 +39,13 @@ Start-Sleep -Seconds $SettleSeconds
 if ($proc.HasExited) { throw "app exited during the run with code $($proc.ExitCode); see $stderrFile" }
 Stop-Process -Id $proc.Id -Force
 
-$layerLines = Select-String -Path $stderrFile -Pattern "validation layer:" -SimpleMatch
-if (-not $layerLines) { throw "no 'validation layer:' output at all; are the layers installed and enabled?" }
-$found = $layerLines | ForEach-Object { [regex]::Matches($_.Line, "VUID-[A-Za-z0-9_-]+") } | ForEach-Object Value | Sort-Object -Unique
-$baseline = Get-Content "scripts/validation_baseline.txt" | Where-Object { $_ -and -not $_.StartsWith("#") } | Sort-Object -Unique
+# No output is a valid result (a clean run): the validation build makes Device throw at startup if the layers are
+# missing, and the marker above is only reached after the device exists, so silence cannot mean "layers not loaded".
+$layerLines = @(Select-String -Path $stderrFile -Pattern "validation layer:" -SimpleMatch)
+$found = @($layerLines | ForEach-Object { [regex]::Matches($_.Line, "VUID-[A-Za-z0-9_-]+") } | ForEach-Object Value | Sort-Object -Unique)
+$baseline = @(Get-Content "scripts/validation_baseline.txt" | Where-Object { $_ -and -not $_.StartsWith("#") } | Sort-Object -Unique)
 
-$diff = Compare-Object -ReferenceObject @($baseline) -DifferenceObject @($found)
+$diff = Compare-Object -ReferenceObject $baseline -DifferenceObject $found
 if ($diff) {
     $diff | ForEach-Object {
         $side = if ($_.SideIndicator -eq "=>") { "NEW    " } else { "MISSING" }
@@ -53,4 +54,4 @@ if ($diff) {
     Write-Host "validation check FAILED; full output in $stderrFile"
     exit 1
 }
-Write-Host "validation OK: $(@($found).Count) known VUIDs, no new ones"
+Write-Host "validation OK: $($found.Count) VUIDs, all in the baseline ($($baseline.Count) entries)"

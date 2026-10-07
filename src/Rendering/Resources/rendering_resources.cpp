@@ -740,10 +740,11 @@ void RenderingResources::createDescriptorSetLayouts() {
                  "MaterialDescriptorSetLayout");
 
     //Create descriptor set layout for camera uniform buffer
-    cameraDescriptorSetLayout = createDescriptorSetLayout(
-        device, {
-                    layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
-                });
+    cameraDescriptorSetLayout =
+        createDescriptorSetLayout(device, {
+                                              layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                                                            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+                                          });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)cameraDescriptorSetLayout,
                  "CameraDescriptorSetLayout");
 
@@ -809,10 +810,11 @@ void RenderingResources::createDescriptorSetLayouts() {
                  "ShadowModelMatrixDescriptorSetLayout");
 
     //Create descriptor set layout for skybox
-    skyboxDescriptorSetLayout = createDescriptorSetLayout(
-        device, {
-                    layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                });
+    skyboxDescriptorSetLayout =
+        createDescriptorSetLayout(device, {
+                                              layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                                            VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT),
+                                          });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)skyboxDescriptorSetLayout,
                  "SkyboxDescriptorSetLayout");
 
