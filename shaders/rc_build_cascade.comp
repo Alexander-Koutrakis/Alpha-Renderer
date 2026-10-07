@@ -298,11 +298,10 @@ void main() {
     float linearDepth = texelFetch(uDepthPyramid, probeCenterPx, 0).r;
 
     // Surface basis at probe center
-    vec3 probeNormal = decodeNormal(texelFetch(uGBufferNormal, probeCenterPx, 0).xyz);
-
-    if (!all(greaterThan(abs(probeNormal), vec3(1e-4)))) {
-        probeNormal = vec3(0.0, 0.0, 1.0); // fallback if invalid normal
-    }
+    vec3 encodedNormal = texelFetch(uGBufferNormal, probeCenterPx, 0).xyz;
+    vec3 rawNormal = encodedNormal * 2.0 - 1.0;
+    // Fall back only for a degenerate (near zero-length) normal; axis-aligned normals such as (0, 1, 0) are valid.
+    vec3 probeNormal = dot(rawNormal, rawNormal) > 1e-8 ? decodeNormal(encodedNormal) : vec3(0.0, 0.0, 1.0);
     mat3 probeBasis = buildProbeBasis(probeNormal);
 
     // World position at probe center (ray start)
