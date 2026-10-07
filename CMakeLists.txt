@@ -182,6 +182,8 @@ file(GLOB_RECURSE SHADERS
   shaders/*.frag
   shaders/*.comp
 )
+# Shared GLSL included via GL_GOOGLE_include_directive; not compiled on its own.
+file(GLOB_RECURSE SHADER_INCLUDES shaders/common/*.glsl)
 
 set(SPV_OUTPUTS "")
 foreach(SHADER ${SHADERS})
@@ -191,8 +193,8 @@ foreach(SHADER ${SHADERS})
   add_custom_command(
     OUTPUT ${SPV}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/shaders
-    COMMAND ${GLSLC} ${SHADER} -o ${SPV}
-    DEPENDS ${SHADER}
+    COMMAND ${GLSLC} -I ${CMAKE_SOURCE_DIR}/shaders/common ${SHADER} -o ${SPV}
+    DEPENDS ${SHADER} ${SHADER_INCLUDES}
   )
 
   list(APPEND SPV_OUTPUTS ${SPV})
