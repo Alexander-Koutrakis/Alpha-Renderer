@@ -1,4 +1,5 @@
 #include "imgui_manager.hpp"
+#include "render_passes.hpp"
 #include <stdexcept>
 #include <array>
 #include <iostream>
@@ -46,15 +47,10 @@ void ImGuiManager::createDescriptorPool() {
 
 void ImGuiManager::createRenderPass(SwapChain& swapChain) {
     // Create a simple render pass for ImGui that renders directly to the swap chain
-    VkAttachmentDescription attachment{};
-    attachment.format = swapChain.getSwapChainImageFormat();
-    attachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    attachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD; // Load existing content (our rendered scene)
-    attachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    attachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    // Load existing content (our rendered scene)
+    VkAttachmentDescription attachment = attachmentDescription(
+        swapChain.getSwapChainImageFormat(), VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE,
+        VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
 
     VkAttachmentReference colorAttachmentRef{};
     colorAttachmentRef.attachment = 0;
@@ -73,38 +69,15 @@ void ImGuiManager::createRenderPass(SwapChain& swapChain) {
     dependency.srcAccessMask = 0;
     dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
 
-    VkRenderPassCreateInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = 1;
-    renderPassInfo.pAttachments = &attachment;
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = 1;
-    renderPassInfo.pDependencies = &dependency;
-
-    if (vkCreateRenderPass(device.getDevice(), &renderPassInfo, nullptr, &imguiRenderPass) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create ImGui render pass!");
-    }
+    imguiRenderPass = Rendering::createRenderPass(device.getDevice(), attachment, subpass, dependency);
 }
 
 void ImGuiManager::createFramebuffers(SwapChain& swapChain) {
     framebuffers.resize(swapChain.imageCount());
 
     for (size_t i = 0; i < swapChain.imageCount(); i++) {
-        VkImageView attachments[] = {swapChain.getImageView(i)};
-
-        VkFramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = imguiRenderPass;
-        framebufferInfo.attachmentCount = 1;
-        framebufferInfo.pAttachments = attachments;
-        framebufferInfo.width = swapChain.getExtent().width;
-        framebufferInfo.height = swapChain.getExtent().height;
-        framebufferInfo.layers = 1;
-
-        if (vkCreateFramebuffer(device.getDevice(), &framebufferInfo, nullptr, &framebuffers[i]) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create ImGui framebuffer!");
-        }
+        framebuffers[i] = createFramebuffer(device.getDevice(), imguiRenderPass, swapChain.getImageView(i),
+                                            swapChain.getExtent().width, swapChain.getExtent().height);
     }
 }
 

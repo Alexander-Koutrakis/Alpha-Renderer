@@ -1,6 +1,7 @@
 #include "shadow_pass.hpp"
 #include "Rendering/Core/barriers.hpp"
 #include "Rendering/Core/pipeline_layouts.hpp"
+#include "Rendering/Core/render_passes.hpp"
 #include "Rendering/Resources/mesh.hpp"
 #include <stdexcept>
 #include <iostream>
@@ -67,15 +68,9 @@ void ShadowPass::cleanup() {
 }
 
 void ShadowPass::createRenderPass() {
-    VkAttachmentDescription depthAttachment{};
-    depthAttachment.format = depthFormat;
-    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    depthAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkAttachmentDescription depthAttachment =
+        attachmentDescription(depthFormat, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+                              VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     VkAttachmentReference depthReference{};
     depthReference.attachment = 0;
@@ -106,18 +101,7 @@ void ShadowPass::createRenderPass() {
     dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
-    VkRenderPassCreateInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = 1;
-    renderPassInfo.pAttachments = &depthAttachment;
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-    renderPassInfo.pDependencies = dependencies.data();
-
-    if (vkCreateRenderPass(device.getDevice(), &renderPassInfo, nullptr, &shadowRenderPass) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create shadow render pass!");
-    }
+    shadowRenderPass = Rendering::createRenderPass(device.getDevice(), depthAttachment, subpass, dependencies);
 }
 
 void ShadowPass::createPipelines(const CreateInfo& createInfo) {
@@ -529,18 +513,7 @@ void ShadowPass::cleanupFramebuffers() {
 
 void ShadowPass::createShadowFramebuffer(VkImageView imageView, uint32_t width, uint32_t height, uint32_t layers,
                                          VkFramebuffer& framebuffer) {
-    VkFramebufferCreateInfo framebufferInfo{};
-    framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebufferInfo.renderPass = shadowRenderPass;
-    framebufferInfo.attachmentCount = 1;
-    framebufferInfo.pAttachments = &imageView;
-    framebufferInfo.width = width;
-    framebufferInfo.height = height;
-    framebufferInfo.layers = layers;
-
-    if (vkCreateFramebuffer(device.getDevice(), &framebufferInfo, nullptr, &framebuffer) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create shadow framebuffer!");
-    }
+    framebuffer = createFramebuffer(device.getDevice(), shadowRenderPass, imageView, width, height, layers);
 }
 
 } // namespace Rendering

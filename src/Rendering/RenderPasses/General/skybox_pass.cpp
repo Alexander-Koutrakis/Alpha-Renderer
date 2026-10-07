@@ -1,6 +1,7 @@
 #include "skybox_pass.hpp"
 #include "Rendering/Core/barriers.hpp"
 #include "Rendering/Core/pipeline_layouts.hpp"
+#include "Rendering/Core/render_passes.hpp"
 #include "ECS/components.hpp"
 #include <vector>
 
@@ -49,26 +50,15 @@ void SkyboxPass::cleanup() {
 
 void SkyboxPass::createRenderPass(const CreateInfo& createInfo) {
     // Now we'll render to the light pass result instead of albedo
-    VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = createInfo.albedoFormat;
-    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkAttachmentDescription colorAttachment =
+        attachmentDescription(createInfo.albedoFormat, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE,
+                              VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     // Depth buffer is still used for depth testing
-    VkAttachmentDescription depthAttachment{};
-    depthAttachment.format = VK_FORMAT_D32_SFLOAT; // Typical depth format, adjust if needed
-    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-    depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    // Typical depth format, adjust if needed
+    VkAttachmentDescription depthAttachment = attachmentDescription(
+        VK_FORMAT_D32_SFLOAT, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE,
+        VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
 
     // Attachment references
     VkAttachmentReference colorAttachmentRef{};
@@ -99,18 +89,7 @@ void SkyboxPass::createRenderPass(const CreateInfo& createInfo) {
 
     // Create render pass
     std::array<VkAttachmentDescription, 2> attachments = {colorAttachment, depthAttachment};
-    VkRenderPassCreateInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-    renderPassInfo.pAttachments = attachments.data();
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = 1;
-    renderPassInfo.pDependencies = &dependency;
-
-    if (vkCreateRenderPass(device.getDevice(), &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create skybox render pass!");
-    }
+    renderPass = Rendering::createRenderPass(device.getDevice(), attachments, subpass, dependency);
 }
 
 void SkyboxPass::createPipeline(const CreateInfo& createInfo) {
@@ -160,18 +139,7 @@ void SkyboxPass::createFramebuffers(const CreateInfo& createInfo) {
             depthViews[i]   // Depth buffer stays the same
         };
 
-        VkFramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = renderPass;
-        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        framebufferInfo.pAttachments = attachments.data();
-        framebufferInfo.width = width;
-        framebufferInfo.height = height;
-        framebufferInfo.layers = 1;
-
-        if (vkCreateFramebuffer(device.getDevice(), &framebufferInfo, nullptr, &framebuffers[i]) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create skybox framebuffer!");
-        }
+        framebuffers[i] = createFramebuffer(device.getDevice(), renderPass, attachments, width, height);
     }
 }
 
