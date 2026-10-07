@@ -1,5 +1,6 @@
 #include "rc_gi_pass.hpp"
 #include "Rendering/Core/barriers.hpp"
+#include "Rendering/Core/pipeline_layouts.hpp"
 #include "Rendering/Core/samplers.hpp"
 
 #include <algorithm>
@@ -57,21 +58,9 @@ RCGIPass::~RCGIPass() {
 
 void RCGIPass::createDepthPyramidPipeline() {
     // Pipeline layout with push constants (used by downsample; seed ignores them)
-    VkPushConstantRange pcRange{};
-    pcRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    pcRange.offset = 0;
-    pcRange.size = static_cast<uint32_t>(sizeof(DepthPyramidPushConstants));
-
-    VkPipelineLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutInfo.setLayoutCount = 1;
-    layoutInfo.pSetLayouts = &info.depthPyramidSetLayout;
-    layoutInfo.pushConstantRangeCount = 1;
-    layoutInfo.pPushConstantRanges = &pcRange;
-
-    if (vkCreatePipelineLayout(device.getDevice(), &layoutInfo, nullptr, &depthPyramidPipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create pipeline layout for depth pyramid");
-    }
+    depthPyramidPipelineLayout = createPipelineLayout(
+        device.getDevice(), info.depthPyramidSetLayout,
+        pushConstantRange(VK_SHADER_STAGE_COMPUTE_BIT, static_cast<uint32_t>(sizeof(DepthPyramidPushConstants))));
 
     ComputePipelineConfigInfo cfg{};
     cfg.pipelineLayout = depthPyramidPipelineLayout;
@@ -82,21 +71,9 @@ void RCGIPass::createDepthPyramidPipeline() {
 
 void RCGIPass::createRCBuildPipeline() {
     // Push constants: cascadeIndex, probeStridePx, tileSize, depthMipCount, frameIndex, tStart, segmentLen
-    VkPushConstantRange pcRange{};
-    pcRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    pcRange.offset = 0;
-    pcRange.size = static_cast<uint32_t>(sizeof(CascadeBuildPushConstants));
-
-    VkPipelineLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    layoutInfo.setLayoutCount = 1;
-    layoutInfo.pSetLayouts = &info.rcBuildSetLayout;
-    layoutInfo.pushConstantRangeCount = 1;
-    layoutInfo.pPushConstantRanges = &pcRange;
-
-    if (vkCreatePipelineLayout(device.getDevice(), &layoutInfo, nullptr, &rcBuildPipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create pipeline layout for RC build");
-    }
+    rcBuildPipelineLayout = createPipelineLayout(
+        device.getDevice(), info.rcBuildSetLayout,
+        pushConstantRange(VK_SHADER_STAGE_COMPUTE_BIT, static_cast<uint32_t>(sizeof(CascadeBuildPushConstants))));
 
     ComputePipelineConfigInfo cfg{};
     cfg.pipelineLayout = rcBuildPipelineLayout;
@@ -115,24 +92,12 @@ void RCGIPass::createRCMergePipeline() {
 
 void RCGIPass::createRCResolvePipeline() {
     // Push constants: cascadeIndex,probeStridePx,tileSize,giIntensity
-    VkPushConstantRange pcRange{};
-    pcRange.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    pcRange.offset = 0;
-    pcRange.size = static_cast<uint32_t>(sizeof(ResolvePushConstants));
-
-    VkPipelineLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 
     std::array<VkDescriptorSetLayout, 2> setLayouts = {info.rcResolveSetLayout, info.skyboxSetLayout};
 
-    layoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-    layoutInfo.pSetLayouts = setLayouts.data();
-    layoutInfo.pushConstantRangeCount = 1;
-    layoutInfo.pPushConstantRanges = &pcRange;
-
-    if (vkCreatePipelineLayout(device.getDevice(), &layoutInfo, nullptr, &rcResolvePipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create pipeline layout for RC resolve");
-    }
+    rcResolvePipelineLayout = createPipelineLayout(
+        device.getDevice(), setLayouts,
+        pushConstantRange(VK_SHADER_STAGE_COMPUTE_BIT, static_cast<uint32_t>(sizeof(ResolvePushConstants))));
 
     ComputePipelineConfigInfo cfg{};
     cfg.pipelineLayout = rcResolvePipelineLayout;

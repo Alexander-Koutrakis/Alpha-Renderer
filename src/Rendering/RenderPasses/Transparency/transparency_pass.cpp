@@ -1,5 +1,6 @@
 #include "transparency_pass.hpp"
 #include "Rendering/Core/barriers.hpp"
+#include "Rendering/Core/pipeline_layouts.hpp"
 #include <stdexcept>
 #include <array>
 #include <iostream>
@@ -149,23 +150,8 @@ void TransparencyPass::createPipeline(const CreateInfo& createInfo) {
         createInfo.cascadeSplitsDescriptorSetLayout      // Set 7
     };
 
-    VkPipelineLayoutCreateInfo instancedPipelineLayoutInfo{};
-    instancedPipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    instancedPipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
-    instancedPipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
-
-    VkPushConstantRange pushConstant{};
-    pushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    pushConstant.offset = 0;
-    pushConstant.size = sizeof(uint32_t);
-
-    instancedPipelineLayoutInfo.pushConstantRangeCount = 1;
-    instancedPipelineLayoutInfo.pPushConstantRanges = &pushConstant;
-
-    if (vkCreatePipelineLayout(device.getDevice(), &instancedPipelineLayoutInfo, nullptr, &pipelineLayout) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("Failed to create transparency pipeline layout");
-    }
+    pipelineLayout = createPipelineLayout(device.getDevice(), descriptorSetLayouts,
+                                          pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(uint32_t)));
 
     // Pipeline configuration - just the basics for now
     PipelineConfigInfo instancedPipelineConfig{};

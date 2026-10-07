@@ -1,5 +1,6 @@
 #include "geometry_pass.hpp"
 #include "Rendering/Core/barriers.hpp"
+#include "Rendering/Core/pipeline_layouts.hpp"
 #include <array>
 #include <stdexcept>
 #include <iostream>
@@ -200,22 +201,8 @@ void GeometryPass::createPipeline(const CreateInfo& createInfo) {
                                                        createInfo.modelsDescriptorSetLayout,
                                                        createInfo.materialDescriptorSetLayout};
 
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-    pipelineLayoutInfo.pSetLayouts = setLayouts.data();
-
-    VkPushConstantRange pushConstant{};
-    pushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    pushConstant.offset = 0;
-    pushConstant.size = sizeof(uint32_t);
-
-    pipelineLayoutInfo.pushConstantRangeCount = 1;
-    pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
-
-    if (vkCreatePipelineLayout(device.getDevice(), &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create pipeline layout!");
-    }
+    pipelineLayout = createPipelineLayout(device.getDevice(), setLayouts,
+                                          pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(uint32_t)));
 
     // Create pipeline configuration
     PipelineConfigInfo pipelineConfig{};
