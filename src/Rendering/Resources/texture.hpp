@@ -64,7 +64,7 @@ private:
     VkImageView imageView{VK_NULL_HANDLE};
     VkSampler sampler{VK_NULL_HANDLE};
 
-    VkFormat imageFormat;
+    VkFormat imageFormat{VK_FORMAT_UNDEFINED};
     uint32_t mipLevels{1};
     uint32_t width{0};
     uint32_t height{0};

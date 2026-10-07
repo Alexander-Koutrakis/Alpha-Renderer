@@ -33,7 +33,7 @@ private:
     void handleArrowLook(ECS::Transform& transform, float dt);
     void handleKeyboardMovement(ECS::Transform& transform, float dt);
 
-    GLFWwindow* window;
+    GLFWwindow* window = nullptr;
     KeyMappings keys{};
 
     // Movement settings

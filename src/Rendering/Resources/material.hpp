@@ -34,7 +34,7 @@ class Material {
 public:
     struct MaterialInfo {
         std::string name;
-        TransparencyType transparencyType;
+        TransparencyType transparencyType{TransparencyType::TYPE_OPAQUE};
         MaterialUbo properties;
         bool enableGPUInstancing{false};
     };
@@ -91,7 +91,7 @@ private:
     Texture* metallicSmoothnessTexture{nullptr};
     Texture* occlusionTexture{nullptr};
 
-    TransparencyType transparencyType;
+    TransparencyType transparencyType{TransparencyType::TYPE_OPAQUE};
 };
 
 } // namespace Rendering

@@ -32,7 +32,7 @@ struct Transform : public Component {
 
 // Rest of your components with default constructors...
 struct MeshRenderer : public Component {
-    Mesh* mesh;
+    Mesh* mesh = nullptr;
     std::vector<Material*> materials{nullptr};
     bool castingShadows{false};
     MeshRenderer(EntityID owner, Mesh* mesh, std::vector<Material*> materials, bool castingShadows = false)
@@ -71,8 +71,8 @@ struct Light : public Component {
 
 struct DirectionalLight : public Light {
     glm::vec4 direction{1.0f, 0, 0, 0};
-    std::array<glm::mat4, MAX_SHADOW_CASCADE_COUNT> viewProjectionMatrix;
-    std::array<float, MAX_SHADOW_CASCADE_COUNT> cascadeSplits;
+    std::array<glm::mat4, MAX_SHADOW_CASCADE_COUNT> viewProjectionMatrix{};
+    std::array<float, MAX_SHADOW_CASCADE_COUNT> cascadeSplits{};
 
     DirectionalLight(EntityID owner, float lightIntensity = 1.0f, glm::vec3 lightColor = glm::vec3(1.0f),
                      glm::vec4 lightDirection = glm::vec4(1.0f, 0, 0, 0), bool castShadows = false,
@@ -109,7 +109,7 @@ struct SpotLight : public Light {
 
 struct PointLight : public Light {
     float range{1.0f};
-    std::array<glm::mat4, 6> viewProjectionMatrix;
+    std::array<glm::mat4, 6> viewProjectionMatrix{};
     Transform transform;
     PointLight(EntityID owner, float lightIntensity = 1.0f, float lightRange = 1.0f,
                glm::vec3 lightColor = glm::vec3(1.0f), bool castShadows = false, float shadowStrength = 1.0f)

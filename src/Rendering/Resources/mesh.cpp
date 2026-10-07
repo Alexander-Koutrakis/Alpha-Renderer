@@ -124,7 +124,7 @@ void Mesh::drawSubmeshInstanced(VkCommandBuffer commandBuffer, uint32_t submeshI
 }
 
 void Mesh::addSubmesh(uint32_t indexStart, uint32_t indexCount) {
-    Submesh submesh;
+    Submesh submesh{};
     submesh.indexStart = indexStart;
     submesh.indexCount = indexCount;
     submeshes.push_back(submesh);

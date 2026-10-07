@@ -68,11 +68,11 @@ private:
     Device& device;
     std::string meshName;
     std::unique_ptr<Buffer> vertexBuffer;
-    uint32_t vertexCount;
+    uint32_t vertexCount = 0;
 
     bool hasIndexBuffer = false;
     std::unique_ptr<Buffer> indexBuffer;
-    uint32_t indexCount;
+    uint32_t indexCount = 0;
     Math::AABB localAABB;
 
     // Submesh data for multi-material meshes
