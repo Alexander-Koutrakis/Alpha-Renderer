@@ -1,5 +1,6 @@
 #include "smaa_edge_pass.hpp"
 #include "Rendering/Core/pipeline_layouts.hpp"
+#include "Rendering/Core/render_passes.hpp"
 #include <array>
 #include <stdexcept>
 
@@ -86,18 +87,7 @@ void SMAAEdgePass::createFramebuffers() {
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         std::array<VkImageView, 1> attachments = {(*targetViews)[i]};
 
-        VkFramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = renderPass;
-        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        framebufferInfo.pAttachments = attachments.data();
-        framebufferInfo.width = width;
-        framebufferInfo.height = height;
-        framebufferInfo.layers = 1;
-
-        if (vkCreateFramebuffer(device.getDevice(), &framebufferInfo, nullptr, &framebuffers[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create SMAA edge framebuffer!");
-        }
+        framebuffers[i] = createFramebuffer(device.getDevice(), renderPass, attachments, width, height);
     }
 }
 

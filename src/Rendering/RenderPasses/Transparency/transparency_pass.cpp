@@ -1,6 +1,7 @@
 #include "transparency_pass.hpp"
 #include "Rendering/Core/barriers.hpp"
 #include "Rendering/Core/pipeline_layouts.hpp"
+#include "Rendering/Core/render_passes.hpp"
 #include <stdexcept>
 #include <array>
 #include <iostream>
@@ -212,18 +213,7 @@ void TransparencyPass::createFramebuffers(const CreateInfo& createInfo) {
             depthViews[i]         // Depth buffer
         };
 
-        VkFramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = renderPass;
-        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        framebufferInfo.pAttachments = attachments.data();
-        framebufferInfo.width = width;
-        framebufferInfo.height = height;
-        framebufferInfo.layers = 1;
-
-        if (vkCreateFramebuffer(device.getDevice(), &framebufferInfo, nullptr, &framebuffers[i]) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create transparency framebuffer");
-        }
+        framebuffers[i] = createFramebuffer(device.getDevice(), renderPass, attachments, width, height);
     }
 }
 

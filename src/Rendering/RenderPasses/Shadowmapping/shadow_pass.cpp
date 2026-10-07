@@ -1,6 +1,7 @@
 #include "shadow_pass.hpp"
 #include "Rendering/Core/barriers.hpp"
 #include "Rendering/Core/pipeline_layouts.hpp"
+#include "Rendering/Core/render_passes.hpp"
 #include "Rendering/Resources/mesh.hpp"
 #include <stdexcept>
 #include <iostream>
@@ -529,18 +530,7 @@ void ShadowPass::cleanupFramebuffers() {
 
 void ShadowPass::createShadowFramebuffer(VkImageView imageView, uint32_t width, uint32_t height, uint32_t layers,
                                          VkFramebuffer& framebuffer) {
-    VkFramebufferCreateInfo framebufferInfo{};
-    framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebufferInfo.renderPass = shadowRenderPass;
-    framebufferInfo.attachmentCount = 1;
-    framebufferInfo.pAttachments = &imageView;
-    framebufferInfo.width = width;
-    framebufferInfo.height = height;
-    framebufferInfo.layers = layers;
-
-    if (vkCreateFramebuffer(device.getDevice(), &framebufferInfo, nullptr, &framebuffer) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create shadow framebuffer!");
-    }
+    framebuffer = createFramebuffer(device.getDevice(), shadowRenderPass, imageView, width, height, layers);
 }
 
 } // namespace Rendering

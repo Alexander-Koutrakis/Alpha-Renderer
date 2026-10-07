@@ -1,4 +1,5 @@
 #include "imgui_manager.hpp"
+#include "render_passes.hpp"
 #include <stdexcept>
 #include <array>
 #include <iostream>
@@ -91,20 +92,8 @@ void ImGuiManager::createFramebuffers(SwapChain& swapChain) {
     framebuffers.resize(swapChain.imageCount());
 
     for (size_t i = 0; i < swapChain.imageCount(); i++) {
-        VkImageView attachments[] = {swapChain.getImageView(i)};
-
-        VkFramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = imguiRenderPass;
-        framebufferInfo.attachmentCount = 1;
-        framebufferInfo.pAttachments = attachments;
-        framebufferInfo.width = swapChain.getExtent().width;
-        framebufferInfo.height = swapChain.getExtent().height;
-        framebufferInfo.layers = 1;
-
-        if (vkCreateFramebuffer(device.getDevice(), &framebufferInfo, nullptr, &framebuffers[i]) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create ImGui framebuffer!");
-        }
+        framebuffers[i] = createFramebuffer(device.getDevice(), imguiRenderPass, swapChain.getImageView(i),
+                                            swapChain.getExtent().width, swapChain.getExtent().height);
     }
 }
 

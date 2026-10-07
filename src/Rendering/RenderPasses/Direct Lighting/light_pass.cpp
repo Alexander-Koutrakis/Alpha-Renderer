@@ -2,6 +2,7 @@
 #include "ECS/ecs.hpp"
 #include "Rendering/Core/barriers.hpp"
 #include "Rendering/Core/pipeline_layouts.hpp"
+#include "Rendering/Core/render_passes.hpp"
 #include <array>
 #include <stdexcept>
 #include <iostream>
@@ -128,19 +129,8 @@ void LightPass::createFramebuffers(const CreateInfo& createInfo) {
     std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> imageViews = *createInfo.lightPassResultViewsPtr;
     std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> incidentViews = *createInfo.lightIncidentViewsPtr;
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VkImageView attachments[2] = {imageViews[i], incidentViews[i]};
-        VkFramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = renderPass;
-        framebufferInfo.attachmentCount = 2;
-        framebufferInfo.pAttachments = attachments;
-        framebufferInfo.width = width;
-        framebufferInfo.height = height;
-        framebufferInfo.layers = 1;
-
-        if (vkCreateFramebuffer(device.getDevice(), &framebufferInfo, nullptr, &framebuffers[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create framebuffer!");
-        }
+        framebuffers[i] =
+            createFramebuffer(device.getDevice(), renderPass, {imageViews[i], incidentViews[i]}, width, height);
     }
 }
 
