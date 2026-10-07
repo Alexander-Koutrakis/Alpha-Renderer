@@ -1,4 +1,5 @@
 #include "rc_gi_pass.hpp"
+#include "Rendering/Core/barriers.hpp"
 
 #include <algorithm>
 #include <stdexcept>
@@ -335,107 +336,44 @@ void RCGIPass::resolveIndirect(FrameContext& frameContext) {
 }
 
 void RCGIPass::setDepthPyramidBarriersBefore(FrameContext& frameContext) {
-    VkCommandBuffer cmd = frameContext.commandBuffer;
-
-    // Make scene depth visible to COMPUTE sampling
-    VkImageMemoryBarrier depthBarrier{};
-    depthBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    depthBarrier.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    depthBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    depthBarrier.oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-    depthBarrier.newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-    depthBarrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    depthBarrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    depthBarrier.image = frameContext.depthImage;
-    depthBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-    depthBarrier.subresourceRange.baseMipLevel = 0;
-    depthBarrier.subresourceRange.levelCount = 1;
-    depthBarrier.subresourceRange.baseArrayLayer = 0;
-    depthBarrier.subresourceRange.layerCount = 1;
-
-    // Transition mip 0 to GENERAL for write
-    VkImageMemoryBarrier mip0ToGeneral{};
-    mip0ToGeneral.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    mip0ToGeneral.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    mip0ToGeneral.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    mip0ToGeneral.image = frameContext.depthPyramidImage;
-    mip0ToGeneral.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    mip0ToGeneral.subresourceRange.baseMipLevel = 0;
-    mip0ToGeneral.subresourceRange.levelCount = 1;
-    mip0ToGeneral.subresourceRange.baseArrayLayer = 0;
-    mip0ToGeneral.subresourceRange.layerCount = 1;
-    // Previous writer was depth attachment; be explicit about the dependency.
-    mip0ToGeneral.srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    mip0ToGeneral.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    mip0ToGeneral.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    mip0ToGeneral.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-    std::array<VkImageMemoryBarrier, 2> barriers{depthBarrier, mip0ToGeneral};
-    vkCmdPipelineBarrier(cmd,
-                         VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
-                             VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr,
-                         static_cast<uint32_t>(barriers.size()), barriers.data());
+    // Make scene depth visible to compute sampling, and move pyramid mip 0 to GENERAL for writing.
+    // The previous writer of mip 0 was the depth attachment; be explicit about that dependency.
+    const std::array<ImageBarrierDesc, 2> barriers{{
+        {frameContext.depthImage, VK_IMAGE_ASPECT_DEPTH_BIT, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+         VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+         VK_ACCESS_SHADER_READ_BIT},
+        mipLevelBarrier(frameContext.depthPyramidImage, 0, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                        VK_IMAGE_LAYOUT_GENERAL, VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
+                        VK_ACCESS_SHADER_WRITE_BIT),
+    }};
+    cmdImageBarriers(frameContext.commandBuffer,
+                     VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT | VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT |
+                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, barriers);
 }
 
 void RCGIPass::setMipLevelBarriers(FrameContext& frameContext, uint32_t mipLevel) {
-    VkCommandBuffer cmd = frameContext.commandBuffer;
-    VkImageMemoryBarrier barriers[2]{};
-    barriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER; // prev mip to READ_ONLY
-    barriers[0].srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    barriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    barriers[0].oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    barriers[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[0].image = frameContext.depthPyramidImage;
-    barriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barriers[0].subresourceRange.baseMipLevel = mipLevel - 1;
-    barriers[0].subresourceRange.levelCount = 1;
-    barriers[0].subresourceRange.baseArrayLayer = 0;
-    barriers[0].subresourceRange.layerCount = 1;
-
-    barriers[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER; // dst mip to GENERAL
-    barriers[1].srcAccessMask = 0;
-    barriers[1].dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    barriers[1].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; // conservative starting state
-    barriers[1].newLayout = VK_IMAGE_LAYOUT_GENERAL;
-    barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[1].image = frameContext.depthPyramidImage;
-    barriers[1].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barriers[1].subresourceRange.baseMipLevel = mipLevel;
-    barriers[1].subresourceRange.levelCount = 1;
-    barriers[1].subresourceRange.baseArrayLayer = 0;
-    barriers[1].subresourceRange.layerCount = 1;
-
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr,
-                         0, nullptr, 2, barriers);
+    const std::array<ImageBarrierDesc, 2> barriers{{
+        // previous mip: written by the last dispatch, now sampled
+        mipLevelBarrier(frameContext.depthPyramidImage, mipLevel - 1, 0, VK_IMAGE_LAYOUT_GENERAL,
+                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_WRITE_BIT,
+                        VK_ACCESS_SHADER_READ_BIT),
+        // destination mip: conservative starting state, becomes writable
+        mipLevelBarrier(frameContext.depthPyramidImage, mipLevel, 0, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                        VK_IMAGE_LAYOUT_GENERAL, 0, VK_ACCESS_SHADER_WRITE_BIT),
+    }};
+    cmdImageBarriers(frameContext.commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, barriers);
 }
 
 // Finalize: transition last mip to READ_ONLY for external sampling
 void RCGIPass::setDepthPyramidCompletedBarriers(FrameContext& frameContext) {
-    VkCommandBuffer cmd = frameContext.commandBuffer;
-
-    uint32_t lastMip = frameContext.depthPyramidMipLevels - 1;
-    VkImageMemoryBarrier lastToRead{};
-    lastToRead.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    lastToRead.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    lastToRead.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    lastToRead.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-    lastToRead.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    lastToRead.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    lastToRead.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    lastToRead.image = frameContext.depthPyramidImage;
-    lastToRead.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    lastToRead.subresourceRange.baseMipLevel = lastMip;
-    lastToRead.subresourceRange.levelCount = 1;
-    lastToRead.subresourceRange.baseArrayLayer = 0;
-    lastToRead.subresourceRange.layerCount = 1;
-
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                         VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0,
-                         nullptr, 1, &lastToRead);
+    const uint32_t lastMip = frameContext.depthPyramidMipLevels - 1;
+    cmdImageBarriers(frameContext.commandBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+                     VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                     mipLevelBarrier(frameContext.depthPyramidImage, lastMip, 0, VK_IMAGE_LAYOUT_GENERAL,
+                                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_ACCESS_SHADER_WRITE_BIT,
+                                     VK_ACCESS_SHADER_READ_BIT));
 }
 
 void RCGIPass::buildDepthPyramid(FrameContext& frameContext) {
@@ -486,13 +424,9 @@ void RCGIPass::run(FrameContext& frameContext) {
 }
 
 void RCGIPass::emitComputeBarrier(VkCommandBuffer cmd) const {
-    VkMemoryBarrier barrier{};
-    barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-    barrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-    barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
-
-    vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 1,
-                         &barrier, 0, nullptr, 0, nullptr);
+    cmdMemoryBarrier(
+        cmd, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
+        MemoryBarrierDesc{VK_ACCESS_SHADER_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT});
 }
 
 } // namespace Rendering

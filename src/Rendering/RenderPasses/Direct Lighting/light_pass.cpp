@@ -1,5 +1,6 @@
 #include "light_pass.hpp"
 #include "ECS/ecs.hpp"
+#include "Rendering/Core/barriers.hpp"
 #include <array>
 #include <stdexcept>
 #include <iostream>
@@ -226,125 +227,33 @@ void LightPass::endRenderPass(FrameContext& frameContext) {
 }
 
 void LightPass::setBarriers(FrameContext& frameContext) {
-    VkCommandBuffer commandBuffer = frameContext.commandBuffer;
+    // UBOs written by the host this frame must be visible to the lighting fragment shader.
+    const std::array<BufferBarrierDesc, 3> bufferBarriers{{
+        BufferBarrierDesc::hostWriteToShaderRead(frameContext.sceneLightingBuffer->getBuffer()),
+        BufferBarrierDesc::hostWriteToShaderRead(frameContext.lightArrayUniformBuffer->getBuffer()),
+        BufferBarrierDesc::hostWriteToShaderRead(frameContext.cascadeSplitsBuffer->getBuffer()),
+    }};
 
-    // Buffer barriers for UBOs
-    std::array<VkBufferMemoryBarrier, 3> bufferBarriers{}; // Change from 1 to 3
+    // G-Buffer images are written by the geometry pass; they already sit in their read-only layout.
+    constexpr VkImageLayout gBufferLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    constexpr VkImageLayout depthLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    const std::array<ImageBarrierDesc, 5> imageBarriers{{
+        {frameContext.gBufferPositionImage, VK_IMAGE_ASPECT_COLOR_BIT, gBufferLayout, gBufferLayout,
+         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT},
+        {frameContext.gBufferNormalImage, VK_IMAGE_ASPECT_COLOR_BIT, gBufferLayout, gBufferLayout,
+         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT},
+        {frameContext.gBufferAlbedoImage, VK_IMAGE_ASPECT_COLOR_BIT, gBufferLayout, gBufferLayout,
+         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT},
+        {frameContext.gbufferMaterialImage, VK_IMAGE_ASPECT_COLOR_BIT, gBufferLayout, gBufferLayout,
+         VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT},
+        {frameContext.depthImage, VK_IMAGE_ASPECT_DEPTH_BIT, depthLayout, depthLayout,
+         VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT, VK_ACCESS_SHADER_READ_BIT},
+    }};
 
-    // Lighting UBO barrier
-    bufferBarriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    bufferBarriers[0].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    bufferBarriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    bufferBarriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bufferBarriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bufferBarriers[0].buffer = frameContext.sceneLightingBuffer->getBuffer();
-    bufferBarriers[0].offset = 0;
-    bufferBarriers[0].size = VK_WHOLE_SIZE;
-
-    // Unified light buffer barrier
-    bufferBarriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    bufferBarriers[1].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    bufferBarriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    bufferBarriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bufferBarriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bufferBarriers[1].buffer = frameContext.lightArrayUniformBuffer->getBuffer();
-    bufferBarriers[1].offset = 0;
-    bufferBarriers[1].size = VK_WHOLE_SIZE;
-
-    // Cascade splits buffer barrier
-    bufferBarriers[2].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    bufferBarriers[2].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    bufferBarriers[2].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    bufferBarriers[2].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bufferBarriers[2].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bufferBarriers[2].buffer = frameContext.cascadeSplitsBuffer->getBuffer();
-    bufferBarriers[2].offset = 0;
-    bufferBarriers[2].size = VK_WHOLE_SIZE;
-
-    // Need to wait for G-Buffer images to be written by Geometry Pass
-    std::array<VkImageMemoryBarrier, 5> imageBarriers{};
-
-    // Position buffer barrier
-    imageBarriers[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    imageBarriers[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    imageBarriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    imageBarriers[0].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; // Should already be in this layout
-    imageBarriers[0].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageBarriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    imageBarriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    imageBarriers[0].image = frameContext.gBufferPositionImage;
-    imageBarriers[0].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    imageBarriers[0].subresourceRange.baseMipLevel = 0;
-    imageBarriers[0].subresourceRange.levelCount = 1;
-    imageBarriers[0].subresourceRange.baseArrayLayer = 0;
-    imageBarriers[0].subresourceRange.layerCount = 1;
-
-    // Normal buffer barrier
-    imageBarriers[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    imageBarriers[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    imageBarriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    imageBarriers[1].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageBarriers[1].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageBarriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    imageBarriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    imageBarriers[1].image = frameContext.gBufferNormalImage;
-    imageBarriers[1].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    imageBarriers[1].subresourceRange.baseMipLevel = 0;
-    imageBarriers[1].subresourceRange.levelCount = 1;
-    imageBarriers[1].subresourceRange.baseArrayLayer = 0;
-    imageBarriers[1].subresourceRange.layerCount = 1;
-
-    // Albedo buffer barrier
-    imageBarriers[2].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    imageBarriers[2].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    imageBarriers[2].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    imageBarriers[2].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageBarriers[2].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageBarriers[2].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    imageBarriers[2].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    imageBarriers[2].image = frameContext.gBufferAlbedoImage;
-    imageBarriers[2].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    imageBarriers[2].subresourceRange.baseMipLevel = 0;
-    imageBarriers[2].subresourceRange.levelCount = 1;
-    imageBarriers[2].subresourceRange.baseArrayLayer = 0;
-    imageBarriers[2].subresourceRange.layerCount = 1;
-
-    // Material buffer barrier
-    imageBarriers[3].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    imageBarriers[3].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    imageBarriers[3].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    imageBarriers[3].oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageBarriers[3].newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageBarriers[3].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    imageBarriers[3].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    imageBarriers[3].image = frameContext.gbufferMaterialImage;
-    imageBarriers[3].subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    imageBarriers[3].subresourceRange.baseMipLevel = 0;
-    imageBarriers[3].subresourceRange.levelCount = 1;
-    imageBarriers[3].subresourceRange.baseArrayLayer = 0;
-    imageBarriers[3].subresourceRange.layerCount = 1;
-
-    // Depth buffer barrier
-    imageBarriers[4].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    imageBarriers[4].srcAccessMask = VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    imageBarriers[4].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    imageBarriers[4].oldLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-    imageBarriers[4].newLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-    imageBarriers[4].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    imageBarriers[4].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    imageBarriers[4].image = frameContext.depthImage;
-    imageBarriers[4].subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-    imageBarriers[4].subresourceRange.baseMipLevel = 0;
-    imageBarriers[4].subresourceRange.levelCount = 1;
-    imageBarriers[4].subresourceRange.baseArrayLayer = 0;
-    imageBarriers[4].subresourceRange.layerCount = 1;
-
-    vkCmdPipelineBarrier(commandBuffer,
-                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
-                             VK_PIPELINE_STAGE_HOST_BIT,
-                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
-                         static_cast<uint32_t>(bufferBarriers.size()), bufferBarriers.data(),
-                         static_cast<uint32_t>(imageBarriers.size()), imageBarriers.data());
+    cmdPipelineBarrier(frameContext.commandBuffer,
+                       VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT |
+                           VK_PIPELINE_STAGE_HOST_BIT,
+                       VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, {}, bufferBarriers, imageBarriers);
 }
 
 } // namespace Rendering

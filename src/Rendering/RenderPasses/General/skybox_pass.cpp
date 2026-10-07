@@ -1,4 +1,5 @@
 #include "skybox_pass.hpp"
+#include "Rendering/Core/barriers.hpp"
 #include "ECS/components.hpp"
 #include <vector>
 
@@ -16,25 +17,14 @@ SkyboxPass::~SkyboxPass() {
 }
 
 void SkyboxPass::setBarriers(FrameContext& frameContext) {
-    VkImageMemoryBarrier barrier{};
-    barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    barrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    barrier.newLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barrier.image = frameContext.gBufferAlbedoImage;
-    barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    barrier.subresourceRange.baseMipLevel = 0;
-    barrier.subresourceRange.levelCount = 1;
-    barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount = 1;
-    barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-
-    vkCmdPipelineBarrier(frameContext.commandBuffer,
-                         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,         // previous usage
-                         VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // next usage
-                         0, 0, nullptr, 0, nullptr, 1, &barrier);
+    // The albedo target goes from sampled (lighting pass) back to a colour attachment for the sky.
+    cmdImageBarriers(frameContext.commandBuffer,
+                     VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,         // previous usage
+                     VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, // next usage
+                     ImageBarrierDesc{frameContext.gBufferAlbedoImage, VK_IMAGE_ASPECT_COLOR_BIT,
+                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                                      VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_ACCESS_SHADER_READ_BIT,
+                                      VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT});
 }
 
 void SkyboxPass::cleanup() {

@@ -83,6 +83,7 @@ add_executable(main
   "src/Rendering/Core/descriptors.cpp"
   "src/Rendering/Core/compute_pipeline.cpp"
   "src/Rendering/Core/buffer.cpp"
+  "src/Rendering/Core/barriers.cpp"
 
   # Rendering Resources
   "src/Rendering/Resources/rendering_resources.cpp"

@@ -1,4 +1,5 @@
 #include "shadow_pass.hpp"
+#include "Rendering/Core/barriers.hpp"
 #include "Rendering/Resources/mesh.hpp"
 #include <stdexcept>
 #include <iostream>
@@ -483,35 +484,11 @@ void ShadowPass::renderPointLights(FrameContext& frameContext) {
 // Helper method to update instance buffers from DrawingData
 
 void ShadowPass::setBarriers(FrameContext& frameContext) {
-    VkCommandBuffer commandBuffer = frameContext.commandBuffer;
-
-    // Create barriers for the shadow uniform buffer and instance model matrix buffer
-    std::array<VkBufferMemoryBarrier, 2> bufferBarriers{};
-
-    // Shadow uniform buffer barrier - contains light matrices
-    bufferBarriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    bufferBarriers[0].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    bufferBarriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    bufferBarriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bufferBarriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bufferBarriers[0].buffer = frameContext.lightMatrixBuffer->getBuffer();
-    bufferBarriers[0].offset = 0;
-    bufferBarriers[0].size = VK_WHOLE_SIZE;
-
-    // Instance model matrix buffer barrier
-    bufferBarriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    bufferBarriers[1].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    bufferBarriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    bufferBarriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bufferBarriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    bufferBarriers[1].buffer = frameContext.shadowModelMatrixBuffer->getBuffer();
-    bufferBarriers[1].offset = 0;
-    bufferBarriers[1].size = VK_WHOLE_SIZE;
-
-    // Issue all barriers at once
-    vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                         VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr,
-                         static_cast<uint32_t>(bufferBarriers.size()), bufferBarriers.data(), 0, nullptr);
+    // Light matrices and the shadow instance matrices are written by the host before the shadow passes read them.
+    cmdBufferBarriers(frameContext.commandBuffer, VK_PIPELINE_STAGE_HOST_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                      VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+                      {BufferBarrierDesc::hostWriteToShaderRead(frameContext.lightMatrixBuffer->getBuffer()),
+                       BufferBarrierDesc::hostWriteToShaderRead(frameContext.shadowModelMatrixBuffer->getBuffer())});
 }
 
 void ShadowPass::updateMatrixBufferDescriptorSets(FrameContext& frameContext) {
