@@ -14,7 +14,7 @@ public:
         uint32_t height;
         VkFormat targetFormat;
         VkDescriptorSetLayout descriptorSetLayout;
-        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* targetViews;
+        const std::vector<VkImageView>* targetViews; // one per swapchain image
     };
 
     ColorCorrectionPass(Device& device, const CreateInfo& info);
@@ -37,11 +37,11 @@ private:
     uint32_t width;
     uint32_t height;
     VkFormat targetFormat;
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* targetViews;
+    const std::vector<VkImageView>* targetViews;
     VkDescriptorSetLayout descriptorSetLayout{VK_NULL_HANDLE};
 
     VkRenderPass renderPass{VK_NULL_HANDLE};
-    std::array<VkFramebuffer, MAX_FRAMES_IN_FLIGHT> framebuffers{};
+    std::vector<VkFramebuffer> framebuffers; // indexed by swapchain image
     std::unique_ptr<Pipeline> pipeline{nullptr};
     VkPipelineLayout pipelineLayout{VK_NULL_HANDLE};
 };

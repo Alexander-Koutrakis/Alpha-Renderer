@@ -103,7 +103,8 @@ struct PrevCameraData {
 
 struct FrameContext {
     // === CORE FRAME DATA ===
-    uint32_t frameIndex = 0;
+    uint32_t frameIndex = 0; // frame-in-flight slot: index for all per-frame resources
+    uint32_t imageIndex = 0; // acquired swapchain image: index only for resources that target the swapchain
     VkCommandBuffer commandBuffer = VK_NULL_HANDLE;
     VkExtent2D extent{};
     float frameTime = 0.0f;

@@ -103,11 +103,11 @@ private:
     std::unique_ptr<SMAABlendPass> smaaBlendPass;
     std::unique_ptr<ColorCorrectionPass> colorCorrectionPass;
 
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> swapchainImageViews{};
+    std::vector<VkImageView> swapchainImageViews; // one per swapchain image
     std::unique_ptr<ImGuiManager> imguiManager;
 
     uint32_t currentImageIndex{0};
-    size_t currentFrameIndex{0};
+    uint32_t currentFrameIndex{0}; // frame-in-flight slot; the only owner of this counter
     bool isFrameStarted{false};
     bool framebufferResized{false};
 

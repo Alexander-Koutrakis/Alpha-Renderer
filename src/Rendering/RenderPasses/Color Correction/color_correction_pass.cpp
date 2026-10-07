@@ -28,7 +28,7 @@ void ColorCorrectionPass::cleanup() {
             vkDestroyFramebuffer(device.getDevice(), framebuffer, nullptr);
         }
     }
-    framebuffers.fill(VK_NULL_HANDLE);
+    framebuffers.clear();
 
     pipeline.reset();
     if (pipelineLayout != VK_NULL_HANDLE) {
@@ -67,10 +67,10 @@ void ColorCorrectionPass::createRenderPass() {
 }
 
 void ColorCorrectionPass::createFramebuffers() {
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        std::array<VkImageView, 1> attachments = {(*targetViews)[i]};
+    for (VkImageView view : *targetViews) {
+        std::array<VkImageView, 1> attachments = {view};
 
-        framebuffers[i] = createFramebuffer(device.getDevice(), renderPass, attachments, width, height);
+        framebuffers.push_back(createFramebuffer(device.getDevice(), renderPass, attachments, width, height));
     }
 }
 
@@ -96,7 +96,7 @@ void ColorCorrectionPass::beginRenderPass(FrameContext& frameContext) {
     VkRenderPassBeginInfo renderPassInfo{};
     renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
     renderPassInfo.renderPass = renderPass;
-    renderPassInfo.framebuffer = framebuffers[frameContext.frameIndex];
+    renderPassInfo.framebuffer = framebuffers[frameContext.imageIndex];
     renderPassInfo.renderArea.offset = {0, 0};
     renderPassInfo.renderArea.extent = {width, height};
 

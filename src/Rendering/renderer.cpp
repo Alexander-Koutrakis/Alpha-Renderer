@@ -154,7 +154,7 @@ VkCommandBuffer Renderer::beginFrame() {
         return nullptr;
     }
 
-    auto result = swapChain->acquireNextImage(&currentImageIndex);
+    auto result = swapChain->acquireNextImage(currentFrameIndex, &currentImageIndex);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         handleWindowResize();
@@ -189,7 +189,7 @@ void Renderer::endFrame() {
 
     VK_CHECK(vkEndCommandBuffer(commandBuffer));
 
-    auto result = swapChain->submitCommandBuffers(&commandBuffer, &currentImageIndex);
+    auto result = swapChain->submitCommandBuffers(currentFrameIndex, &commandBuffer, &currentImageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || window.wasWindowResized()) {
         window.resetWindowResizedFlag();
         handleWindowResize();
@@ -343,9 +343,7 @@ void Renderer::createColorCorrectionPass() {
     const uint32_t w = swapChain->getExtent().width;
     const uint32_t h = swapChain->getExtent().height;
 
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-        swapchainImageViews[i] = swapChain->getImageView(static_cast<uint32_t>(i));
-    }
+    swapchainImageViews = swapChain->getImageViews();
 
     ColorCorrectionPass::CreateInfo info{};
     info.width = w;
@@ -369,8 +367,8 @@ void Renderer::run() {
         return;
     }
 
-    // Get the current frame context (match resources to the acquired swapchain image)
-    FrameContext& frameContext = frameContexts[currentImageIndex];
+    // Get the current frame context (per-frame resources are indexed by frame-in-flight slot)
+    FrameContext& frameContext = frameContexts[currentFrameIndex];
     updateFrameContext(commandBuffer, frameContext);
 
     shadowmapPass->run(frameContext);
@@ -409,7 +407,8 @@ void Renderer::updateFrameContext(VkCommandBuffer commandBuffer, FrameContext& f
     frameContext.cameraData.invProjectionMatrix = glm::inverse(camera.projectionMatrix);
 
     frameContext.commandBuffer = commandBuffer;
-    frameContext.frameIndex = currentImageIndex;
+    frameContext.frameIndex = currentFrameIndex;
+    frameContext.imageIndex = currentImageIndex;
     frameContext.extent = swapChain->getExtent();
     frameContext.frameTime = AlphaEngine::getDeltaTime();
 
