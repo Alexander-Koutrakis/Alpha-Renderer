@@ -150,6 +150,12 @@ if(NOT MSVC)
   endif()
 endif()
 
+# Turns the Vulkan validation layers on (used by scripts/validation_check.ps1; the product build keeps them off).
+option(ALPHA_ENABLE_VALIDATION "Enable Vulkan validation layers" OFF)
+if(ALPHA_ENABLE_VALIDATION)
+  target_compile_definitions(main PRIVATE ALPHA_ENABLE_VALIDATION)
+endif()
+
 target_link_libraries(main PRIVATE
   Vulkan::Vulkan
   ${GLFW_LIBRARY}

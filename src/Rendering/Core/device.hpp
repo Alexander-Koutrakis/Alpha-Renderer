@@ -25,7 +25,11 @@ struct QueueFamilyIndices {
 
 class Device {
 public:
+#ifdef ALPHA_ENABLE_VALIDATION
+    const bool enableValidationLayers = true;
+#else
     const bool enableValidationLayers = false;
+#endif
 
     Device(Window& window);
     ~Device();
