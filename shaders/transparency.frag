@@ -99,12 +99,12 @@ layout(set = 4, binding = 2) uniform sampler2D normalTexture;
 layout(set = 4, binding = 3) uniform sampler2D metallicSmoothnessTexture;
 layout(set = 4, binding = 4) uniform sampler2D occlusionTexture;
 
-// Set 5: Scene lighting (ambient, etc.)
+// Set 5: Scene lighting (must match Rendering::SceneLightingUbo)
 layout(set = 5, binding = 0) uniform SceneLightingUbo {
     mat4 viewMatrix;
     mat4 projectionMatrix;
     vec4 cameraPosition;
-    vec4 ambientLight;
+    float ambientIntensity;
     float reflectionIntensity;
 } sceneLighting;
 
@@ -486,7 +486,7 @@ void main() {
         occlusion *= texture(occlusionTexture, fragUV).r;
     }
 
-    vec3 indirectDiffuse = sceneLighting.ambientLight.rgb * baseColor.rgb * BASE_AMBIENT_INTENSITY * occlusion;
+    vec3 indirectDiffuse = vec3(sceneLighting.ambientIntensity) * baseColor.rgb * BASE_AMBIENT_INTENSITY * occlusion;
     vec3 indirectLighting = kD * indirectDiffuse;
     
     // Final color
