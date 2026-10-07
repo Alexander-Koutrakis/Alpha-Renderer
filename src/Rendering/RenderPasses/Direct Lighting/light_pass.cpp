@@ -1,6 +1,7 @@
 #include "light_pass.hpp"
 #include "ECS/ecs.hpp"
 #include "Rendering/Core/barriers.hpp"
+#include "Rendering/Core/pipeline_layouts.hpp"
 #include <array>
 #include <stdexcept>
 #include <iostream>
@@ -152,16 +153,7 @@ void LightPass::createPipeline(const CreateInfo& createInfo) {
                                                      createInfo.enviromentalReflectionsSetLayout,
                                                      createInfo.cascadeSplitsSetLayout};
 
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-    pipelineLayoutInfo.pSetLayouts = setLayouts.data();
-    pipelineLayoutInfo.pushConstantRangeCount = 0;
-    pipelineLayoutInfo.pPushConstantRanges = nullptr;
-
-    if (vkCreatePipelineLayout(device.getDevice(), &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create pipeline layout!");
-    }
+    pipelineLayout = createPipelineLayout(device.getDevice(), setLayouts);
     // Create pipeline configuration
     PipelineConfigInfo pipelineConfig{};
     Pipeline::defaultPipelineConfigInfo(pipelineConfig);
