@@ -103,12 +103,12 @@ add_executable(main
   "src/Rendering/RenderPasses/SMAA/smaa_weight_pass.cpp"
   "src/Rendering/RenderPasses/SMAA/smaa_edge_pass.cpp"
   "src/Rendering/RenderPasses/SMAA/smaa_blend_pass.cpp"
-  "src/Rendering/RenderPasses/Radiance Cascades/rc_gi_pass.cpp"
+  "src/Rendering/RenderPasses/radiance_cascades/rc_gi_pass.cpp"
   "src/Rendering/RenderPasses/Geometry/geometry_pass.cpp"
   "src/Rendering/RenderPasses/General/skybox_pass.cpp"
-  "src/Rendering/RenderPasses/Direct Lighting/light_pass.cpp"
+  "src/Rendering/RenderPasses/direct_lighting/light_pass.cpp"
   "src/Rendering/RenderPasses/Composition/composition_pass.cpp"
-  "src/Rendering/RenderPasses/Color Correction/color_correction_pass.cpp"
+  "src/Rendering/RenderPasses/color_correction/color_correction_pass.cpp"
 
   # Systems
   "src/Systems/camera_system.cpp"

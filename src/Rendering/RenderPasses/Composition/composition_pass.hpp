@@ -6,7 +6,7 @@
 #include "Rendering/RenderPasses/render_passes_buffers.hpp"
 #include "Rendering/Core/descriptors.hpp"
 #include "Rendering/rendering_constants.hpp"
-#include "Rendering/RenderPasses/Direct Lighting/light_pass.hpp"
+#include "Rendering/RenderPasses/direct_lighting/light_pass.hpp"
 #include "Rendering/RenderPasses/Transparency/transparency_pass.hpp"
 #include "Rendering/Resources/rendering_resources.hpp"
 #include <array>
