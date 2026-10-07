@@ -424,20 +424,18 @@ vec3 calculateUnifiedLight(
 }
 
 // ----- OIT WEIGHT CALCULATION -----
-float calculateWeight(float depth, float alpha) {
-    float linearDepth = gl_FragCoord.z;
-    float cameraSpaceZ = -1.0 * (1.0 - linearDepth) * 500.0;
-    float z = abs(cameraSpaceZ);
+// Depth-only weight (McGuire & Bavoil). Alpha is applied by the caller, once, in the accumulation write.
+// maxWeight bounds the weight itself so the RGBA16F accumulation target cannot overflow for bright HDR colors.
+float calculateWeight(float viewDepth) {
+    float z = abs(viewDepth);
     
     float a = 10.0;
     float minWeight = 1e-2;
     float maxWeight = 3e3;
     float depthScale = 200.0;
     
-    float weight = 0.03 / (1e-5 + pow(z / depthScale, 4.0));
-    weight = a * max(minWeight, min(maxWeight, weight));
-    
-    return alpha * weight;
+    float weight = a * 0.03 / (1e-5 + pow(z / depthScale, 4.0));
+    return clamp(weight, minWeight, maxWeight);
 }
 
 // ----- MAIN -----
@@ -492,11 +490,12 @@ void main() {
     vec3 finalColor = directLighting + indirectLighting;
     
     // Calculate OIT weight
-    float weight = calculateWeight(gl_FragCoord.z, baseColor.a);
+    float viewDepth = (camera.view * vec4(fragPosition, 1.0)).z;
+    float weight = calculateWeight(viewDepth);
     
-    // Weighted blend accumulation
-    accum = vec4(finalColor * baseColor.a * weight, weight);
+    // Weighted blend accumulation: rgb = color * alpha * w, a = alpha * w
+    accum = vec4(finalColor * baseColor.a, baseColor.a) * weight;
     
     // Revealage factor
-    reveal = pow( baseColor.a, 1.0);
+    reveal = baseColor.a;
 } 
