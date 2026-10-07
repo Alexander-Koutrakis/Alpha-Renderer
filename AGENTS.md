@@ -17,6 +17,7 @@ Rules for any agent (Claude Code or Codex) changing this repo.
 - `just build`, `just shaders`, `just format-check`, `just tidy`: the pieces on their own.
 - Initialize every member and Vulkan struct: `VkFoo info{VK_STRUCTURE_TYPE_FOO};` or `{}`; handles `= VK_NULL_HANDLE`.
 - No unit tests yet; they arrive in Phase 6 of `PLAN.md`.
+- `just validation`: runs the app with validation layers on and fails on any VUID not in `scripts/validation_baseline.txt`. Needs a GPU, so it is not part of `just check`; run it for rendering changes.
 - `just doctor`: toolchain check.
 
 ## One-way doors (always ask)
