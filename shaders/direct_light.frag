@@ -605,7 +605,8 @@ vec3 calculateUnifiedLight(Light light, vec3 worldPos, vec3 normal, vec3 viewDir
 //=============================================================================
 void main() {
     vec3 albedo = texture(albedoTexture, inUV).rgb;
-    vec3 worldPos = texture(positionTexture, inUV).xyz;
+    vec4 positionSample = texture(positionTexture, inUV);
+    vec3 worldPos = positionSample.xyz;
     vec3 normal = normalize(texture(normalTexture, inUV).rgb * 2.0 - 1.0);
     vec4 material = texture(materialTexture, inUV);
     vec3 viewDir = normalize(environmentLighting.cameraPosition.xyz - worldPos);
@@ -615,8 +616,9 @@ void main() {
  
 
 
-    // Skip lighting for skybox pixels
-    if (length(worldPos) < EPSILON) {
+    // Skip lighting for skybox pixels: the geometry pass clears position.w to 0 and writes 1 for surfaces.
+    // (Testing length(worldPos) would also drop a surface sitting exactly at the world origin.)
+    if (positionSample.w <= 0.0) {
         outColor = vec4(albedo, 1.0);
         outIncident = vec4(0.0);
         return;
