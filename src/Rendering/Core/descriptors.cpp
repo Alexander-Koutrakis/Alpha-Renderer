@@ -2,53 +2,30 @@
 #include "descriptors.hpp"
 
 // std
-#include <cassert>
 #include <stdexcept>
+#include <string>
 
 namespace Rendering {
 
-// *************** Descriptor Set Layout Builder *********************
-
-DescriptorSetLayout::Builder& DescriptorSetLayout::Builder::addBinding(uint32_t binding,
-                                                                       VkDescriptorType descriptorType,
-                                                                       VkShaderStageFlags stageFlags, uint32_t count) {
-    assert(bindings.count(binding) == 0 && "Binding already in use");
-    VkDescriptorSetLayoutBinding layoutBinding{};
-    layoutBinding.binding = binding;
-    layoutBinding.descriptorType = descriptorType;
-    layoutBinding.descriptorCount = count;
-    layoutBinding.stageFlags = stageFlags;
-    bindings[binding] = layoutBinding;
-    return *this;
-}
-
-std::unique_ptr<DescriptorSetLayout> DescriptorSetLayout::Builder::build() const {
-    return std::make_unique<DescriptorSetLayout>(device, bindings);
-}
-
 // *************** Descriptor Set Layout *********************
 
-DescriptorSetLayout::DescriptorSetLayout(Device& device,
-                                         std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> bindings)
-    : device{device}, bindings{bindings} {
-    std::vector<VkDescriptorSetLayoutBinding> setLayoutBindings{};
-    for (auto kv : bindings) {
-        setLayoutBindings.push_back(kv.second);
-    }
+VkDescriptorSetLayout createDescriptorSetLayout(Device& device, const VkDescriptorSetLayoutBinding* bindings,
+                                                uint32_t bindingCount) {
+    VkDescriptorSetLayoutCreateInfo layoutInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+    layoutInfo.bindingCount = bindingCount;
+    layoutInfo.pBindings = bindings;
 
-    VkDescriptorSetLayoutCreateInfo descriptorSetLayoutInfo{};
-    descriptorSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    descriptorSetLayoutInfo.bindingCount = static_cast<uint32_t>(setLayoutBindings.size());
-    descriptorSetLayoutInfo.pBindings = setLayoutBindings.data();
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &descriptorSetLayoutInfo, nullptr, &descriptorSetLayout) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("failed to create descriptor set layout!");
+    VkDescriptorSetLayout layout = VK_NULL_HANDLE;
+    const VkResult result = vkCreateDescriptorSetLayout(device.getDevice(), &layoutInfo, nullptr, &layout);
+    if (result != VK_SUCCESS) {
+        throw std::runtime_error("failed to create descriptor set layout (VkResult " + std::to_string(result) + ")");
     }
+    return layout;
 }
 
-DescriptorSetLayout::~DescriptorSetLayout() {
-    vkDestroyDescriptorSetLayout(device.getDevice(), descriptorSetLayout, nullptr);
+VkDescriptorSetLayout createDescriptorSetLayout(Device& device,
+                                                std::initializer_list<VkDescriptorSetLayoutBinding> bindings) {
+    return createDescriptorSetLayout(device, bindings.begin(), static_cast<uint32_t>(bindings.size()));
 }
 
 // *************** Descriptor Pool Builder *********************

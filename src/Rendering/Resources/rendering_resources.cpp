@@ -865,439 +865,183 @@ void RenderingResources::createDescriptorPool() {
 void RenderingResources::createDescriptorSetLayouts() {
     std::cout << "Creating models descriptor set layout..." << std::endl;
     // Create descriptor set layout for instance storage buffers
-    std::array<VkDescriptorSetLayoutBinding, 2> instanceBindings{};
-    // Model matrix storage buffer
-    instanceBindings[0].binding = 0;
-    instanceBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    instanceBindings[0].descriptorCount = 1;
-    instanceBindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    // Normal matrix storage buffer
-    instanceBindings[1].binding = 1;
-    instanceBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    instanceBindings[1].descriptorCount = 1;
-    instanceBindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    VkDescriptorSetLayoutCreateInfo instanceLayoutInfo{};
-    instanceLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    instanceLayoutInfo.bindingCount = static_cast<uint32_t>(instanceBindings.size());
-    instanceLayoutInfo.pBindings = instanceBindings.data();
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &instanceLayoutInfo, nullptr, &modelsDescriptorSetLayout) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("Failed to create instance buffer descriptor set layout");
-    }
+    modelsDescriptorSetLayout = createDescriptorSetLayout(
+        device, {
+                    layoutBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
+                    layoutBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
+                });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)modelsDescriptorSetLayout,
                  "ModelsDescriptorSetLayout");
     std::cout << "Models descriptor set layout created successfully." << std::endl;
 
     std::cout << "Creating material descriptor set layout..." << std::endl;
-    std::array<VkDescriptorSetLayoutBinding, 5> bindings{};
-
-    // Material UBO (binding = 1)
-    bindings[0].binding = 0;
-    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    bindings[0].descriptorCount = 1;
-    bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    // Albedo texture (binding = 2)
-    bindings[1].binding = 1;
-    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    bindings[1].descriptorCount = 1;
-    bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    // Normal map (binding = 3)
-    bindings[2].binding = 2;
-    bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    bindings[2].descriptorCount = 1;
-    bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    // Metallic-smoothness map (binding = 4)
-    bindings[3].binding = 3;
-    bindings[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    bindings[3].descriptorCount = 1;
-    bindings[3].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    // Occlusion map (binding = 5)
-    bindings[4].binding = 4;
-    bindings[4].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    bindings[4].descriptorCount = 1;
-    bindings[4].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutCreateInfo setMaterialLayoutInfo{};
-    setMaterialLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    setMaterialLayoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-    setMaterialLayoutInfo.pBindings = bindings.data();
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &setMaterialLayoutInfo, nullptr,
-                                    &materialDescriptorSetLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create descriptor set layout for materials");
-    }
+    materialDescriptorSetLayout = createDescriptorSetLayout(
+        device, {
+                    layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)materialDescriptorSetLayout,
                  "MaterialDescriptorSetLayout");
     std::cout << "Material descriptor set layout created successfully." << std::endl;
 
     //Create descriptor set layout for camera uniform buffer
     std::cout << "Creating camera descriptor set layout..." << std::endl;
-    VkDescriptorSetLayoutBinding cameraBufferBinding{};
-    cameraBufferBinding.binding = 0;
-    cameraBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    cameraBufferBinding.descriptorCount = 1;
-    cameraBufferBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    VkDescriptorSetLayoutCreateInfo cameraBufferLayoutInfo{};
-    cameraBufferLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    cameraBufferLayoutInfo.bindingCount = 1;
-    cameraBufferLayoutInfo.pBindings = &cameraBufferBinding;
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &cameraBufferLayoutInfo, nullptr, &cameraDescriptorSetLayout) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("Failed to create descriptor set layout for set 0!");
-    }
+    cameraDescriptorSetLayout = createDescriptorSetLayout(
+        device, {
+                    layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
+                });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)cameraDescriptorSetLayout,
                  "CameraDescriptorSetLayout");
     std::cout << "Camera descriptor set layout created successfully." << std::endl;
 
     std::cout << "Creating GBuffer descriptor set layout..." << std::endl;
-    std::array<VkDescriptorSetLayoutBinding, 4> gBufferBindings{};
-    for (size_t i = 0; i < gBufferBindings.size(); i++) {
-        gBufferBindings[i].binding = i;
-        gBufferBindings[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        gBufferBindings[i].descriptorCount = 1;
-        gBufferBindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    }
-
-    VkDescriptorSetLayoutCreateInfo gBufferLayoutInfo{};
-    gBufferLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    gBufferLayoutInfo.bindingCount = static_cast<uint32_t>(gBufferBindings.size());
-    gBufferLayoutInfo.pBindings = gBufferBindings.data();
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &gBufferLayoutInfo, nullptr, &gBufferDescriptorSetLayout) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("failed to create gbuffer descriptor set layout!");
-    }
+    gBufferDescriptorSetLayout = createDescriptorSetLayout(
+        device, {
+                    layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)gBufferDescriptorSetLayout,
                  "GBufferDescriptorSetLayout");
     std::cout << "GBuffer descriptor set layout created successfully." << std::endl;
 
     std::cout << "Creating light array descriptor set layout..." << std::endl;
-    VkDescriptorSetLayoutBinding lightArrayBinding{};
-    lightArrayBinding.binding = 0;
-    lightArrayBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    lightArrayBinding.descriptorCount = 1;
-    lightArrayBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutCreateInfo lightLayoutInfo{};
-    lightLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    lightLayoutInfo.bindingCount = 1;
-    lightLayoutInfo.pBindings = &lightArrayBinding;
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &lightLayoutInfo, nullptr, &lightArrayDescriptorSetLayout) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("failed to create unified light descriptor set layout!");
-    }
+    lightArrayDescriptorSetLayout = createDescriptorSetLayout(
+        device, {
+                    layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)lightArrayDescriptorSetLayout,
                  "LightArrayDescriptorSetLayout");
     std::cout << "Light array descriptor set layout created successfully." << std::endl;
 
     std::cout << "Creating cascade splits descriptor set layout..." << std::endl;
-    VkDescriptorSetLayoutBinding cascadeSplitsBinding{};
-    cascadeSplitsBinding.binding = 0;
-    cascadeSplitsBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    cascadeSplitsBinding.descriptorCount = 1;
-    cascadeSplitsBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutCreateInfo cascadeSplitsLayoutInfo{};
-    cascadeSplitsLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    cascadeSplitsLayoutInfo.bindingCount = 1;
-    cascadeSplitsLayoutInfo.pBindings = &cascadeSplitsBinding;
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &cascadeSplitsLayoutInfo, nullptr, &cascadeSplitsSetLayout) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("failed to create cascade splits descriptor set layout!");
-    }
+    cascadeSplitsSetLayout = createDescriptorSetLayout(
+        device, {
+                    layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)cascadeSplitsSetLayout,
                  "CascadeSplitsDescriptorSetLayout");
     std::cout << "Cascade splits descriptor set layout created successfully." << std::endl;
 
     std::cout << "Creating scene lighting descriptor set layout..." << std::endl;
-    VkDescriptorSetLayoutBinding sceneLightingBinding{};
-    sceneLightingBinding.binding = 0;
-    sceneLightingBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    sceneLightingBinding.descriptorCount = 1;
-    sceneLightingBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutCreateInfo sceneLightingLayoutInfo{};
-    sceneLightingLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    sceneLightingLayoutInfo.bindingCount = 1;
-    sceneLightingLayoutInfo.pBindings = &sceneLightingBinding;
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &sceneLightingLayoutInfo, nullptr,
-                                    &sceneLightingDescriptorSetLayout) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create scene lighting descriptor set layout!");
-    }
+    sceneLightingDescriptorSetLayout = createDescriptorSetLayout(
+        device, {
+                    layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)sceneLightingDescriptorSetLayout,
                  "SceneLightingDescriptorSetLayout");
     std::cout << "Scene lighting descriptor set layout created successfully." << std::endl;
 
     // Create descriptor set layout (shared between both pipelines)
     std::cout << "Creating shadow light matrix descriptor set layout..." << std::endl;
-    VkDescriptorSetLayoutBinding shadowUboBinding{};
-    shadowUboBinding.binding = 0;
-    shadowUboBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    shadowUboBinding.descriptorCount = 1;
-    shadowUboBinding.stageFlags =
-        VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutCreateInfo shadowUbolayoutInfo{};
-    shadowUbolayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    shadowUbolayoutInfo.bindingCount = 1;
-    shadowUbolayoutInfo.pBindings = &shadowUboBinding;
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &shadowUbolayoutInfo, nullptr,
-                                    &shadowcastinglightMatrixDescriptorSetLayout) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create shadow descriptor set layout!");
-    }
+    shadowcastinglightMatrixDescriptorSetLayout = createDescriptorSetLayout(
+        device,
+        {
+            layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                          VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+        });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowcastinglightMatrixDescriptorSetLayout,
                  "ShadowLightMatrixDescriptorSetLayout");
     std::cout << "Shadow light matrix descriptor set layout created successfully." << std::endl;
 
     // Create descriptor set layout for shadow map samplers
     std::cout << "Creating shadow map sampler descriptor set layout..." << std::endl;
-    std::array<VkDescriptorSetLayoutBinding, 3> shadowMapLayoutBindings{};
-    // Directional shadow maps
-    shadowMapLayoutBindings[0].binding = 0;
-    shadowMapLayoutBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    shadowMapLayoutBindings[0].descriptorCount = MAX_DIRECTIONAL_LIGHTS;
-    shadowMapLayoutBindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    // Spot shadow maps
-    shadowMapLayoutBindings[1].binding = 1;
-    shadowMapLayoutBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    shadowMapLayoutBindings[1].descriptorCount = MAX_SPOT_LIGHTS;
-    shadowMapLayoutBindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    // Point shadow maps (cubemaps)
-    shadowMapLayoutBindings[2].binding = 2;
-    shadowMapLayoutBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    shadowMapLayoutBindings[2].descriptorCount = MAX_POINT_LIGHTS;
-    shadowMapLayoutBindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutCreateInfo layoutInfo{};
-    layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    layoutInfo.bindingCount = static_cast<uint32_t>(shadowMapLayoutBindings.size());
-    layoutInfo.pBindings = shadowMapLayoutBindings.data();
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &layoutInfo, nullptr, &shadowMapSamplerLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create shadow map sampler descriptor set layout");
-    }
+    shadowMapSamplerLayout = createDescriptorSetLayout(
+        device,
+        {
+            layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT,
+                          MAX_DIRECTIONAL_LIGHTS),
+            layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, MAX_SPOT_LIGHTS),
+            layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, MAX_POINT_LIGHTS),
+        });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowMapSamplerLayout,
                  "ShadowMapSamplerDescriptorSetLayout");
     std::cout << "Shadow map sampler descriptor set layout created successfully." << std::endl;
 
     //Create descriptor set layout for shadow model matrix
     std::cout << "Creating shadow model matrix descriptor set layout..." << std::endl;
-    VkDescriptorSetLayoutBinding shadowModelMatrixBinding{};
-    shadowModelMatrixBinding.binding = 0;
-    shadowModelMatrixBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    shadowModelMatrixBinding.descriptorCount = 1;
-    shadowModelMatrixBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    VkDescriptorSetLayoutCreateInfo shadowModelMatrixLayoutInfo{};
-    shadowModelMatrixLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    shadowModelMatrixLayoutInfo.bindingCount = 1;
-    shadowModelMatrixLayoutInfo.pBindings = &shadowModelMatrixBinding;
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &shadowModelMatrixLayoutInfo, nullptr,
-                                    &shadowModelMatrixDescriptorSetLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create shadow model matrix descriptor set layout");
-    }
+    shadowModelMatrixDescriptorSetLayout = createDescriptorSetLayout(
+        device, {
+                    layoutBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
+                });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowModelMatrixDescriptorSetLayout,
                  "ShadowModelMatrixDescriptorSetLayout");
     std::cout << "Shadow model matrix descriptor set layout created successfully." << std::endl;
 
     //Create descriptor set layout for skybox
     std::cout << "Creating skybox descriptor set layout..." << std::endl;
-    VkDescriptorSetLayoutBinding skyboxBinding{};
-    skyboxBinding.binding = 0;
-    skyboxBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    skyboxBinding.descriptorCount = 1;
-    skyboxBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutCreateInfo skyboxLayoutInfo{};
-    skyboxLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    skyboxLayoutInfo.bindingCount = 1;
-    skyboxLayoutInfo.pBindings = &skyboxBinding;
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &skyboxLayoutInfo, nullptr, &skyboxDescriptorSetLayout) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("Failed to create skybox descriptor set layout");
-    }
+    skyboxDescriptorSetLayout = createDescriptorSetLayout(
+        device, {
+                    layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)skyboxDescriptorSetLayout,
                  "SkyboxDescriptorSetLayout");
     std::cout << "Skybox descriptor set layout created successfully." << std::endl;
 
     //Create descriptor set layout for transparency model matrix
     std::cout << "Creating transparency model descriptor set layout..." << std::endl;
-    std::array<VkDescriptorSetLayoutBinding, 2> transparencyInstanceBindings{};
-    // Model matrix storage buffer
-    transparencyInstanceBindings[0].binding = 0;
-    transparencyInstanceBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    transparencyInstanceBindings[0].descriptorCount = 1;
-    transparencyInstanceBindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    // Normal matrix storage buffer
-    transparencyInstanceBindings[1].binding = 1;
-    transparencyInstanceBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    transparencyInstanceBindings[1].descriptorCount = 1;
-    transparencyInstanceBindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-    VkDescriptorSetLayoutCreateInfo transparencyInstanceLayoutInfo{};
-    transparencyInstanceLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    transparencyInstanceLayoutInfo.bindingCount = static_cast<uint32_t>(transparencyInstanceBindings.size());
-    transparencyInstanceLayoutInfo.pBindings = transparencyInstanceBindings.data();
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &transparencyInstanceLayoutInfo, nullptr,
-                                    &transparencyModelDescriptorSetLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create transparency instance buffer descriptor set layout");
-    }
+    transparencyModelDescriptorSetLayout = createDescriptorSetLayout(
+        device, {
+                    layoutBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
+                    layoutBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
+                });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)transparencyModelDescriptorSetLayout,
                  "TransparencyModelDescriptorSetLayout");
     std::cout << "Transparency model descriptor set layout created successfully." << std::endl;
 
     // Create descriptor set layout for composition textures
     std::cout << "Creating composition descriptor set layout..." << std::endl;
-    std::array<VkDescriptorSetLayoutBinding, 4> compositionBindings{};
-
-    // Binding 0: Opaque render result (from LightPass)
-    compositionBindings[0].binding = 0;
-    compositionBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    compositionBindings[0].descriptorCount = 1;
-    compositionBindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    // Binding 1: Transparency accumulation buffer
-    compositionBindings[1].binding = 1;
-    compositionBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    compositionBindings[1].descriptorCount = 1;
-    compositionBindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    // Binding 2: Transparency revealage buffer
-    compositionBindings[2].binding = 2;
-    compositionBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    compositionBindings[2].descriptorCount = 1;
-    compositionBindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    // Binding 3: Indirect GI buffer
-    compositionBindings[3].binding = 3;
-    compositionBindings[3].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    compositionBindings[3].descriptorCount = 1;
-    compositionBindings[3].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutCreateInfo compositionLayoutInfo{};
-    compositionLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    compositionLayoutInfo.bindingCount = static_cast<uint32_t>(compositionBindings.size());
-    compositionLayoutInfo.pBindings = compositionBindings.data();
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &compositionLayoutInfo, nullptr, &compositionSetLayout) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("failed to create composition descriptor set layout!");
-    }
+    compositionSetLayout = createDescriptorSetLayout(
+        device, {
+                    layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)compositionSetLayout,
                  "CompositionDescriptorSetLayout");
     std::cout << "Composition descriptor set layout created successfully." << std::endl;
 
     // SMAA edge descriptor set layout (compositionColor input)
     std::cout << "Creating SMAA edge descriptor set layout..." << std::endl;
-    VkDescriptorSetLayoutBinding smaaEdgeBinding{};
-    smaaEdgeBinding.binding = 0;
-    smaaEdgeBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    smaaEdgeBinding.descriptorCount = 1;
-    smaaEdgeBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutCreateInfo smaaEdgeLayoutInfo{};
-    smaaEdgeLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    smaaEdgeLayoutInfo.bindingCount = 1;
-    smaaEdgeLayoutInfo.pBindings = &smaaEdgeBinding;
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &smaaEdgeLayoutInfo, nullptr, &smaaEdgeSetLayout) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("failed to create SMAA edge descriptor set layout!");
-    }
+    smaaEdgeSetLayout = createDescriptorSetLayout(
+        device, {
+                    layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)smaaEdgeSetLayout, "SMAAEdgeDescriptorSetLayout");
     std::cout << "SMAA edge descriptor set layout created successfully." << std::endl;
 
     // SMAA weight descriptor set layout (edges + area/search LUT)
     std::cout << "Creating SMAA weight descriptor set layout..." << std::endl;
-    std::array<VkDescriptorSetLayoutBinding, 3> smaaWeightBindings{};
-    smaaWeightBindings[0].binding = 0;
-    smaaWeightBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    smaaWeightBindings[0].descriptorCount = 1;
-    smaaWeightBindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    smaaWeightBindings[1].binding = 1;
-    smaaWeightBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    smaaWeightBindings[1].descriptorCount = 1;
-    smaaWeightBindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    smaaWeightBindings[2].binding = 2;
-    smaaWeightBindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    smaaWeightBindings[2].descriptorCount = 1;
-    smaaWeightBindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutCreateInfo smaaWeightLayoutInfo{};
-    smaaWeightLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    smaaWeightLayoutInfo.bindingCount = static_cast<uint32_t>(smaaWeightBindings.size());
-    smaaWeightLayoutInfo.pBindings = smaaWeightBindings.data();
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &smaaWeightLayoutInfo, nullptr, &smaaWeightSetLayout) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("failed to create SMAA weight descriptor set layout!");
-    }
+    smaaWeightSetLayout = createDescriptorSetLayout(
+        device, {
+                    layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)smaaWeightSetLayout, "SMAAWeightDescriptorSetLayout");
     std::cout << "SMAA weight descriptor set layout created successfully." << std::endl;
 
     // SMAA blend descriptor set layout (compositionColor + blend weights)
     std::cout << "Creating SMAA blend descriptor set layout..." << std::endl;
-    std::array<VkDescriptorSetLayoutBinding, 2> smaaBlendBindings{};
-    smaaBlendBindings[0].binding = 0;
-    smaaBlendBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    smaaBlendBindings[0].descriptorCount = 1;
-    smaaBlendBindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    smaaBlendBindings[1].binding = 1;
-    smaaBlendBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    smaaBlendBindings[1].descriptorCount = 1;
-    smaaBlendBindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutCreateInfo smaaBlendLayoutInfo{};
-    smaaBlendLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    smaaBlendLayoutInfo.bindingCount = static_cast<uint32_t>(smaaBlendBindings.size());
-    smaaBlendLayoutInfo.pBindings = smaaBlendBindings.data();
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &smaaBlendLayoutInfo, nullptr, &smaaBlendSetLayout) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("failed to create SMAA blend descriptor set layout!");
-    }
+    smaaBlendSetLayout = createDescriptorSetLayout(
+        device, {
+                    layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)smaaBlendSetLayout, "SMAABlendDescriptorSetLayout");
     std::cout << "SMAA blend descriptor set layout created successfully." << std::endl;
 
     // Color correction descriptor set layout (post-AA color input)
     std::cout << "Creating color correction descriptor set layout..." << std::endl;
-    VkDescriptorSetLayoutBinding colorCorrectBinding{};
-    colorCorrectBinding.binding = 0;
-    colorCorrectBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    colorCorrectBinding.descriptorCount = 1;
-    colorCorrectBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutCreateInfo colorCorrectLayoutInfo{};
-    colorCorrectLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    colorCorrectLayoutInfo.bindingCount = 1;
-    colorCorrectLayoutInfo.pBindings = &colorCorrectBinding;
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &colorCorrectLayoutInfo, nullptr, &colorCorrectionSetLayout) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("failed to create color correction descriptor set layout!");
-    }
+    colorCorrectionSetLayout = createDescriptorSetLayout(
+        device, {
+                    layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)colorCorrectionSetLayout,
                  "ColorCorrectionDescriptorSetLayout");
     std::cout << "Color correction descriptor set layout created successfully." << std::endl;
@@ -1305,43 +1049,17 @@ void RenderingResources::createDescriptorSetLayouts() {
     // RC Build descriptor set layout
     std::cout << "Creating RC build descriptor set layout..." << std::endl;
     // NOTE: β is packed into uRadiance alpha (radiance.rgb, beta.a), so we only need one storage atlas array.
-    std::array<VkDescriptorSetLayoutBinding, 8> rcBuildBindings{};
-    // 0: Camera UBO
-    rcBuildBindings[0].binding = 0;
-    rcBuildBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    rcBuildBindings[0].descriptorCount = 1;
-    rcBuildBindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    // 1..4: GBuffer
-    for (uint32_t b = 1; b <= 4; ++b) {
-        rcBuildBindings[b].binding = b;
-        rcBuildBindings[b].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        rcBuildBindings[b].descriptorCount = 1;
-        rcBuildBindings[b].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    }
-    // 5: Depth pyramid (sampled)
-    rcBuildBindings[5].binding = 5;
-    rcBuildBindings[5].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    rcBuildBindings[5].descriptorCount = 1;
-    rcBuildBindings[5].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    // 6: Light pass result (sampled)
-    rcBuildBindings[6].binding = 6;
-    rcBuildBindings[6].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    rcBuildBindings[6].descriptorCount = 1;
-    rcBuildBindings[6].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    // 7: RC Radiance atlases (storage image array)
-    rcBuildBindings[7].binding = 7;
-    rcBuildBindings[7].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    rcBuildBindings[7].descriptorCount = RC_CASCADE_COUNT;
-    rcBuildBindings[7].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    VkDescriptorSetLayoutCreateInfo rcBuildLayoutInfo{};
-    rcBuildLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    rcBuildLayoutInfo.bindingCount = static_cast<uint32_t>(rcBuildBindings.size());
-    rcBuildLayoutInfo.pBindings = rcBuildBindings.data();
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &rcBuildLayoutInfo, nullptr, &rcBuildSetLayout) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create RC build descriptor set layout!");
-    }
+    rcBuildSetLayout = createDescriptorSetLayout(
+        device, {
+                    layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT),
+                    layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
+                    layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
+                    layoutBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
+                    layoutBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
+                    layoutBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
+                    layoutBinding(6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
+                    layoutBinding(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, RC_CASCADE_COUNT),
+                });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)rcBuildSetLayout, "RCBuildDescriptorSetLayout");
     std::cout << "RC build descriptor set layout created successfully." << std::endl;
 
@@ -1349,75 +1067,35 @@ void RenderingResources::createDescriptorSetLayouts() {
     std::cout << "Creating RC resolve descriptor set layout..." << std::endl;
     // NOTE: keep binding numbers stable (skip binding 6) to avoid shifting shader bindings:
     // binding 5 = radiance (rgba16f, beta in alpha), binding 7 = gi out, binding 8/9 = history/prev pos.
-    std::array<VkDescriptorSetLayoutBinding, 9> rcResolveBindings{};
-    // 0: Camera UBO
-    rcResolveBindings[0].binding = 0;
-    rcResolveBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-    rcResolveBindings[0].descriptorCount = 1;
-    rcResolveBindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    // 1..4: GBuffer
-    for (uint32_t b = 1; b <= 4; ++b) {
-        rcResolveBindings[b].binding = b;
-        rcResolveBindings[b].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        rcResolveBindings[b].descriptorCount = 1;
-        rcResolveBindings[b].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    }
-    // 5: RC Radiance (sampled array)
-    rcResolveBindings[5].binding = 5;
-    rcResolveBindings[5].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    rcResolveBindings[5].descriptorCount = RC_CASCADE_COUNT;
-    rcResolveBindings[5].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    // 7: GI output (storage image)
-    rcResolveBindings[6].binding = 7;
-    rcResolveBindings[6].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    rcResolveBindings[6].descriptorCount = 1;
-    rcResolveBindings[6].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    // 8: GI history (sampled image from previous frame for temporal accumulation)
-    rcResolveBindings[7].binding = 8;
-    rcResolveBindings[7].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    rcResolveBindings[7].descriptorCount = 1;
-    rcResolveBindings[7].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    // 9: Previous frame position buffer (for temporal validation)
-    rcResolveBindings[8].binding = 9;
-    rcResolveBindings[8].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    rcResolveBindings[8].descriptorCount = 1;
-    rcResolveBindings[8].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-
-    VkDescriptorSetLayoutCreateInfo rcResolveLayoutInfo{};
-    rcResolveLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    rcResolveLayoutInfo.bindingCount = static_cast<uint32_t>(rcResolveBindings.size());
-    rcResolveLayoutInfo.pBindings = rcResolveBindings.data();
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &rcResolveLayoutInfo, nullptr, &rcResolveSetLayout) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("failed to create RC resolve descriptor set layout!");
-    }
+    rcResolveSetLayout = createDescriptorSetLayout(
+        device, {
+                    layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                                  VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                  VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                  VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                  VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                  VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                  VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, RC_CASCADE_COUNT),
+                    layoutBinding(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT),
+                    layoutBinding(8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
+                    layoutBinding(9, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                  VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+                });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)rcResolveSetLayout, "RCResolveDescriptorSetLayout");
     std::cout << "RC resolve descriptor set layout created successfully." << std::endl;
 
     // Depth pyramid build descriptor set layout (centralized)
     std::cout << "Creating depth pyramid descriptor set layout..." << std::endl;
-    std::array<VkDescriptorSetLayoutBinding, 2> pyrBindings{};
-    // 0: source depth (combined image sampler)
-    pyrBindings[0].binding = 0;
-    pyrBindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    pyrBindings[0].descriptorCount = 1;
-    pyrBindings[0].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-    // 1: destination pyramid mip 0 (storage image)
-    pyrBindings[1].binding = 1;
-    pyrBindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    pyrBindings[1].descriptorCount = 1;
-    pyrBindings[1].stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-    VkDescriptorSetLayoutCreateInfo pyrLayoutInfo{};
-    pyrLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-    pyrLayoutInfo.bindingCount = static_cast<uint32_t>(pyrBindings.size());
-    pyrLayoutInfo.pBindings = pyrBindings.data();
-
-    if (vkCreateDescriptorSetLayout(device.getDevice(), &pyrLayoutInfo, nullptr, &depthPyramidSetLayout) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("failed to create depth pyramid descriptor set layout!");
-    }
+    depthPyramidSetLayout = createDescriptorSetLayout(
+        device, {
+                    layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
+                    layoutBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT),
+                });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)depthPyramidSetLayout,
                  "DepthPyramidDescriptorSetLayout");
     std::cout << "Depth pyramid descriptor set layout created successfully." << std::endl;
