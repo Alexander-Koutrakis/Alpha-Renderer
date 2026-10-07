@@ -648,7 +648,7 @@ void main() {
     vec3 iblDiffuse = skyIrradiance * albedo * kD * ao;
     // Specular IBL (reflection probe / skybox prefilter)
     vec3 iblSpecular = calculateIBLSpecular(normal, viewDir, albedo, roughness, metallic);
-    iblSpecular *= environmentLighting.reflectionIntensity * kS;
+    iblSpecular *= environmentLighting.reflectionIntensity;
 
     vec3 indirect = iblDiffuse + iblSpecular;
     
