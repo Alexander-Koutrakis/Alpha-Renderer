@@ -85,13 +85,26 @@ Branch `init`.
   `cppcoreguidelines-init-variables` is off (it flags locals assigned on every path and API out-parameters; zeroing them would hide real misses).
 - Exit: build clean, tidy clean on touched files, scene still renders identically (screenshot diff).
 
-### Phase 3: Vulkan struct descriptors (your step: "structs everywhere")
-Branch `structs`. Introduce small value structs plus helpers, migrating callers and deleting the old paths as we go:
-- `ImageBarrierDesc` + `cmdTransition()` (31 sites), `DescriptorWriter` (~55 sites), `ImageDesc`/`ImageViewDesc`, `SamplerDesc` presets,
-  `PipelineLayoutDesc`, `RenderPassDesc` (or a decision to move to dynamic rendering, which I would raise with you before starting).
-- Reuse the existing `XPass::CreateInfo` convention so the whole codebase reads one way.
-- Each sub-step is its own commit; the branch can be merged in two or three slices if it gets large.
-- Exit: build clean, screenshot diff vs baseline per slice, validation layers on with zero errors (needs Phase 4 step 1 first, or a local toggle).
+### Phase 3: Vulkan struct descriptors (your step: "structs everywhere") (done)
+Branch `structs`, merged into `main` as slice branches (`barriers`, `descriptors`, `descriptor-writer`, `validation-baseline`, `images`,
+`samplers`, `pipeline-layouts`, `render-passes`), each migrating every site and deleting the old path.
+Changed from the original plan: **native Vulkan structs plus thin helpers, not parallel `ImageDesc`/`SamplerDesc`/`PipelineLayoutDesc`/`RenderPassDesc`
+data models** (decided in `docs/descriptors-plan.md` section 7 and confirmed by the owner). Barriers are the one place that got value structs, because the raw
+struct was 14 fields of ceremony. Render passes were kept; dynamic rendering is parked for Phase 7. Helpers throw `std::runtime_error` with one generic message.
+- Barriers: `ImageBarrierDesc`, `BufferBarrierDesc`, `MemoryBarrierDesc`, `cmdPipelineBarrier` (`Core/barriers.*`), 35 sites.
+- Descriptors: `createDescriptorSetLayout`, `allocateDescriptorSet`, `DescriptorWriter`: 21 layouts, 91 allocations, 228 writes.
+- Images: `imageCreateInfo2D`, `createImageView` (`Core/images.*`): 15 images, 23 views.
+- Samplers: `createSampler` (`Core/samplers.*`): 12 sites.
+- Pipeline layouts: `createPipelineLayout`, `pushConstantRange` (`Core/pipeline_layouts.*`), with `ArrayView` in `Core/array_view.hpp`: 16 sites.
+- Framebuffers and render passes: `createFramebuffer`, `attachmentDescription`, `createRenderPass` (`Core/render_passes.*`): 11 framebuffer sites, 11 passes.
+  Subpass and dependency structs stay native on purpose.
+- Not done from the original bullets: the `XPass::CreateInfo` convention was not touched (the passes keep their own).
+- Gate and proof (all in `docs/handoff.md` section 5): `just check`; `just validation` (needs a GPU; baseline is the two pre-existing
+  `-07988` VUIDs in `scripts/validation_baseline.txt`, so "zero errors" is not yet true and is a Phase 4 item); and five call-log harnesses
+  (`scripts/descriptor_call_log.ps1` with a header per object type) whose before/after diff was empty for every slice.
+- Exit status: build clean, tidy clean, call-log diffs empty, validation at baseline. **Not met: the screenshot diff vs baseline**, because no
+  same-camera screenshots were taken (agents cannot capture the window). Until the owner supplies them, Phase 3 is verified at the
+  Vulkan-object level, not at the pixel level.
 
 ### Phase 4: Correctness and hygiene
 Branch `hygiene`.
@@ -122,7 +135,7 @@ Branch `portable`.
 Split `rendering_resources.cpp` into per-pass resource owners; data-driven pass order in `renderer.cpp`; per-pass GPU timestamps.
 
 ## Open decisions for you
-1. Dynamic rendering and `vkCmdPipelineBarrier2` (Vulkan 1.3) vs keeping render passes: big change, modern-Vulkan payoff. Default: keep render passes in Phase 3, revisit in Phase 7.
+1. Dynamic rendering and `vkCmdPipelineBarrier2` (Vulkan 1.3) vs keeping render passes: decided for Phase 3, render passes kept. Revisit in Phase 7.
 2. Phase 6 dependency strategy: system packages vs FetchContent/vcpkg. Default: FetchContent for GLM/GLFW, system KTX.
-3. Merge style per phase: fast-forward or `--no-ff`.
+3. Merge style per phase: decided, `--no-ff`.
 4. Whether to ship behavior-changing shader fixes in this pass or list them as known issues.
