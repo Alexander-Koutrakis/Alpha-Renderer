@@ -1,4 +1,5 @@
 #include "alpha_engine.hpp"
+#include "Rendering/Core/vk_check.hpp"
 
 #include <chrono>
 #include <iostream>
@@ -50,7 +51,7 @@ void AlphaEngine::run() {
         renderer->run();
     }
 
-    vkDeviceWaitIdle(device->getDevice());
+    VK_CHECK(vkDeviceWaitIdle(device->getDevice()));
 
     // --- Debug: Report stutter frames after the loop ---
     int stutterCount = 0;

@@ -1,6 +1,7 @@
 class AlphaEngine;
 
 #include "renderer.hpp"
+#include "Core/vk_check.hpp"
 #include "Engine/alpha_engine.hpp"
 #include <iostream>
 #include <array>
@@ -40,7 +41,7 @@ void Renderer::recreateSwapChain() {
         }
     }
 
-    vkDeviceWaitIdle(device.getDevice());
+    VK_CHECK(vkDeviceWaitIdle(device.getDevice()));
 
     if (swapChain == nullptr) {
         swapChain = std::make_shared<SwapChain>(device, extent);
@@ -97,7 +98,7 @@ void Renderer::handleWindowResize() {
         return;
     }
 
-    vkDeviceWaitIdle(device.getDevice());
+    VK_CHECK(vkDeviceWaitIdle(device.getDevice()));
 
     // First clean up resources that depend on the swapchain
     cleanupWindowDependentResources();
@@ -129,9 +130,7 @@ void Renderer::createCommandBuffers() {
     allocInfo.commandPool = device.getCommandPool();
     allocInfo.commandBufferCount = static_cast<uint32_t>(commandBuffers.size());
 
-    if (vkAllocateCommandBuffers(device.getDevice(), &allocInfo, commandBuffers.data()) != VK_SUCCESS) {
-        throw std::runtime_error("failed to allocate command buffers!");
-    }
+    VK_CHECK(vkAllocateCommandBuffers(device.getDevice(), &allocInfo, commandBuffers.data()));
 }
 
 void Renderer::freeCommandBuffers() {
@@ -172,9 +171,7 @@ VkCommandBuffer Renderer::beginFrame() {
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-        throw std::runtime_error("failed to begin recording command buffer!");
-    }
+    VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
 
     return commandBuffer;
 }
@@ -190,9 +187,7 @@ void Renderer::endFrame() {
 
     auto commandBuffer = getCurrentCommandBuffer();
 
-    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-        throw std::runtime_error("failed to record command buffer!");
-    }
+    VK_CHECK(vkEndCommandBuffer(commandBuffer));
 
     auto result = swapChain->submitCommandBuffers(&commandBuffer, &currentImageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || window.wasWindowResized()) {

@@ -1,4 +1,5 @@
 #include "swapchain.hpp"
+#include "vk_check.hpp"
 #include "images.hpp"
 
 // std
@@ -49,8 +50,8 @@ SwapChain::~SwapChain() {
 }
 
 VkResult SwapChain::acquireNextImage(uint32_t* imageIndex) {
-    vkWaitForFences(device.getDevice(), 1, &inFlightFences[currentFrame], VK_TRUE,
-                    std::numeric_limits<uint64_t>::max());
+    VK_CHECK(vkWaitForFences(device.getDevice(), 1, &inFlightFences[currentFrame], VK_TRUE,
+                             std::numeric_limits<uint64_t>::max()));
 
     VkResult result = vkAcquireNextImageKHR(device.getDevice(), vkSwapChain, std::numeric_limits<uint64_t>::max(),
                                             imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, imageIndex);
@@ -60,7 +61,7 @@ VkResult SwapChain::acquireNextImage(uint32_t* imageIndex) {
 
 VkResult SwapChain::submitCommandBuffers(const VkCommandBuffer* buffers, uint32_t* imageIndex) {
     if (imagesInFlight[*imageIndex] != VK_NULL_HANDLE) {
-        vkWaitForFences(device.getDevice(), 1, &imagesInFlight[*imageIndex], VK_TRUE, UINT64_MAX);
+        VK_CHECK(vkWaitForFences(device.getDevice(), 1, &imagesInFlight[*imageIndex], VK_TRUE, UINT64_MAX));
     }
     imagesInFlight[*imageIndex] = inFlightFences[currentFrame];
 
@@ -80,10 +81,8 @@ VkResult SwapChain::submitCommandBuffers(const VkCommandBuffer* buffers, uint32_
     submitInfo.signalSemaphoreCount = 1;
     submitInfo.pSignalSemaphores = signalSemaphores;
 
-    vkResetFences(device.getDevice(), 1, &inFlightFences[currentFrame]);
-    if (vkQueueSubmit(device.getGraphicsQueue(), 1, &submitInfo, inFlightFences[currentFrame]) != VK_SUCCESS) {
-        throw std::runtime_error("failed to submit draw command buffer!");
-    }
+    VK_CHECK(vkResetFences(device.getDevice(), 1, &inFlightFences[currentFrame]));
+    VK_CHECK(vkQueueSubmit(device.getGraphicsQueue(), 1, &submitInfo, inFlightFences[currentFrame]));
 
     VkPresentInfoKHR presentInfo = {};
     presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
@@ -146,9 +145,9 @@ void SwapChain::createSwapChain() {
         throw std::runtime_error("failed to create swap chain!");
     }
 
-    vkGetSwapchainImagesKHR(device.getDevice(), vkSwapChain, &imageCount, nullptr);
+    VK_CHECK(vkGetSwapchainImagesKHR(device.getDevice(), vkSwapChain, &imageCount, nullptr));
     swapChainImages.resize(imageCount);
-    vkGetSwapchainImagesKHR(device.getDevice(), vkSwapChain, &imageCount, swapChainImages.data());
+    VK_CHECK(vkGetSwapchainImagesKHR(device.getDevice(), vkSwapChain, &imageCount, swapChainImages.data()));
 
     swapChainImageFormat = surfaceFormat.format;
     swapChainExtent = extent;
