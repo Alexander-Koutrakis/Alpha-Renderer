@@ -154,8 +154,13 @@ if(NOT MSVC)
   endif()
 endif()
 
-# Turns the Vulkan validation layers on (used by scripts/validation_check.ps1; the product build keeps them off).
-option(ALPHA_ENABLE_VALIDATION "Enable Vulkan validation layers" OFF)
+# Vulkan validation layers: on by default in Debug builds, off otherwise. Pass -DALPHA_ENABLE_VALIDATION=ON/OFF to override.
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(ALPHA_VALIDATION_DEFAULT ON)
+else()
+  set(ALPHA_VALIDATION_DEFAULT OFF)
+endif()
+option(ALPHA_ENABLE_VALIDATION "Enable Vulkan validation layers" ${ALPHA_VALIDATION_DEFAULT})
 if(ALPHA_ENABLE_VALIDATION)
   target_compile_definitions(main PRIVATE ALPHA_ENABLE_VALIDATION)
 endif()
