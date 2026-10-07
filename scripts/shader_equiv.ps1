@@ -10,6 +10,7 @@ param(
     [string[]]$Expect = @()
 )
 $ErrorActionPreference = "Stop"
+$Expect = @($Expect | ForEach-Object { $_ -split "," } | Where-Object { $_ })   # `powershell -File` passes a,b as one string
 
 $sdk = $env:VULKAN_SDK
 if (-not $sdk) { throw "VULKAN_SDK is not set" }

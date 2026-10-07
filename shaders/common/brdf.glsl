@@ -19,7 +19,7 @@ float NormalDistributionFunction(vec3 normal, vec3 halfVector, float roughness) 
 /// Fresnel-Schlick approximation with roughness
 /// Models how reflectivity changes at grazing angles
 vec3 FresnelSchlickRoughness(float VdotH, vec3 F0, float roughness) {
-    float Fc = pow(1.0 - VdotH, 5.0);
+    float Fc = pow(clamp(1.0 - VdotH, 0.0, 1.0), 5.0);
     return F0 + (max(vec3(1.0 - roughness), F0) - F0) * Fc;
 }
 

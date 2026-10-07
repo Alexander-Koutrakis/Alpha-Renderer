@@ -385,7 +385,7 @@ float findShadowForPointLight(Light light, vec3 worldPos, vec3 normal) {
     
     vec3 lightPos = light.positionAndData.xyz;
     vec3 lightToFragment = worldPos - lightPos;
-    float lightRange = light.directionAndRange.w;
+    float lightRange = max(light.directionAndRange.w, 0.001);
     float currentDistance = length(lightToFragment);
     float normalizedDistance = currentDistance / lightRange;
     
@@ -446,7 +446,7 @@ float findShadowForPointLight(Light light, vec3 worldPos, vec3 normal) {
     // PCF filtering with Vogel disk
     // =========================================================================
     float distanceBias = normalizedDistance * BASE_DEPTH_BIAS;
-    float slopeBias = sqrt(1.0 - NdotL * NdotL) / max(NdotL, 0.001);
+    float slopeBias = sqrt(max(1.0 - NdotL * NdotL, 0.0)) / max(NdotL, 0.001);
     float bias = BASE_DEPTH_BIAS + distanceBias + min(MAX_SHADOW_BIAS * slopeBias, MAX_SHADOW_BIAS);
     
     const int PCF_SAMPLES = 16;

@@ -75,6 +75,6 @@ void main() {
     } else {
         // Point/Spot - calculate radial depth
         float lightDistance = length(inWorldPos - push.lightPosRange.xyz);
-        gl_FragDepth = lightDistance / push.lightPosRange.w;
+        gl_FragDepth = lightDistance / max(push.lightPosRange.w, 0.001);
     }
 }
