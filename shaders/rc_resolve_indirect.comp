@@ -30,6 +30,7 @@ layout(rgba16f, set = 0, binding = 7) uniform writeonly image2D uGIOut;
 
 layout(set = 0, binding = 8) uniform sampler2D uGIHistory;
 layout(set = 0, binding = 9) uniform sampler2D uPrevGBufferPosition;
+layout(set = 0, binding = 10) uniform sampler2D uPrevGBufferNormal;
 
 layout(set = 1, binding = 0) uniform samplerCube uSkybox;
 
@@ -332,7 +333,7 @@ TemporalResult applyTemporalAccumulation(
     float depthDiff = length(historyPos.xyz - worldPosition);
     float depthConf = 1.0 - smoothstep(TEMPORAL_DEPTH_THRESHOLD * 0.5, TEMPORAL_DEPTH_THRESHOLD, depthDiff);
 
-    vec3 historyNormal = decodeNormal(texelFetch(uGBufferNormal, historyPx, 0).xyz);
+    vec3 historyNormal = decodeNormal(texelFetch(uPrevGBufferNormal, historyPx, 0).xyz);
     float normalDot = dot(normal, historyNormal);
     float normalConf = smoothstep(TEMPORAL_NORMAL_THRESHOLD - 0.1, 0.99, normalDot);
 

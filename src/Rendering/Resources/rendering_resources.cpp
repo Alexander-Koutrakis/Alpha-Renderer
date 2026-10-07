@@ -692,7 +692,7 @@ void RenderingResources::createDescriptorPool() {
     const uint32_t depthPyramidSamplers = MAX_FRAMES_IN_FLIGHT * (1 + pyramidExtraSetsPerFrame); // seed + per-mip
     const uint32_t rcBuildSamplers = MAX_FRAMES_IN_FLIGHT * 6; // gbuffer4 + depth + incident
     const uint32_t rcResolveSamplers =
-        MAX_FRAMES_IN_FLIGHT * (RC_CASCADE_COUNT + 6);                // gbuffer4 + radiance array + history + prev pos
+        MAX_FRAMES_IN_FLIGHT * (RC_CASCADE_COUNT + 7); // gbuffer4 + radiance array + history + prev pos + prev normal
     const uint32_t smaaSamplers = MAX_FRAMES_IN_FLIGHT * (1 + 3 + 2); // edge + weight + blend
     const uint32_t colorCorrectionSamplers = MAX_FRAMES_IN_FLIGHT * 1;
     const uint32_t skyboxSamplers = 1;
@@ -887,7 +887,7 @@ void RenderingResources::createDescriptorSetLayouts() {
 
     // RC Resolve descriptor set layout
     // NOTE: keep binding numbers stable (skip binding 6) to avoid shifting shader bindings:
-    // binding 5 = radiance (rgba16f, beta in alpha), binding 7 = gi out, binding 8/9 = history/prev pos.
+    // binding 5 = radiance (rgba16f, beta in alpha), binding 7 = gi out, binding 8/9/10 = history/prev pos/prev normal.
     rcResolveSetLayout = createDescriptorSetLayout(
         device, {
                     layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -906,6 +906,7 @@ void RenderingResources::createDescriptorSetLayouts() {
                     layoutBinding(8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
                     layoutBinding(9, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                                   VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+                    layoutBinding(10, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)rcResolveSetLayout, "RCResolveDescriptorSetLayout");
 
@@ -1141,7 +1142,7 @@ void RenderingResources::createDescriptorSets() {
         }
 
         // GI history: frame i uses the previous frame's GI output for temporal accumulation, and the previous
-        // frame's position buffer for temporal validation.
+        // frame's position and normal buffers for temporal validation.
         const uint32_t historyFrameIndex = (i + MAX_FRAMES_IN_FLIGHT - 1) % MAX_FRAMES_IN_FLIGHT;
 
         DescriptorWriter resolveWriter;
@@ -1156,6 +1157,9 @@ void RenderingResources::createDescriptorSets() {
                    {lightPassSampler, giIndirectViews[historyFrameIndex], VK_IMAGE_LAYOUT_GENERAL})
             .image(9, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                    {gBuffer->getSampler(), gBuffer->getPositionView(historyFrameIndex),
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+            .image(10, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {gBuffer->getSampler(), gBuffer->getNormalView(historyFrameIndex),
                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .update(device, rcResolveDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)rcResolveDescriptorSets[i],
