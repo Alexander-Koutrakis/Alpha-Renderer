@@ -1,6 +1,8 @@
 #include "light_pass.hpp"
 #include "ECS/ecs.hpp"
 #include "Rendering/Core/barriers.hpp"
+#include "Rendering/Core/pipeline_layouts.hpp"
+#include "Rendering/Core/render_passes.hpp"
 #include <array>
 #include <stdexcept>
 #include <iostream>
@@ -65,15 +67,9 @@ void LightPass::run(FrameContext& frameContext) {
 }
 
 void LightPass::createRenderPass(const CreateInfo& createInfo) {
-    VkAttachmentDescription colorAttachment{};
-    colorAttachment.format = createInfo.lightPassFormat;
-    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkAttachmentDescription colorAttachment =
+        attachmentDescription(createInfo.lightPassFormat, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+                              VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     VkAttachmentDescription incidentAttachment = colorAttachment;
 
@@ -109,37 +105,15 @@ void LightPass::createRenderPass(const CreateInfo& createInfo) {
 
     std::array<VkAttachmentDescription, 2> attachments{colorAttachment, incidentAttachment};
 
-    VkRenderPassCreateInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-    renderPassInfo.pAttachments = attachments.data();
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-    renderPassInfo.pDependencies = dependencies.data();
-
-    if (vkCreateRenderPass(device.getDevice(), &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create light pass render pass!");
-    }
+    renderPass = Rendering::createRenderPass(device.getDevice(), attachments, subpass, dependencies);
 }
 
 void LightPass::createFramebuffers(const CreateInfo& createInfo) {
     std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> imageViews = *createInfo.lightPassResultViewsPtr;
     std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> incidentViews = *createInfo.lightIncidentViewsPtr;
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VkImageView attachments[2] = {imageViews[i], incidentViews[i]};
-        VkFramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = renderPass;
-        framebufferInfo.attachmentCount = 2;
-        framebufferInfo.pAttachments = attachments;
-        framebufferInfo.width = width;
-        framebufferInfo.height = height;
-        framebufferInfo.layers = 1;
-
-        if (vkCreateFramebuffer(device.getDevice(), &framebufferInfo, nullptr, &framebuffers[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create framebuffer!");
-        }
+        framebuffers[i] =
+            createFramebuffer(device.getDevice(), renderPass, {imageViews[i], incidentViews[i]}, width, height);
     }
 }
 
@@ -152,16 +126,7 @@ void LightPass::createPipeline(const CreateInfo& createInfo) {
                                                      createInfo.enviromentalReflectionsSetLayout,
                                                      createInfo.cascadeSplitsSetLayout};
 
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-    pipelineLayoutInfo.pSetLayouts = setLayouts.data();
-    pipelineLayoutInfo.pushConstantRangeCount = 0;
-    pipelineLayoutInfo.pPushConstantRanges = nullptr;
-
-    if (vkCreatePipelineLayout(device.getDevice(), &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create pipeline layout!");
-    }
+    pipelineLayout = createPipelineLayout(device.getDevice(), setLayouts);
     // Create pipeline configuration
     PipelineConfigInfo pipelineConfig{};
     Pipeline::defaultPipelineConfigInfo(pipelineConfig);

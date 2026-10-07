@@ -1,5 +1,7 @@
 #include "shadow_pass.hpp"
 #include "Rendering/Core/barriers.hpp"
+#include "Rendering/Core/pipeline_layouts.hpp"
+#include "Rendering/Core/render_passes.hpp"
 #include "Rendering/Resources/mesh.hpp"
 #include <stdexcept>
 #include <iostream>
@@ -66,15 +68,9 @@ void ShadowPass::cleanup() {
 }
 
 void ShadowPass::createRenderPass() {
-    VkAttachmentDescription depthAttachment{};
-    depthAttachment.format = depthFormat;
-    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    depthAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkAttachmentDescription depthAttachment =
+        attachmentDescription(depthFormat, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+                              VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     VkAttachmentReference depthReference{};
     depthReference.attachment = 0;
@@ -105,77 +101,31 @@ void ShadowPass::createRenderPass() {
     dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
     dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
-    VkRenderPassCreateInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = 1;
-    renderPassInfo.pAttachments = &depthAttachment;
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-    renderPassInfo.pDependencies = dependencies.data();
-
-    if (vkCreateRenderPass(device.getDevice(), &renderPassInfo, nullptr, &shadowRenderPass) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create shadow render pass!");
-    }
+    shadowRenderPass = Rendering::createRenderPass(device.getDevice(), depthAttachment, subpass, dependencies);
 }
 
 void ShadowPass::createPipelines(const CreateInfo& createInfo) {
-    VkPushConstantRange directionalPushConstant{};
-    directionalPushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    directionalPushConstant.offset = 0;
-    directionalPushConstant.size = sizeof(InstancedPushConstants);
-
-    VkPushConstantRange spotPushConstant{};
-    spotPushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    spotPushConstant.offset = 0;
-    spotPushConstant.size = sizeof(InstancedPushConstants);
-
-    VkPushConstantRange pointPushConstant{};
-    pointPushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    pointPushConstant.offset = 0;
-    pointPushConstant.size = sizeof(InstancedPushConstants);
-
     //Directional light layout
     std::array<VkDescriptorSetLayout, 3> setLayouts = {createInfo.lightMatrixDescriptorSetLayout,
                                                        createInfo.shadowModelMatrixDescriptorSetLayout,
                                                        createInfo.materialDescriptorSetLayout};
 
-    VkPipelineLayoutCreateInfo directionalLayoutInfo{};
-    directionalLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    directionalLayoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-    directionalLayoutInfo.pSetLayouts = setLayouts.data();
-    directionalLayoutInfo.pushConstantRangeCount = 1;
-    directionalLayoutInfo.pPushConstantRanges = &directionalPushConstant;
-
     //Spot light layout
-    VkPipelineLayoutCreateInfo spotLayoutInfo{};
-    spotLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    spotLayoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-    spotLayoutInfo.pSetLayouts = setLayouts.data();
-    spotLayoutInfo.pushConstantRangeCount = 1;
-    spotLayoutInfo.pPushConstantRanges = &spotPushConstant;
 
     //Point light layout
-    VkPipelineLayoutCreateInfo pointLayoutInfo{};
-    pointLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pointLayoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-    pointLayoutInfo.pSetLayouts = setLayouts.data();
-    pointLayoutInfo.pushConstantRangeCount = 1;
-    pointLayoutInfo.pPushConstantRanges = &pointPushConstant;
 
     //Create pipeline layouts
-    if (vkCreatePipelineLayout(device.getDevice(), &directionalLayoutInfo, nullptr, &directionalPipelineLayout) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("failed to create instanced pipeline layout!");
-    }
+    directionalPipelineLayout = createPipelineLayout(
+        device.getDevice(), setLayouts,
+        pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(InstancedPushConstants)));
 
-    if (vkCreatePipelineLayout(device.getDevice(), &spotLayoutInfo, nullptr, &spotPipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create instanced pipeline layout!");
-    }
+    spotPipelineLayout = createPipelineLayout(
+        device.getDevice(), setLayouts,
+        pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(InstancedPushConstants)));
 
-    if (vkCreatePipelineLayout(device.getDevice(), &pointLayoutInfo, nullptr, &pointPipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create instanced pipeline layout!");
-    }
+    pointPipelineLayout = createPipelineLayout(
+        device.getDevice(), setLayouts,
+        pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(InstancedPushConstants)));
 
     // Create pipeline configuration
     PipelineConfigInfo pipelineConfig{};
@@ -563,18 +513,7 @@ void ShadowPass::cleanupFramebuffers() {
 
 void ShadowPass::createShadowFramebuffer(VkImageView imageView, uint32_t width, uint32_t height, uint32_t layers,
                                          VkFramebuffer& framebuffer) {
-    VkFramebufferCreateInfo framebufferInfo{};
-    framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-    framebufferInfo.renderPass = shadowRenderPass;
-    framebufferInfo.attachmentCount = 1;
-    framebufferInfo.pAttachments = &imageView;
-    framebufferInfo.width = width;
-    framebufferInfo.height = height;
-    framebufferInfo.layers = layers;
-
-    if (vkCreateFramebuffer(device.getDevice(), &framebufferInfo, nullptr, &framebuffer) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create shadow framebuffer!");
-    }
+    framebuffer = createFramebuffer(device.getDevice(), shadowRenderPass, imageView, width, height, layers);
 }
 
 } // namespace Rendering

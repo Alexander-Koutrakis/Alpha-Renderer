@@ -1,5 +1,7 @@
 #include "rendering_resources.hpp"
 #include "Rendering/Core/barriers.hpp"
+#include "Rendering/Core/images.hpp"
+#include "Rendering/Core/samplers.hpp"
 #include <stdexcept>
 #include <iostream>
 #include <algorithm>
@@ -116,40 +118,16 @@ void RenderingResources::findResourcesFormats() {
 }
 
 void RenderingResources::createDepthResources() {
-    VkImageCreateInfo imageInfo{};
-    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.extent.width = width;
-    imageInfo.extent.height = height;
-    imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = 1;
-    imageInfo.arrayLayers = 1;
-    imageInfo.format = depthFormat;
-    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    VkImageCreateInfo imageInfo = imageCreateInfo2D(
+        width, height, depthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         // Create depth image
         device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImages[i], depthMemories[i]);
 
         // Create depth image view
-        VkImageViewCreateInfo viewInfo{};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = depthImages[i];
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = depthFormat;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(device.getDevice(), &viewInfo, nullptr, &depthViews[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create depth image view!");
-        }
+        depthViews[i] = createImageView(device.getDevice(), depthImages[i], depthFormat, VK_IMAGE_VIEW_TYPE_2D,
+                                        VK_IMAGE_ASPECT_DEPTH_BIT);
 
         // Set debug names
         setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)depthImages[i], "DepthImage_Frame" + std::to_string(i));
@@ -175,60 +153,26 @@ void RenderingResources::createDepthPyramidResources() {
     const uint32_t mipLevels = requested == 0 ? maxPossible : std::min(requested, maxPossible);
 
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VkImageCreateInfo imageInfo{};
-        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.extent.width = width;
-        imageInfo.extent.height = height;
-        imageInfo.extent.depth = 1;
-        imageInfo.mipLevels = mipLevels;
-        imageInfo.arrayLayers = 1;
-        imageInfo.format = depthPyramidFormat;
-        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
-                          VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        VkImageCreateInfo imageInfo =
+            imageCreateInfo2D(width, height, depthPyramidFormat,
+                              VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT |
+                                  VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
+                              mipLevels);
 
         device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthPyramidImages[i],
                                    depthPyramidMemories[i]);
 
-        VkImageViewCreateInfo viewInfo{};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = depthPyramidImages[i];
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = depthPyramidFormat;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = mipLevels;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(device.getDevice(), &viewInfo, nullptr, &depthPyramidViews[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create depth pyramid image view!");
-        }
+        depthPyramidViews[i] = createImageView(device.getDevice(), depthPyramidImages[i], depthPyramidFormat,
+                                               VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels);
 
         depthPyramidMipLevels[i] = mipLevels;
 
         // Create per-mip views for all mips (0..mipLevels-1); used for both storage and sampling
         depthPyramidMipStorageViews[i].resize(mipLevels, VK_NULL_HANDLE);
         for (uint32_t m = 0; m < mipLevels; ++m) {
-            VkImageViewCreateInfo mipViewInfo{};
-            mipViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            mipViewInfo.image = depthPyramidImages[i];
-            mipViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            mipViewInfo.format = depthPyramidFormat;
-            mipViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            mipViewInfo.subresourceRange.baseMipLevel = m;
-            mipViewInfo.subresourceRange.levelCount = 1;
-            mipViewInfo.subresourceRange.baseArrayLayer = 0;
-            mipViewInfo.subresourceRange.layerCount = 1;
-
-            if (vkCreateImageView(device.getDevice(), &mipViewInfo, nullptr, &depthPyramidMipStorageViews[i][m]) !=
-                VK_SUCCESS) {
-                throw std::runtime_error("failed to create depth pyramid per-mip storage image view");
-            }
+            depthPyramidMipStorageViews[i][m] =
+                createImageView(device.getDevice(), depthPyramidImages[i], depthPyramidFormat, VK_IMAGE_VIEW_TYPE_2D,
+                                VK_IMAGE_ASPECT_COLOR_BIT, m);
 
             setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)depthPyramidMipStorageViews[i][m],
                          "DepthPyramidMipView_Frame" + std::to_string(i) + "_Mip" + std::to_string(m));
@@ -257,27 +201,9 @@ void RenderingResources::createDepthPyramidResources() {
     // IMPORTANT: depth comparisons must be done with point sampling to avoid mixing geometry depth
     // with far-plane ("sky") depth near edges, which produces banding/missing-hit artifacts.
     if (depthPyramidSampler == VK_NULL_HANDLE) {
-        VkSamplerCreateInfo samplerInfo{};
-        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_NEAREST;
-        samplerInfo.minFilter = VK_FILTER_NEAREST;
-        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.anisotropyEnable = VK_FALSE;
-        samplerInfo.maxAnisotropy = 1.0f;
-        samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-        samplerInfo.unnormalizedCoordinates = VK_FALSE;
-        samplerInfo.compareEnable = VK_FALSE;
-        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-        samplerInfo.mipLodBias = 0.0f;
-        samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = static_cast<float>(mipLevels);
-
-        if (vkCreateSampler(device.getDevice(), &samplerInfo, nullptr, &depthPyramidSampler) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create depth pyramid sampler!");
-        }
+        depthPyramidSampler = createSampler(device.getDevice(), VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_NEAREST,
+                                            VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+                                            static_cast<float>(mipLevels));
         setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)depthPyramidSampler, "DepthPyramidSampler");
     }
 
@@ -287,64 +213,20 @@ void RenderingResources::createDepthPyramidResources() {
 void RenderingResources::createLightPassResources() {
     std::cout << "Creating light pass resources" << std::endl;
     // Create a sampler for the light pass result
-    VkSamplerCreateInfo samplerInfo{};
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = VK_FILTER_LINEAR;
-    samplerInfo.minFilter = VK_FILTER_LINEAR;
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.anisotropyEnable = VK_FALSE;
-    samplerInfo.maxAnisotropy = 1.0f;
-    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-    samplerInfo.compareEnable = VK_FALSE;
-    samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    samplerInfo.mipLodBias = 0.0f;
-    samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = 0.0f;
-
-    if (vkCreateSampler(device.getDevice(), &samplerInfo, nullptr, &lightPassSampler) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create light pass sampler!");
-    }
+    lightPassSampler = createSampler(device.getDevice(), VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR,
+                                     VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK, 0.0f);
 
     std::cout << "Light pass sampler created" << std::endl;
     // Create light pass render target images
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VkImageCreateInfo imageInfo{};
-        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.extent.width = width;
-        imageInfo.extent.height = height;
-        imageInfo.extent.depth = 1;
-        imageInfo.mipLevels = 1;
-        imageInfo.arrayLayers = 1;
-        imageInfo.format = hdrFormat;
-        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        VkImageCreateInfo imageInfo = imageCreateInfo2D(
+            width, height, hdrFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 
         device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, lightPassResultImages[i],
                                    lightPassResultMemories[i]);
 
         // Create image view
-        VkImageViewCreateInfo viewInfo{};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = lightPassResultImages[i];
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = hdrFormat;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(device.getDevice(), &viewInfo, nullptr, &lightPassResultViews[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create light pass image view!");
-        }
+        lightPassResultViews[i] = createImageView(device.getDevice(), lightPassResultImages[i], hdrFormat);
 
         // Set debug names
         setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)lightPassResultImages[i],
@@ -358,10 +240,7 @@ void RenderingResources::createLightPassResources() {
         device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, lightIncidentImages[i],
                                    lightIncidentMemories[i]);
 
-        viewInfo.image = lightIncidentImages[i];
-        if (vkCreateImageView(device.getDevice(), &viewInfo, nullptr, &lightIncidentViews[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create light incident image view!");
-        }
+        lightIncidentViews[i] = createImageView(device.getDevice(), lightIncidentImages[i], hdrFormat);
         setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)lightIncidentImages[i],
                      "LightIncidentImage_Frame" + std::to_string(i));
         setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)lightIncidentViews[i],
@@ -1478,73 +1357,22 @@ void RenderingResources::createShadowMapResources() {
 
 void RenderingResources::createTransparencyResources() {
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VkImageCreateInfo accumulationImageInfo{};
-        accumulationImageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        accumulationImageInfo.imageType = VK_IMAGE_TYPE_2D;
-        accumulationImageInfo.extent.width = width;
-        accumulationImageInfo.extent.height = height;
-        accumulationImageInfo.extent.depth = 1;
-        accumulationImageInfo.mipLevels = 1;
-        accumulationImageInfo.arrayLayers = 1;
-        accumulationImageInfo.format = hdrFormat;
-        accumulationImageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        accumulationImageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        accumulationImageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        accumulationImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        accumulationImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        VkImageCreateInfo accumulationImageInfo = imageCreateInfo2D(
+            width, height, hdrFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 
         device.createImageWithInfo(accumulationImageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, accumulationImages[i],
                                    accumulationMemories[i]);
 
-        VkImageViewCreateInfo accumulationViewInfo{};
-        accumulationViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        accumulationViewInfo.image = accumulationImages[i];
-        accumulationViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        accumulationViewInfo.format = hdrFormat;
-        accumulationViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        accumulationViewInfo.subresourceRange.baseMipLevel = 0;
-        accumulationViewInfo.subresourceRange.levelCount = 1;
-        accumulationViewInfo.subresourceRange.baseArrayLayer = 0;
-        accumulationViewInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(device.getDevice(), &accumulationViewInfo, nullptr, &accumulationViews[i]) !=
-            VK_SUCCESS) {
-            throw std::runtime_error("failed to create accumulation image view!");
-        }
+        accumulationViews[i] = createImageView(device.getDevice(), accumulationImages[i], hdrFormat);
 
         // Create revealage texture (R8)
-        VkImageCreateInfo revealageImageInfo{};
-        revealageImageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        revealageImageInfo.imageType = VK_IMAGE_TYPE_2D;
-        revealageImageInfo.extent.width = width;
-        revealageImageInfo.extent.height = height;
-        revealageImageInfo.extent.depth = 1;
-        revealageImageInfo.mipLevels = 1;
-        revealageImageInfo.arrayLayers = 1;
-        revealageImageInfo.format = revealageFormat;
-        revealageImageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        revealageImageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        revealageImageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        revealageImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        revealageImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        VkImageCreateInfo revealageImageInfo = imageCreateInfo2D(
+            width, height, revealageFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 
         device.createImageWithInfo(revealageImageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, revealageImages[i],
                                    revealageMemories[i]);
 
-        VkImageViewCreateInfo revealageViewInfo{};
-        revealageViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        revealageViewInfo.image = revealageImages[i];
-        revealageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        revealageViewInfo.format = revealageFormat;
-        revealageViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        revealageViewInfo.subresourceRange.baseMipLevel = 0;
-        revealageViewInfo.subresourceRange.levelCount = 1;
-        revealageViewInfo.subresourceRange.baseArrayLayer = 0;
-        revealageViewInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(device.getDevice(), &revealageViewInfo, nullptr, &revealageViews[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create revealage image view!");
-        }
+        revealageViews[i] = createImageView(device.getDevice(), revealageImages[i], revealageFormat);
 
         // Set debug names for transparency resources
         setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)accumulationImages[i],
@@ -1564,38 +1392,14 @@ void RenderingResources::createTransparencyResources() {
 void RenderingResources::createGIResources() {
     // Create per-frame GI indirect images and views
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VkImageCreateInfo imageInfo{};
-        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.extent.width = width;
-        imageInfo.extent.height = height;
-        imageInfo.extent.depth = 1;
-        imageInfo.mipLevels = 1;
-        imageInfo.arrayLayers = 1;
-        imageInfo.format = giIndirectFormat;
-        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        VkImageCreateInfo imageInfo = imageCreateInfo2D(width, height, giIndirectFormat,
+                                                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
+                                                            VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
 
         device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, giIndirectImages[i],
                                    giIndirectMemories[i]);
 
-        VkImageViewCreateInfo viewInfo{};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = giIndirectImages[i];
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = giIndirectFormat;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(device.getDevice(), &viewInfo, nullptr, &giIndirectViews[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create GI indirect image view!");
-        }
+        giIndirectViews[i] = createImageView(device.getDevice(), giIndirectImages[i], giIndirectFormat);
 
         // Set debug names
         setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)giIndirectImages[i], "GIIndirectImage_Frame" + std::to_string(i));
@@ -1616,60 +1420,18 @@ void RenderingResources::createGIResources() {
 
 void RenderingResources::createPostProcessResources() {
     // Shared sampler for post-process textures (linear clamp)
-    VkSamplerCreateInfo samplerInfo{};
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = VK_FILTER_LINEAR;
-    samplerInfo.minFilter = VK_FILTER_LINEAR;
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.anisotropyEnable = VK_FALSE;
-    samplerInfo.maxAnisotropy = 1.0f;
-    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-    samplerInfo.compareEnable = VK_FALSE;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = 0.0f;
-
-    if (vkCreateSampler(device.getDevice(), &samplerInfo, nullptr, &postProcessSampler) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create post-process sampler!");
-    }
+    postProcessSampler = createSampler(device.getDevice(), VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR,
+                                       VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK, 0.0f);
     setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)postProcessSampler, "PostProcessSampler");
 
     auto makeColorImage = [&](VkFormat format, VkImage& image, VkDeviceMemory& memory, VkImageView& view,
                               const std::string& name) {
-        VkImageCreateInfo imageInfo{};
-        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.extent.width = width;
-        imageInfo.extent.height = height;
-        imageInfo.extent.depth = 1;
-        imageInfo.mipLevels = 1;
-        imageInfo.arrayLayers = 1;
-        imageInfo.format = format;
-        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        VkImageCreateInfo imageInfo =
+            imageCreateInfo2D(width, height, format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 
         device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, memory);
 
-        VkImageViewCreateInfo viewInfo{};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = image;
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = format;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(device.getDevice(), &viewInfo, nullptr, &view) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create post-process image view: " + name);
-        }
+        view = createImageView(device.getDevice(), image, format);
 
         setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)image, name + "_Image");
         setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)view, name + "_View");
@@ -1701,20 +1463,9 @@ void RenderingResources::loadSMAALUTTextures() {
         stagingBuffer.writeToBuffer(data, imageSize);
 
         // Create image with exactly 1 mip level
-        VkImageCreateInfo imageInfo{};
-        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.extent.width = w;
-        imageInfo.extent.height = h;
-        imageInfo.extent.depth = 1;
-        imageInfo.mipLevels = 1; // Critical: no mipmaps for SMAA LUTs
-        imageInfo.arrayLayers = 1;
-        imageInfo.format = format;
-        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        // Critical: no mipmaps for SMAA LUTs
+        VkImageCreateInfo imageInfo =
+            imageCreateInfo2D(w, h, format, VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT);
 
         device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, outImage, outMemory);
 
@@ -1749,20 +1500,7 @@ void RenderingResources::loadSMAALUTTextures() {
         device.endSingleTimeCommands(cmd);
 
         // Create image view
-        VkImageViewCreateInfo viewInfo{};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = outImage;
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = format;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(device.getDevice(), &viewInfo, nullptr, &outView) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create SMAA LUT image view");
-        }
+        outView = createImageView(device.getDevice(), outImage, format);
 
         setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)outImage, name + "_Image");
         setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)outView, name + "_View");
@@ -1775,27 +1513,9 @@ void RenderingResources::loadSMAALUTTextures() {
 
     // Create sampler for Area texture: LINEAR filtering, CLAMP_TO_EDGE
     {
-        VkSamplerCreateInfo samplerInfo{};
-        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_LINEAR;
-        samplerInfo.minFilter = VK_FILTER_LINEAR;
-        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.anisotropyEnable = VK_FALSE;
-        samplerInfo.maxAnisotropy = 1.0f;
-        samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
-        samplerInfo.unnormalizedCoordinates = VK_FALSE;
-        samplerInfo.compareEnable = VK_FALSE;
-        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-        samplerInfo.mipLodBias = 0.0f;
-        samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 0.0f;
-
-        if (vkCreateSampler(device.getDevice(), &samplerInfo, nullptr, &smaaAreaSampler) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create SMAA Area sampler");
-        }
+        smaaAreaSampler =
+            createSampler(device.getDevice(), VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_NEAREST,
+                          VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK, 0.0f);
         setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)smaaAreaSampler, "SMAA_Area_Sampler");
     }
 
@@ -1806,27 +1526,10 @@ void RenderingResources::loadSMAALUTTextures() {
     // Create sampler for Search texture: NEAREST filtering, CLAMP_TO_EDGE
     // The search texture must use point sampling for correct lookups
     {
-        VkSamplerCreateInfo samplerInfo{};
-        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-        samplerInfo.magFilter = VK_FILTER_NEAREST; // Critical: POINT sampling
-        samplerInfo.minFilter = VK_FILTER_NEAREST;
-        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.anisotropyEnable = VK_FALSE;
-        samplerInfo.maxAnisotropy = 1.0f;
-        samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
-        samplerInfo.unnormalizedCoordinates = VK_FALSE;
-        samplerInfo.compareEnable = VK_FALSE;
-        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-        samplerInfo.mipLodBias = 0.0f;
-        samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 0.0f;
-
-        if (vkCreateSampler(device.getDevice(), &samplerInfo, nullptr, &smaaSearchSampler) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create SMAA Search sampler");
-        }
+        // Critical: POINT sampling
+        smaaSearchSampler =
+            createSampler(device.getDevice(), VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_NEAREST,
+                          VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK, 0.0f);
         setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)smaaSearchSampler, "SMAA_Search_Sampler");
     }
 
@@ -1848,39 +1551,14 @@ void RenderingResources::createRCAtlases() {
 
         for (size_t frame = 0; frame < MAX_FRAMES_IN_FLIGHT; ++frame) {
             // Radiance atlas
-            VkImageCreateInfo radInfo{};
-            radInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-            radInfo.imageType = VK_IMAGE_TYPE_2D;
-            radInfo.extent.width = atlasWidth;
-            radInfo.extent.height = atlasHeight;
-            radInfo.extent.depth = 1;
-            radInfo.mipLevels = 1;
-            radInfo.arrayLayers = 1;
-            radInfo.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-            radInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-            radInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-            radInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-            radInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-            radInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+            VkImageCreateInfo radInfo = imageCreateInfo2D(atlasWidth, atlasHeight, VK_FORMAT_R16G16B16A16_SFLOAT,
+                                                          VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
 
             device.createImageWithInfo(radInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, rcRadianceImages[cascade][frame],
                                        rcRadianceMemories[cascade][frame]);
 
-            VkImageViewCreateInfo radView{};
-            radView.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-            radView.image = rcRadianceImages[cascade][frame];
-            radView.viewType = VK_IMAGE_VIEW_TYPE_2D;
-            radView.format = VK_FORMAT_R16G16B16A16_SFLOAT;
-            radView.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-            radView.subresourceRange.baseMipLevel = 0;
-            radView.subresourceRange.levelCount = 1;
-            radView.subresourceRange.baseArrayLayer = 0;
-            radView.subresourceRange.layerCount = 1;
-
-            if (vkCreateImageView(device.getDevice(), &radView, nullptr, &rcRadianceViews[cascade][frame]) !=
-                VK_SUCCESS) {
-                throw std::runtime_error("failed to create RC radiance atlas view");
-            }
+            rcRadianceViews[cascade][frame] =
+                createImageView(device.getDevice(), rcRadianceImages[cascade][frame], VK_FORMAT_R16G16B16A16_SFLOAT);
 
             // Set debug names
             std::string cascadeFrameStr = "Cascade" + std::to_string(cascade) + "_Frame" + std::to_string(frame);

@@ -84,6 +84,10 @@ add_executable(main
   "src/Rendering/Core/compute_pipeline.cpp"
   "src/Rendering/Core/buffer.cpp"
   "src/Rendering/Core/barriers.cpp"
+  "src/Rendering/Core/images.cpp"
+  "src/Rendering/Core/pipeline_layouts.cpp"
+  "src/Rendering/Core/render_passes.cpp"
+  "src/Rendering/Core/samplers.cpp"
 
   # Rendering Resources
   "src/Rendering/Resources/rendering_resources.cpp"
@@ -148,6 +152,12 @@ if(NOT MSVC)
   if(ALPHA_WARNINGS_AS_ERRORS)
     target_compile_options(main PRIVATE -Werror)
   endif()
+endif()
+
+# Turns the Vulkan validation layers on (used by scripts/validation_check.ps1; the product build keeps them off).
+option(ALPHA_ENABLE_VALIDATION "Enable Vulkan validation layers" OFF)
+if(ALPHA_ENABLE_VALIDATION)
+  target_compile_definitions(main PRIVATE ALPHA_ENABLE_VALIDATION)
 endif()
 
 target_link_libraries(main PRIVATE

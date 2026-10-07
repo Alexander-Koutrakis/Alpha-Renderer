@@ -1,5 +1,7 @@
 #include "transparency_pass.hpp"
 #include "Rendering/Core/barriers.hpp"
+#include "Rendering/Core/pipeline_layouts.hpp"
+#include "Rendering/Core/render_passes.hpp"
 #include <stdexcept>
 #include <array>
 #include <iostream>
@@ -37,37 +39,19 @@ void TransparencyPass::cleanup() {
 
 void TransparencyPass::createRenderPass(const CreateInfo& createInfo) {
     // Color attachment for accumulation buffer
-    VkAttachmentDescription accumulationAttachment{};
-    accumulationAttachment.format = createInfo.hdrFormat;
-    accumulationAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    accumulationAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    accumulationAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    accumulationAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    accumulationAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    accumulationAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    accumulationAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkAttachmentDescription accumulationAttachment =
+        attachmentDescription(createInfo.hdrFormat, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+                              VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     // Color attachment for revealage buffer
-    VkAttachmentDescription revealageAttachment{};
-    revealageAttachment.format = createInfo.revealageFormat;
-    revealageAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    revealageAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    revealageAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    revealageAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    revealageAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    revealageAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    revealageAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    VkAttachmentDescription revealageAttachment =
+        attachmentDescription(createInfo.revealageFormat, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+                              VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
     // Depth attachment (read-only from geometry pass)
-    VkAttachmentDescription depthAttachment{};
-    depthAttachment.format = createInfo.depthFormat;
-    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
-    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-    depthAttachment.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    VkAttachmentDescription depthAttachment = attachmentDescription(
+        createInfo.depthFormat, VK_ATTACHMENT_LOAD_OP_LOAD, VK_ATTACHMENT_STORE_OP_STORE,
+        VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL);
 
     // References for attachment
     VkAttachmentReference accumulationRef{};
@@ -113,18 +97,7 @@ void TransparencyPass::createRenderPass(const CreateInfo& createInfo) {
     // Create render pass
     std::array<VkAttachmentDescription, 3> attachments = {accumulationAttachment, revealageAttachment, depthAttachment};
 
-    VkRenderPassCreateInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-    renderPassInfo.pAttachments = attachments.data();
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-    renderPassInfo.pDependencies = dependencies.data();
-
-    if (vkCreateRenderPass(device.getDevice(), &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create transparency render pass");
-    }
+    renderPass = Rendering::createRenderPass(device.getDevice(), attachments, subpass, dependencies);
 }
 
 void TransparencyPass::createPipeline(const CreateInfo& createInfo) {
@@ -149,23 +122,8 @@ void TransparencyPass::createPipeline(const CreateInfo& createInfo) {
         createInfo.cascadeSplitsDescriptorSetLayout      // Set 7
     };
 
-    VkPipelineLayoutCreateInfo instancedPipelineLayoutInfo{};
-    instancedPipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    instancedPipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
-    instancedPipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
-
-    VkPushConstantRange pushConstant{};
-    pushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    pushConstant.offset = 0;
-    pushConstant.size = sizeof(uint32_t);
-
-    instancedPipelineLayoutInfo.pushConstantRangeCount = 1;
-    instancedPipelineLayoutInfo.pPushConstantRanges = &pushConstant;
-
-    if (vkCreatePipelineLayout(device.getDevice(), &instancedPipelineLayoutInfo, nullptr, &pipelineLayout) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("Failed to create transparency pipeline layout");
-    }
+    pipelineLayout = createPipelineLayout(device.getDevice(), descriptorSetLayouts,
+                                          pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(uint32_t)));
 
     // Pipeline configuration - just the basics for now
     PipelineConfigInfo instancedPipelineConfig{};
@@ -226,18 +184,7 @@ void TransparencyPass::createFramebuffers(const CreateInfo& createInfo) {
             depthViews[i]         // Depth buffer
         };
 
-        VkFramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = renderPass;
-        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        framebufferInfo.pAttachments = attachments.data();
-        framebufferInfo.width = width;
-        framebufferInfo.height = height;
-        framebufferInfo.layers = 1;
-
-        if (vkCreateFramebuffer(device.getDevice(), &framebufferInfo, nullptr, &framebuffers[i]) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to create transparency framebuffer");
-        }
+        framebuffers[i] = createFramebuffer(device.getDevice(), renderPass, attachments, width, height);
     }
 }
 

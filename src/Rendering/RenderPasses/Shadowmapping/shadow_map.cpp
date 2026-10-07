@@ -1,5 +1,7 @@
 #include "shadow_map.hpp"
 #include "Rendering/Core/barriers.hpp"
+#include "Rendering/Core/images.hpp"
+#include "Rendering/Core/samplers.hpp"
 #include <stdexcept>
 
 namespace Rendering {
@@ -52,25 +54,10 @@ void ShadowMap::cleanup() {
 }
 
 void ShadowMap::createResources() {
-    VkImageCreateInfo imageInfo{};
-    imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    imageInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageInfo.extent.width = width;
-    imageInfo.extent.height = height;
-    imageInfo.extent.depth = 1;
-    imageInfo.mipLevels = 1;
-    imageInfo.arrayLayers = arrayLayers;
-    imageInfo.format = depthFormat;
-    imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-    imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-    imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-    // Add flags for cubemap if necessary
-    if (arrayLayers == 6) {
-        imageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
-    }
+    // Cube-compatible when the array holds six faces
+    VkImageCreateInfo imageInfo = imageCreateInfo2D(
+        width, height, depthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, 1,
+        arrayLayers, arrayLayers == 6 ? VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT : 0);
 
     device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage, depthMemory);
 
@@ -86,62 +73,23 @@ void ShadowMap::createResources() {
 }
 
 void ShadowMap::createSampler() {
-    VkSamplerCreateInfo samplerInfo{};
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = VK_FILTER_LINEAR;
-    samplerInfo.minFilter = VK_FILTER_LINEAR;
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.anisotropyEnable = VK_FALSE;
-    samplerInfo.maxAnisotropy = 1.0f;
-    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    samplerInfo.mipLodBias = 0.0f;
-    samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = 1.0f;
-
-    if (vkCreateSampler(device.getDevice(), &samplerInfo, nullptr, &shadowSampler) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create shadow map sampler!");
-    }
+    shadowSampler =
+        Rendering::createSampler(device.getDevice(), VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR,
+                                 VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE, 1.0f);
 }
 
 void ShadowMap::createImageView() {
-    VkImageViewCreateInfo viewInfo{};
-    viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    viewInfo.image = depthImage;
-    viewInfo.viewType = (arrayLayers == 6)  ? VK_IMAGE_VIEW_TYPE_CUBE
-                        : (arrayLayers > 1) ? VK_IMAGE_VIEW_TYPE_2D_ARRAY
-                                            : VK_IMAGE_VIEW_TYPE_2D;
-    viewInfo.format = depthFormat;
-    viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-    viewInfo.subresourceRange.baseMipLevel = 0;
-    viewInfo.subresourceRange.levelCount = 1;
-    viewInfo.subresourceRange.baseArrayLayer = 0;
-    viewInfo.subresourceRange.layerCount = arrayLayers;
-
-    if (vkCreateImageView(device.getDevice(), &viewInfo, nullptr, &depthView) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create shadow map image view!");
-    }
+    depthView = Rendering::createImageView(device.getDevice(), depthImage, depthFormat,
+                                           (arrayLayers == 6)  ? VK_IMAGE_VIEW_TYPE_CUBE
+                                           : (arrayLayers > 1) ? VK_IMAGE_VIEW_TYPE_2D_ARRAY
+                                                               : VK_IMAGE_VIEW_TYPE_2D,
+                                           VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, 0, arrayLayers);
 
     // Create per-layer 2D views for single-layer rendering when arrayLayers > 1
     layerViews.resize(arrayLayers);
     for (uint32_t layer = 0; layer < arrayLayers; ++layer) {
-        VkImageViewCreateInfo layerViewInfo{};
-        layerViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        layerViewInfo.image = depthImage;
-        layerViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        layerViewInfo.format = depthFormat;
-        layerViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        layerViewInfo.subresourceRange.baseMipLevel = 0;
-        layerViewInfo.subresourceRange.levelCount = 1;
-        layerViewInfo.subresourceRange.baseArrayLayer = layer;
-        layerViewInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(device.getDevice(), &layerViewInfo, nullptr, &layerViews[layer]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create shadow map layer image view!");
-        }
+        layerViews[layer] = Rendering::createImageView(device.getDevice(), depthImage, depthFormat,
+                                                       VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_DEPTH_BIT, 0, 1, layer);
     }
 }
 

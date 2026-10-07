@@ -27,6 +27,10 @@ format-check:
 tidy: build
     ./scripts/run_tidy.ps1
 
+# Run the app with validation layers on and compare VUIDs with scripts/validation_baseline.txt (needs a GPU; not in `check`).
+validation:
+    ./scripts/validation_check.ps1
+
 # Toolchain sanity check.
 doctor:
     just --version

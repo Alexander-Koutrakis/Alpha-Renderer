@@ -1,5 +1,7 @@
 #include "geometry_pass.hpp"
 #include "Rendering/Core/barriers.hpp"
+#include "Rendering/Core/pipeline_layouts.hpp"
+#include "Rendering/Core/render_passes.hpp"
 #include <array>
 #include <stdexcept>
 #include <iostream>
@@ -39,47 +41,23 @@ void GeometryPass::cleanup() {
 }
 
 void GeometryPass::createRenderPass(const CreateInfo& createInfo) {
-    std::array<VkAttachmentDescription, 5> attachmentDescriptions{};
-
-    // Position attachment
-    attachmentDescriptions[0].format = createInfo.positionFormat;
-    attachmentDescriptions[0].samples = VK_SAMPLE_COUNT_1_BIT;
-    attachmentDescriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachmentDescriptions[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachmentDescriptions[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachmentDescriptions[0].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-    // Normal attachment
-    attachmentDescriptions[1].format = createInfo.normalFormat;
-    attachmentDescriptions[1].samples = VK_SAMPLE_COUNT_1_BIT;
-    attachmentDescriptions[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachmentDescriptions[1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachmentDescriptions[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachmentDescriptions[1].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-    // Albedo attachment
-    attachmentDescriptions[2].format = createInfo.albedoFormat;
-    attachmentDescriptions[2].samples = VK_SAMPLE_COUNT_1_BIT;
-    attachmentDescriptions[2].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachmentDescriptions[2].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachmentDescriptions[2].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachmentDescriptions[2].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-    // Material attachment
-    attachmentDescriptions[3].format = createInfo.materialFormat;
-    attachmentDescriptions[3].samples = VK_SAMPLE_COUNT_1_BIT;
-    attachmentDescriptions[3].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachmentDescriptions[3].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachmentDescriptions[3].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachmentDescriptions[3].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-    // Depth attachment
-    attachmentDescriptions[4].format = createInfo.depthFormat;
-    attachmentDescriptions[4].samples = VK_SAMPLE_COUNT_1_BIT;
-    attachmentDescriptions[4].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachmentDescriptions[4].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachmentDescriptions[4].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachmentDescriptions[4].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+    std::array<VkAttachmentDescription, 5> attachmentDescriptions = {
+        // Position attachment
+        attachmentDescription(createInfo.positionFormat, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+                              VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
+        // Normal attachment
+        attachmentDescription(createInfo.normalFormat, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+                              VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
+        // Albedo attachment
+        attachmentDescription(createInfo.albedoFormat, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+                              VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
+        // Material attachment
+        attachmentDescription(createInfo.materialFormat, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+                              VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL),
+        // Depth attachment
+        attachmentDescription(createInfo.depthFormat, VK_ATTACHMENT_LOAD_OP_CLEAR, VK_ATTACHMENT_STORE_OP_STORE,
+                              VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL),
+    };
 
     // Attachment references
     std::array<VkAttachmentReference, 4> colorRefs{};
@@ -119,18 +97,7 @@ void GeometryPass::createRenderPass(const CreateInfo& createInfo) {
     dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
     // Create render pass
-    VkRenderPassCreateInfo renderPassInfo{};
-    renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-    renderPassInfo.attachmentCount = static_cast<uint32_t>(attachmentDescriptions.size());
-    renderPassInfo.pAttachments = attachmentDescriptions.data();
-    renderPassInfo.subpassCount = 1;
-    renderPassInfo.pSubpasses = &subpass;
-    renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-    renderPassInfo.pDependencies = dependencies.data();
-
-    if (vkCreateRenderPass(device.getDevice(), &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create render pass!");
-    }
+    renderPass = Rendering::createRenderPass(device.getDevice(), attachmentDescriptions, subpass, dependencies);
 }
 
 void GeometryPass::createFramebuffers(const CreateInfo& createInfo) {
@@ -141,18 +108,7 @@ void GeometryPass::createFramebuffers(const CreateInfo& createInfo) {
             createInfo.gBuffer->getPositionView(i), createInfo.gBuffer->getNormalView(i),
             createInfo.gBuffer->getAlbedoView(i), createInfo.gBuffer->getMaterialView(i), depthViews[i]};
 
-        VkFramebufferCreateInfo framebufferInfo{};
-        framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferInfo.renderPass = renderPass;
-        framebufferInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
-        framebufferInfo.pAttachments = attachments.data();
-        framebufferInfo.width = width;
-        framebufferInfo.height = height;
-        framebufferInfo.layers = 1;
-
-        if (vkCreateFramebuffer(device.getDevice(), &framebufferInfo, nullptr, &framebuffers[i]) != VK_SUCCESS) {
-            throw std::runtime_error("failed to create framebuffer!");
-        }
+        framebuffers[i] = createFramebuffer(device.getDevice(), renderPass, attachments, width, height);
     }
 }
 
@@ -200,22 +156,8 @@ void GeometryPass::createPipeline(const CreateInfo& createInfo) {
                                                        createInfo.modelsDescriptorSetLayout,
                                                        createInfo.materialDescriptorSetLayout};
 
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-    pipelineLayoutInfo.pSetLayouts = setLayouts.data();
-
-    VkPushConstantRange pushConstant{};
-    pushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-    pushConstant.offset = 0;
-    pushConstant.size = sizeof(uint32_t);
-
-    pipelineLayoutInfo.pushConstantRangeCount = 1;
-    pipelineLayoutInfo.pPushConstantRanges = &pushConstant;
-
-    if (vkCreatePipelineLayout(device.getDevice(), &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create pipeline layout!");
-    }
+    pipelineLayout = createPipelineLayout(device.getDevice(), setLayouts,
+                                          pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT, sizeof(uint32_t)));
 
     // Create pipeline configuration
     PipelineConfigInfo pipelineConfig{};
