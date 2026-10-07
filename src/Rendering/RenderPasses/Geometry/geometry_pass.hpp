@@ -12,7 +12,6 @@
 #include "Rendering/Core/frame_context.hpp"
 #include <array>
 
-using namespace ECS;
 namespace Rendering {
 
 class GeometryPass {

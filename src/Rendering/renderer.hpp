@@ -6,14 +6,14 @@
 #include "Rendering/RenderPasses/Shadowmapping/shadow_pass.hpp"
 #include "Rendering/RenderPasses/Geometry/geometry_pass.hpp"
 #include "Rendering/RenderPasses/General/skybox_pass.hpp"
-#include "Rendering/RenderPasses/Direct Lighting/light_pass.hpp"
+#include "Rendering/RenderPasses/direct_lighting/light_pass.hpp"
 #include "Rendering/RenderPasses/Transparency/transparency_pass.hpp"
 #include "Rendering/RenderPasses/Composition/composition_pass.hpp"
-#include "Rendering/RenderPasses/Radiance Cascades/rc_gi_pass.hpp"
+#include "Rendering/RenderPasses/radiance_cascades/rc_gi_pass.hpp"
 #include "Rendering/RenderPasses/SMAA/smaa_edge_pass.hpp"
 #include "Rendering/RenderPasses/SMAA/smaa_weight_pass.hpp"
 #include "Rendering/RenderPasses/SMAA/smaa_blend_pass.hpp"
-#include "Rendering/RenderPasses/Color Correction/color_correction_pass.hpp"
+#include "Rendering/RenderPasses/color_correction/color_correction_pass.hpp"
 #include "Rendering/Resources/gbuffer.hpp"
 #include "Rendering/Core/imgui_manager.hpp"
 #include "Systems/camera_system.hpp"
@@ -103,11 +103,11 @@ private:
     std::unique_ptr<SMAABlendPass> smaaBlendPass;
     std::unique_ptr<ColorCorrectionPass> colorCorrectionPass;
 
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> swapchainImageViews{};
+    std::vector<VkImageView> swapchainImageViews; // one per swapchain image
     std::unique_ptr<ImGuiManager> imguiManager;
 
     uint32_t currentImageIndex{0};
-    size_t currentFrameIndex{0};
+    uint32_t currentFrameIndex{0}; // frame-in-flight slot; the only owner of this counter
     bool isFrameStarted{false};
     bool framebufferResized{false};
 

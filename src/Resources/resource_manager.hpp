@@ -9,11 +9,10 @@
 #include "Rendering/Resources/material.hpp"
 #include "Rendering/Core/swapchain.hpp"
 #include <array>
-using namespace Rendering;
 namespace Resources {
 class ResourceManager {
 public:
-    ResourceManager(Device& device);
+    ResourceManager(Rendering::Device& device);
     ~ResourceManager() = default;
 
     ResourceManager(const ResourceManager&) = delete;
@@ -45,21 +44,21 @@ public:
     void unloadAllCubemaps();
     void cleanup();
 
-    DescriptorPool* getPBRMaterialPool() { return pbrMaterialDescriptorPool.get(); }
+    Rendering::DescriptorPool* getPBRMaterialPool() { return pbrMaterialDescriptorPool.get(); }
     VkDescriptorSetLayout getPBRDescriptorSetLayout() const { return pbrDescriptorSetLayout; }
 
 private:
     void createMaterialDescriptorPool();
     void createPBRDescriptorSetLayout();
 
-    Device& device;
+    Rendering::Device& device;
 
     std::unordered_map<std::string, std::unique_ptr<Rendering::Mesh>> meshes;
     std::unordered_map<std::string, std::unique_ptr<Rendering::Texture>> textures;
     std::unordered_map<std::string, std::unique_ptr<Rendering::Material>> materials;
     std::unordered_map<std::string, std::unique_ptr<Rendering::Texture>> cubemaps;
 
-    std::unique_ptr<DescriptorPool> pbrMaterialDescriptorPool{nullptr};
+    std::unique_ptr<Rendering::DescriptorPool> pbrMaterialDescriptorPool{nullptr};
     VkDescriptorSetLayout pbrDescriptorSetLayout{VK_NULL_HANDLE};
 };
 } // namespace Resources

@@ -6,7 +6,7 @@
 #include "Systems/transform_system.hpp"
 
 namespace Systems {
-class KeyboardMovemenSystem {
+class KeyboardMovementSystem {
 public:
     struct KeyMappings {
         int moveForward = GLFW_KEY_W;
@@ -23,8 +23,7 @@ public:
         int sprint = GLFW_KEY_LEFT_SHIFT;
     };
 
-    KeyboardMovemenSystem(GLFWwindow* window);
-    ~KeyboardMovemenSystem();
+    KeyboardMovementSystem(GLFWwindow* window);
 
     void run(const float deltaTime);
 

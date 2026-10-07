@@ -97,7 +97,7 @@ private:
     std::vector<const char*> getRequiredExtensions();
     bool checkValidationLayerSupport();
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
-    void hasGflwRequiredInstanceExtensions();
+    void hasGlfwRequiredInstanceExtensions();
     bool checkDeviceExtensionSupport(VkPhysicalDevice device);
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
 

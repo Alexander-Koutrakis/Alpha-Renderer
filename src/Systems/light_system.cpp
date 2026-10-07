@@ -1,13 +1,15 @@
 #include "light_system.hpp"
+#include "Engine/log.hpp"
 #include "Rendering/Resources/material.hpp"
 #include "Scene/scene.hpp"
 #include "Systems/bounding_box_system.hpp"
-#include <iostream>
 #include <vector>
 #include <limits>
 #include <algorithm>
 #include <iomanip>
 #include <unordered_set>
+
+using namespace Rendering;
 using namespace ECS;
 using namespace Math;
 
@@ -645,9 +647,8 @@ void LightSystem::updateShadowModelMatrixBuffer(FrameContext& frameContext, Shad
                 VkDeviceSize bytesNeeded = instancesSize * mat4size;
                 VkDeviceSize bufferSize = frameContext.shadowModelMatrixBuffer->getBufferSize();
                 if (modelBufferOffset + bytesNeeded > bufferSize) {
-                    std::cerr << "Shadow model matrix buffer overflow for directional light cascade " << cascadeIndex
-                              << " (needed " << (modelBufferOffset + bytesNeeded) << " bytes, have " << bufferSize
-                              << ")\n";
+                    Log::error("Shadow model matrix buffer overflow for directional light cascade ", cascadeIndex,
+                               " (needed ", (modelBufferOffset + bytesNeeded), " bytes, have ", bufferSize, ")");
                     continue;
                 }
 
@@ -686,8 +687,7 @@ void LightSystem::updateShadowModelMatrixBuffer(FrameContext& frameContext, Shad
             VkDeviceSize bytesNeeded = instancesSize * mat4size;
             VkDeviceSize bufferSize = frameContext.shadowModelMatrixBuffer->getBufferSize();
             if (modelBufferOffset + bytesNeeded > bufferSize) {
-                std::cerr << "Shadow model matrix buffer overflow for spot light (matrixOffset " << matrixOffset
-                          << ")\n";
+                Log::error("Shadow model matrix buffer overflow for spot light (matrixOffset ", matrixOffset, ")");
                 continue;
             }
             frameContext.shadowModelMatrixBuffer->writeToBuffer(instances.data(), instancesSize * mat4size,
@@ -726,8 +726,8 @@ void LightSystem::updateShadowModelMatrixBuffer(FrameContext& frameContext, Shad
                 VkDeviceSize bytesNeeded = instancesSize * mat4size;
                 VkDeviceSize bufferSize = frameContext.shadowModelMatrixBuffer->getBufferSize();
                 if (modelBufferOffset + bytesNeeded > bufferSize) {
-                    std::cerr << "Shadow model matrix buffer overflow for point light face " << faceIndex
-                              << " (matrixOffset " << matrixOffset << ")\n";
+                    Log::error("Shadow model matrix buffer overflow for point light face ", faceIndex,
+                               " (matrixOffset ", matrixOffset, ")");
                     continue;
                 }
                 frameContext.shadowModelMatrixBuffer->writeToBuffer(instances.data(), instancesSize * mat4size,

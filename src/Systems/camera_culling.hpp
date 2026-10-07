@@ -9,13 +9,15 @@ namespace Systems {
 
 class CameraCulling {
 public:
-    static void updateFrameContext(FrameContext& frameContext);
+    static void updateFrameContext(Rendering::FrameContext& frameContext);
 
 private:
-    static void frustumCullRenderers(const ViewFrustum viewFrustum, AABB& frameSceneBounds,
-                                     MeshRenderingData& meshRenderingData);
+    static void frustumCullRenderers(const Math::ViewFrustum viewFrustum, Math::AABB& frameSceneBounds,
+                                     Rendering::MeshRenderingData& meshRenderingData);
 
-    static void updateOpaqueModelBuffers(FrameContext& frameContext, MeshRenderingData& meshRenderingData);
-    static void updateTransparentModelBuffers(FrameContext& frameContext, MeshRenderingData& meshRenderingData);
+    static void updateOpaqueModelBuffers(Rendering::FrameContext& frameContext,
+                                         Rendering::MeshRenderingData& meshRenderingData);
+    static void updateTransparentModelBuffers(Rendering::FrameContext& frameContext,
+                                              Rendering::MeshRenderingData& meshRenderingData);
 };
 } // namespace Systems

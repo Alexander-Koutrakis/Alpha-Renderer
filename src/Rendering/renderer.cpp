@@ -1,8 +1,8 @@
 class AlphaEngine;
 
 #include "renderer.hpp"
+#include "Core/vk_check.hpp"
 #include "Engine/alpha_engine.hpp"
-#include <iostream>
 #include <array>
 
 using namespace ECS;
@@ -40,7 +40,7 @@ void Renderer::recreateSwapChain() {
         }
     }
 
-    vkDeviceWaitIdle(device.getDevice());
+    VK_CHECK(vkDeviceWaitIdle(device.getDevice()));
 
     if (swapChain == nullptr) {
         swapChain = std::make_shared<SwapChain>(device, extent);
@@ -97,7 +97,7 @@ void Renderer::handleWindowResize() {
         return;
     }
 
-    vkDeviceWaitIdle(device.getDevice());
+    VK_CHECK(vkDeviceWaitIdle(device.getDevice()));
 
     // First clean up resources that depend on the swapchain
     cleanupWindowDependentResources();
@@ -129,9 +129,7 @@ void Renderer::createCommandBuffers() {
     allocInfo.commandPool = device.getCommandPool();
     allocInfo.commandBufferCount = static_cast<uint32_t>(commandBuffers.size());
 
-    if (vkAllocateCommandBuffers(device.getDevice(), &allocInfo, commandBuffers.data()) != VK_SUCCESS) {
-        throw std::runtime_error("failed to allocate command buffers!");
-    }
+    VK_CHECK(vkAllocateCommandBuffers(device.getDevice(), &allocInfo, commandBuffers.data()));
 }
 
 void Renderer::freeCommandBuffers() {
@@ -155,7 +153,7 @@ VkCommandBuffer Renderer::beginFrame() {
         return nullptr;
     }
 
-    auto result = swapChain->acquireNextImage(&currentImageIndex);
+    auto result = swapChain->acquireNextImage(currentFrameIndex, &currentImageIndex);
 
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         handleWindowResize();
@@ -172,9 +170,7 @@ VkCommandBuffer Renderer::beginFrame() {
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 
-    if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS) {
-        throw std::runtime_error("failed to begin recording command buffer!");
-    }
+    VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
 
     return commandBuffer;
 }
@@ -190,11 +186,9 @@ void Renderer::endFrame() {
 
     auto commandBuffer = getCurrentCommandBuffer();
 
-    if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS) {
-        throw std::runtime_error("failed to record command buffer!");
-    }
+    VK_CHECK(vkEndCommandBuffer(commandBuffer));
 
-    auto result = swapChain->submitCommandBuffers(&commandBuffer, &currentImageIndex);
+    auto result = swapChain->submitCommandBuffers(currentFrameIndex, &commandBuffer, &currentImageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || window.wasWindowResized()) {
         window.resetWindowResizedFlag();
         handleWindowResize();
@@ -348,9 +342,7 @@ void Renderer::createColorCorrectionPass() {
     const uint32_t w = swapChain->getExtent().width;
     const uint32_t h = swapChain->getExtent().height;
 
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-        swapchainImageViews[i] = swapChain->getImageView(static_cast<uint32_t>(i));
-    }
+    swapchainImageViews = swapChain->getImageViews();
 
     ColorCorrectionPass::CreateInfo info{};
     info.width = w;
@@ -374,8 +366,8 @@ void Renderer::run() {
         return;
     }
 
-    // Get the current frame context (match resources to the acquired swapchain image)
-    FrameContext& frameContext = frameContexts[currentImageIndex];
+    // Get the current frame context (per-frame resources are indexed by frame-in-flight slot)
+    FrameContext& frameContext = frameContexts[currentFrameIndex];
     updateFrameContext(commandBuffer, frameContext);
 
     shadowmapPass->run(frameContext);
@@ -414,7 +406,8 @@ void Renderer::updateFrameContext(VkCommandBuffer commandBuffer, FrameContext& f
     frameContext.cameraData.invProjectionMatrix = glm::inverse(camera.projectionMatrix);
 
     frameContext.commandBuffer = commandBuffer;
-    frameContext.frameIndex = currentImageIndex;
+    frameContext.frameIndex = currentFrameIndex;
+    frameContext.imageIndex = currentImageIndex;
     frameContext.extent = swapChain->getExtent();
     frameContext.frameTime = AlphaEngine::getDeltaTime();
 

@@ -17,7 +17,6 @@
 #include <array>
 #include <unordered_map>
 
-using namespace ECS;
 namespace Rendering {
 
 class ShadowPass {
@@ -86,7 +85,7 @@ private:
     void renderPointLights(FrameContext& frameContext);
     void renderSpotLights(FrameContext& frameContext);
     void beginShadowRenderPass(VkCommandBuffer commandBuffer, uint32_t frameIndex, size_t lightIndex,
-                               LightType lightType, uint32_t layerIndex = 0);
+                               ECS::LightType lightType, uint32_t layerIndex = 0);
 
     void endShadowRenderPass(VkCommandBuffer commandBuffer);
 

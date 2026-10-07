@@ -99,9 +99,9 @@ Each major render pass has detailed documentation:
 | Pass | Description |
 |------|-------------|
 | [Geometry Pass](RenderPasses/Geometry/README.md) | G-Buffer fill with material support |
-| [Direct Lighting](RenderPasses/Direct%20Lighting/README.md) | PBR lighting with shadows and IBL |
+| [Direct Lighting](RenderPasses/direct_lighting/README.md) | PBR lighting with shadows and IBL |
 | [Shadow Mapping](RenderPasses/Shadowmapping/README.md) | Multi-light shadow generation |
-| [Radiance Cascades](RenderPasses/Radiance%20Cascades/README.md) | Screen-space global illumination |
+| [Radiance Cascades](RenderPasses/radiance_cascades/README.md) | Screen-space global illumination |
 | [Transparency](RenderPasses/Transparency/README.md) | Order-independent transparency |
 
 ## Resource Management

@@ -11,7 +11,6 @@
 #include "Rendering/rendering_constants.hpp"
 #include <array>
 
-using namespace ECS;
 namespace Rendering {
 
 class TransparencyPass {

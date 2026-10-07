@@ -11,7 +11,7 @@
 namespace Systems {
 class CameraSystem {
 public:
-    static void run(Window& window);
+    static void run(Rendering::Window& window);
 
     // Camera settings
     static void setFieldOfView(float fovDegrees);

@@ -164,7 +164,7 @@ void RCGIPass::computeCascadeBands() {
     // 4x branching: angular resolution quadruples each cascade (2x per dimension),
     // so interval length must also scale by 4x to maintain the penumbra condition.
     //
-    // Following tutorial formula:
+    // Formula:
     //   interval_scale(c) = 0 for c=0, else 4^c
     //   interval_range(c) = [scale(c), scale(c+1)] * base
     //

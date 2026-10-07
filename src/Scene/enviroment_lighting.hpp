@@ -7,10 +7,10 @@ namespace Scene {
 struct EnvironmentLighting {
     glm::vec3 ambientColor;
     float ambientIntensity;
-    Texture* skyboxTexture{nullptr};
+    Rendering::Texture* skyboxTexture{nullptr};
     float reflectionIntensity;
 
-    EnvironmentLighting(glm::vec3 ambientColor, float ambientIntensity, Texture* skyboxTexture,
+    EnvironmentLighting(glm::vec3 ambientColor, float ambientIntensity, Rendering::Texture* skyboxTexture,
                         float reflectionIntensity)
         : ambientColor(ambientColor),
           ambientIntensity(ambientIntensity),

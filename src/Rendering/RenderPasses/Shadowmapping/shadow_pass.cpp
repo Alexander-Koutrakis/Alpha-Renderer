@@ -4,7 +4,6 @@
 #include "Rendering/Core/render_passes.hpp"
 #include "Rendering/Resources/mesh.hpp"
 #include <stdexcept>
-#include <iostream>
 #include <vector>
 
 using namespace ECS;
@@ -63,8 +62,6 @@ void ShadowPass::cleanup() {
         vkDestroyRenderPass(device.getDevice(), shadowRenderPass, nullptr);
         shadowRenderPass = VK_NULL_HANDLE;
     }
-
-    std::cout << "Shadow pass cleaned up" << std::endl;
 }
 
 void ShadowPass::createRenderPass() {

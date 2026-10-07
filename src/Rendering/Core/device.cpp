@@ -1,8 +1,9 @@
 #include "device.hpp"
+#include "Engine/log.hpp"
+#include "vk_check.hpp"
 
 // std headers
 #include <cstring>
-#include <iostream>
 #include <set>
 #include <unordered_set>
 
@@ -10,27 +11,26 @@ namespace Rendering {
 
 // local callback functions
 static VKAPI_ATTR VkBool32 VKAPI_CALL debugCallback(VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-                                                    VkDebugUtilsMessageTypeFlagsEXT messageType,
+                                                    VkDebugUtilsMessageTypeFlagsEXT /*messageType*/,
                                                     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-                                                    void* pUserData) {
-    (void)messageSeverity;
-    (void)messageType;
-    (void)pUserData;
-    std::cerr << "validation layer: " << pCallbackData->pMessage << std::endl;
+                                                    void* /*pUserData*/) {
+    if (messageSeverity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+        Log::error("validation layer: ", pCallbackData->pMessage);
+    } else {
+        Log::warn("validation layer: ", pCallbackData->pMessage);
+    }
 
     return VK_FALSE;
 }
 
 static VkDebugUtilsMessengerCreateInfoEXT makeDebugMessengerCreateInfo() {
     VkDebugUtilsMessengerCreateInfoEXT createInfo{VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
-    createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT |
-                                 VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-                                 VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
+    createInfo.messageSeverity =
+        VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
     createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
                              VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
                              VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
     createInfo.pfnUserCallback = debugCallback;
-    createInfo.pUserData = nullptr; // Optional
     return createInfo;
 }
 
@@ -64,7 +64,6 @@ Device::Device(Window& window) : window{window} {
 }
 
 Device::~Device() {
-    std::cout << "Device destructor called" << std::endl;
     vkDestroyCommandPool(device_, commandPool, nullptr);
     vkDestroyDevice(device_, nullptr);
 
@@ -111,7 +110,20 @@ void Device::createInstance() {
         throw std::runtime_error("failed to create instance!");
     }
 
-    hasGflwRequiredInstanceExtensions();
+    hasGlfwRequiredInstanceExtensions();
+}
+
+static int deviceTypeRank(VkPhysicalDeviceType type) {
+    switch (type) {
+        case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+            return 3;
+        case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+            return 2;
+        case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+            return 1;
+        default:
+            return 0;
+    }
 }
 
 void Device::pickPhysicalDevice() {
@@ -123,17 +135,19 @@ void Device::pickPhysicalDevice() {
     std::vector<VkPhysicalDevice> devices(deviceCount);
     vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
-    // Prefer NVIDIA GPU
+    // Pick the suitable device with the best type; on a tie the first one enumerated wins.
+    int bestRank = -1;
     for (const auto& device : devices) {
-        VkPhysicalDeviceProperties deviceproperties;
-        vkGetPhysicalDeviceProperties(device, &deviceproperties);
-
-        // Check for NVIDIA GPU
-        if (deviceproperties.vendorID == 0x10DE && isDeviceSuitable(device)) {
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(device, &properties);
+        if (!isDeviceSuitable(device)) {
+            continue;
+        }
+        const int rank = deviceTypeRank(properties.deviceType);
+        if (rank > bestRank) {
+            bestRank = rank;
             physicalDevice = device;
-            deviceProperties = deviceproperties;
-            std::cout << "physical device: " << deviceProperties.deviceName << std::endl;
-            break;
+            deviceProperties = properties;
         }
     }
 
@@ -142,7 +156,7 @@ void Device::pickPhysicalDevice() {
     }
 
     vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
-    std::cout << "physical device: " << deviceProperties.deviceName << std::endl;
+    Log::info("physical device: ", deviceProperties.deviceName);
 }
 
 void Device::createLogicalDevice() {
@@ -211,6 +225,12 @@ void Device::createSurface() {
 }
 
 bool Device::isDeviceSuitable(VkPhysicalDevice device) {
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(device, &properties);
+    if (properties.apiVersion < VK_API_VERSION_1_3) {
+        return false;
+    }
+
     QueueFamilyIndices indices = findQueueFamilies(device);
 
     bool extensionsSupported = checkDeviceExtensionSupport(device);
@@ -224,7 +244,9 @@ bool Device::isDeviceSuitable(VkPhysicalDevice device) {
     VkPhysicalDeviceFeatures supportedFeatures;
     vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
 
-    return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
+    // Must match the features createLogicalDevice() enables.
+    return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy &&
+           supportedFeatures.independentBlend && supportedFeatures.geometryShader;
 }
 
 void Device::setupDebugMessenger() {
@@ -275,23 +297,23 @@ std::vector<const char*> Device::getRequiredExtensions() {
     return extensions;
 }
 
-void Device::hasGflwRequiredInstanceExtensions() {
+void Device::hasGlfwRequiredInstanceExtensions() {
     uint32_t extensionCount = 0;
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
     std::vector<VkExtensionProperties> extensions(extensionCount);
     vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
 
-    std::cout << "available extensions:" << std::endl;
+    Log::debug("available extensions:");
     std::unordered_set<std::string> available;
     for (const auto& extension : extensions) {
-        std::cout << "\t" << extension.extensionName << std::endl;
+        Log::debug("\t", extension.extensionName);
         available.insert(extension.extensionName);
     }
 
-    std::cout << "required extensions:" << std::endl;
+    Log::debug("required extensions:");
     auto requiredExtensions = getRequiredExtensions();
     for (const auto& required : requiredExtensions) {
-        std::cout << "\t" << required << std::endl;
+        Log::debug("\t", required);
         if (available.find(required) == available.end()) {
             throw std::runtime_error("Missing required glfw extension");
         }
@@ -418,7 +440,7 @@ void Device::createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryP
         throw std::runtime_error("failed to allocate vertex buffer memory!");
     }
 
-    vkBindBufferMemory(device_, buffer, bufferMemory, 0);
+    VK_CHECK(vkBindBufferMemory(device_, buffer, bufferMemory, 0));
 }
 
 VkCommandBuffer Device::beginSingleTimeCommands() {
@@ -429,26 +451,26 @@ VkCommandBuffer Device::beginSingleTimeCommands() {
     allocInfo.commandBufferCount = 1;
 
     VkCommandBuffer commandBuffer;
-    vkAllocateCommandBuffers(device_, &allocInfo, &commandBuffer);
+    VK_CHECK(vkAllocateCommandBuffers(device_, &allocInfo, &commandBuffer));
 
     VkCommandBufferBeginInfo beginInfo{};
     beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-    vkBeginCommandBuffer(commandBuffer, &beginInfo);
+    VK_CHECK(vkBeginCommandBuffer(commandBuffer, &beginInfo));
     return commandBuffer;
 }
 
 void Device::endSingleTimeCommands(VkCommandBuffer commandBuffer) {
-    vkEndCommandBuffer(commandBuffer);
+    VK_CHECK(vkEndCommandBuffer(commandBuffer));
 
     VkSubmitInfo submitInfo{};
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
     submitInfo.commandBufferCount = 1;
     submitInfo.pCommandBuffers = &commandBuffer;
 
-    vkQueueSubmit(graphicsQueue_, 1, &submitInfo, VK_NULL_HANDLE);
-    vkQueueWaitIdle(graphicsQueue_);
+    VK_CHECK(vkQueueSubmit(graphicsQueue_, 1, &submitInfo, VK_NULL_HANDLE));
+    VK_CHECK(vkQueueWaitIdle(graphicsQueue_));
 
     vkFreeCommandBuffers(device_, commandPool, 1, &commandBuffer);
 }

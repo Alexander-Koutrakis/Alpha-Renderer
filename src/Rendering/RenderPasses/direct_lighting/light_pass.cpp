@@ -5,7 +5,6 @@
 #include "Rendering/Core/render_passes.hpp"
 #include <array>
 #include <stdexcept>
-#include <iostream>
 #include <vector>
 
 using namespace ECS;
@@ -43,7 +42,6 @@ void LightPass::cleanup() {
     }
 
     // Clean up descriptor pool and buffers
-    std::cout << "Light pass cleaned up" << std::endl;
 }
 
 void LightPass::run(FrameContext& frameContext) {

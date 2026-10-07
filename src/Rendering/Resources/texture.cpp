@@ -5,7 +5,6 @@
 #include <stdexcept>
 #include "Rendering/Core/buffer.hpp"
 #include <cmath>
-#include <iostream>
 namespace Rendering {
 
 void Texture::setDebugName(VkObjectType objectType, uint64_t handle, const std::string& name) {

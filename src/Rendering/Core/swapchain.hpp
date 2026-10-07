@@ -26,8 +26,9 @@ public:
         return static_cast<float>(swapChainExtent.width) / static_cast<float>(swapChainExtent.height);
     }
 
-    VkResult acquireNextImage(uint32_t* imageIndex);
-    VkResult submitCommandBuffers(const VkCommandBuffer* buffers, uint32_t* imageIndex);
+    // frameIndex is the frame-in-flight slot (0..MAX_FRAMES_IN_FLIGHT-1), owned by the caller.
+    VkResult acquireNextImage(uint32_t frameIndex, uint32_t* imageIndex);
+    VkResult submitCommandBuffers(uint32_t frameIndex, const VkCommandBuffer* buffers, uint32_t* imageIndex);
 
     bool compareSwapFormats(const SwapChain& other) const { return other.swapChainImageFormat == swapChainImageFormat; }
 
@@ -54,10 +55,11 @@ private:
     VkSwapchainKHR vkSwapChain = VK_NULL_HANDLE;
     std::shared_ptr<SwapChain> oldSwapChain;
 
+    // Per frame-in-flight slot.
     std::vector<VkSemaphore> imageAvailableSemaphores;
-    std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkFence> inFlightFences;
+    // Per swapchain image: a present operation holds its semaphore until the image is acquired again.
+    std::vector<VkSemaphore> renderFinishedSemaphores;
     std::vector<VkFence> imagesInFlight;
-    size_t currentFrame = 0;
 };
 } // namespace Rendering

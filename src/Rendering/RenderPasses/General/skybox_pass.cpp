@@ -44,8 +44,6 @@ void SkyboxPass::cleanup() {
 
     // Destroy render pass
     vkDestroyRenderPass(device.getDevice(), renderPass, nullptr);
-
-    std::cout << "Skybox pass cleaned up" << std::endl;
 }
 
 void SkyboxPass::createRenderPass(const CreateInfo& createInfo) {

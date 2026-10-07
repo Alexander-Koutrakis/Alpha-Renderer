@@ -8,19 +8,20 @@
 #define TINYGLTF_NO_STB_IMAGE_WRITE
 
 #include "scene_loader.hpp"
+#include "Engine/log.hpp"
 #include "Rendering/Core/images.hpp"
 #if defined(_MSC_VER)
 #pragma warning(pop)
 #endif
 
 #include <stdexcept>
-#include <iostream>
 #include <filesystem>
-#include <future>
 #include <fstream>
 #include <sstream>
 #include <ktx.h>
 #include <ktxvulkan.h>
+
+using namespace ECS;
 
 namespace Resources {
 
@@ -61,8 +62,8 @@ bool SceneLoader::loadSkyboxCubemap(const std::array<std::string, 6> texturesDir
             float* data = stbi_loadf(path.c_str(), &width, &height, &channels, 4); // Force RGBA
 
             if (!data) {
-                std::cout << "Failed to load face " << vulkanFaceIdx << " (Unity face " << unityFaceIdx << "): " << path
-                          << " - " << stbi_failure_reason() << std::endl;
+                Log::warn("Failed to load face ", vulkanFaceIdx, " (Unity face ", unityFaceIdx, "): ", path, " - ",
+                          stbi_failure_reason());
                 allLoaded = false;
                 break;
             }
@@ -109,11 +110,11 @@ bool SceneLoader::loadSkyboxCubemap(const std::array<std::string, 6> texturesDir
         // Add the cubemap to the resource manager
         resourceManager.addCubemap("skybox", std::move(cubemapTexture));
 
-        std::cout << "Skybox loaded successfully" << std::endl;
+        Log::info("Skybox loaded successfully");
         return true;
 
     } catch (const std::exception& e) {
-        std::cerr << "Failed to load skybox cubemap: " << e.what() << std::endl;
+        Log::error("Failed to load skybox cubemap: ", e.what());
         return false;
     }
 }
@@ -124,11 +125,10 @@ void SceneLoader::createSkyboxEntity() {
     skybox.exposure = 1.0f;
     skybox.cubemapTexture = resourceManager.getCubemap("skybox");
     ecsManager.addComponent(skyboxEntity, skybox);
-    std::cout << "Skybox created" << std::endl;
 }
 
 bool SceneLoader::loadUnityScene(const std::string& jsonPath) {
-    std::cout << "\n=== Starting Unity Scene Loading: " << jsonPath << " ===" << std::endl;
+    Log::info("=== Starting Unity Scene Loading: ", jsonPath, " ===");
 
     // Read and parse JSON file
     std::ifstream file(jsonPath);
@@ -139,67 +139,40 @@ bool SceneLoader::loadUnityScene(const std::string& jsonPath) {
     std::stringstream buffer;
     buffer << file.rdbuf();
 
-    std::cout << "Parsing scene JSON file..." << std::endl;
     DeserializedScene scene = DeserializedScene::deserialize_scene(buffer.str());
-    std::cout << "Scene parsed successfully with:" << std::endl;
-    std::cout << "  " << scene.meshPaths.size() << " meshes" << std::endl;
-    std::cout << "  " << scene.colorTexturePaths.size() + scene.normaltexturePaths.size() << " textures" << std::endl;
-    std::cout << "  " << scene.materialPaths.size() << " materials" << std::endl;
-    std::cout << "  " << scene.gameObjects.size() << " game objects" << std::endl;
+    Log::info("Scene parsed successfully with:");
+    Log::info("  ", scene.meshPaths.size(), " meshes");
+    Log::info("  ", scene.colorTexturePaths.size() + scene.normaltexturePaths.size(), " textures");
+    Log::info("  ", scene.materialPaths.size(), " materials");
+    Log::info("  ", scene.gameObjects.size(), " game objects");
 
     //Cache all resources
-    std::cout << "\nStarting resource caching..." << std::endl;
     cacheMeshes(scene.meshPaths);
-    cacheCompressedTextures(scene.colorTexturePaths, KTX_TTF_BC7_RGBA, "Color textures");
-    cacheCompressedTextures(scene.normaltexturePaths, KTX_TTF_BC5_RG, "Normal textures");
+    cacheCompressedTextures(scene.colorTexturePaths, KTX_TTF_BC7_RGBA);
+    cacheCompressedTextures(scene.normaltexturePaths, KTX_TTF_BC5_RG);
     cacheTextures(scene.colorTexturePaths, VK_FORMAT_R8G8B8A8_SRGB);
     cacheTextures(scene.normaltexturePaths, VK_FORMAT_R8G8B8A8_UNORM);
     loadSkyboxCubemap(scene.environmentLighting.skyboxPaths);
     cacheMaterials(scene.materialPaths);
-    std::cout << "Resource caching completed" << std::endl;
 
     //Create entities
-    std::cout << "\nCreating entities from scene data..." << std::endl;
-    size_t totalEntities = scene.gameObjects.size();
-    size_t currentEntity = 0;
     for (const auto& gameObject : scene.gameObjects) {
         createEntityFromUnityData(gameObject);
-        currentEntity++;
-        std::cout << "\rEntities created " << currentEntity << "/" << totalEntities << std::flush;
     }
-    std::cout << std::endl;
 
-    std::cout << "\nSetting up scene hierarchy and lighting..." << std::endl;
     createScene(scene);
-    std::cout << "Scene setup completed" << std::endl;
 
     createSkyboxEntity();
-    std::cout << "\n=== Unity Scene Loading Completed Successfully ===" << std::endl;
+    Log::info("=== Unity Scene Loading Completed Successfully ===");
     return true;
 }
 
-std::future<bool> SceneLoader::loadUnitySceneAsync(const std::string& jsonPath) {
-    // Launch loading in background thread using std::async
-    return std::async(std::launch::async, [this, jsonPath]() {
-        try {
-            return loadUnityScene(jsonPath);
-        } catch (const std::exception& e) {
-            std::cerr << "Async scene loading failed: " << e.what() << std::endl;
-            return false;
-        }
-    });
-}
-
 void SceneLoader::cacheMeshes(const std::vector<std::string>& meshPaths) {
-    size_t total = meshPaths.size();
-    size_t current = 0;
-
     for (const auto& meshPath : meshPaths) {
         // Read JSON file first
         std::ifstream file(meshPath);
         if (!file.is_open()) {
-            std::cerr << "\nFailed to open mesh file: " << meshPath << std::endl;
-            current++;
+            Log::error("Failed to open mesh file: ", meshPath);
             continue;
         }
 
@@ -241,23 +214,14 @@ void SceneLoader::cacheMeshes(const std::vector<std::string>& meshPaths) {
         }
 
         resourceManager.addMesh(meshID, std::move(mesh));
-
-        current++;
-        std::cout << "\rMeshes loaded " << current << "/" << total << std::flush;
     }
-    std::cout << std::endl;
 }
 
 void SceneLoader::cacheTextures(const std::vector<std::string>& texturePaths, VkFormat format) {
-    size_t total = texturePaths.size();
-    size_t current = 0;
-
     for (const auto& path : texturePaths) {
         // Check if this texture has a compressed version already loaded
         // If it exists in the map as a key, we can skip loading the regular version
         if (compressedTextureMap.find(path) != compressedTextureMap.end()) {
-            current++;
-            std::cout << "\rTextures cached " << current << "/" << total << std::flush;
             continue;
         }
 
@@ -274,18 +238,13 @@ void SceneLoader::cacheTextures(const std::vector<std::string>& texturePaths, Vk
             1, // faces
             debugName);
         resourceManager.addTexture(path, std::move(texture));
-        current++;
-        std::cout << "\rTextures cached " << current << "/" << total << std::flush;
     }
-    std::cout << std::endl;
 }
 
 void SceneLoader::cacheCompressedTextures(const std::vector<std::string>& originalPaths,
-                                          ktx_transcode_fmt_e targetFormat, const std::string& label) {
+                                          ktx_transcode_fmt_e targetFormat) {
     std::vector<std::string> compressedPaths = getCompressedTexturePaths();
-    std::vector<std::string> succesfullyLoadedCompressedTexturePaths;
-    size_t total = originalPaths.size();
-    size_t current = 0;
+    std::vector<std::string> successfullyLoadedCompressedTexturePaths;
 
     // Process all KTX2 textures, only map them if they load successfully
     for (const auto& path : originalPaths) {
@@ -298,9 +257,7 @@ void SceneLoader::cacheCompressedTextures(const std::vector<std::string>& origin
             ktxTexture2_CreateFromNamedFile(ktxPath.c_str(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &kTexture2);
 
         if (result != KTX_SUCCESS) {
-            std::cerr << "\nFailed to load KTX2 texture: " << ktxPath << std::endl;
-            current++;
-            std::cout << "\r" << label << " cached " << current << "/" << total << std::flush;
+            Log::error("Failed to load KTX2 texture: ", ktxPath);
             continue;
         }
 
@@ -308,10 +265,8 @@ void SceneLoader::cacheCompressedTextures(const std::vector<std::string>& origin
         if (ktxTexture2_NeedsTranscoding(kTexture2)) {
             result = ktxTexture2_TranscodeBasis(kTexture2, targetFormat, 0);
             if (result != KTX_SUCCESS) {
-                std::cerr << "\nFailed to transcode KTX2 texture: " << ktxPath << std::endl;
+                Log::error("Failed to transcode KTX2 texture: ", ktxPath);
                 ktxTexture2_Destroy(kTexture2);
-                current++;
-                std::cout << "\r" << label << " cached " << current << "/" << total << std::flush;
                 continue;
             }
         }
@@ -328,9 +283,7 @@ void SceneLoader::cacheCompressedTextures(const std::vector<std::string>& origin
         if (result != KTX_SUCCESS) {
             ktxTexture2_Destroy(kTexture2);
             ktxVulkanDeviceInfo_Destruct(&vkDeviceInfo);
-            std::cerr << "\nFailed to upload KTX2 texture to Vulkan: " << ktxPath << std::endl;
-            current++;
-            std::cout << "\r" << label << " cached " << current << "/" << total << std::flush;
+            Log::error("Failed to upload KTX2 texture to Vulkan: ", ktxPath);
             continue;
         }
 
@@ -345,9 +298,7 @@ void SceneLoader::cacheCompressedTextures(const std::vector<std::string>& origin
             vkTexture.vkFreeMemory(device.getDevice(), vkTexture.deviceMemory, nullptr);
             ktxTexture2_Destroy(kTexture2);
             ktxVulkanDeviceInfo_Destruct(&vkDeviceInfo);
-            std::cerr << "\nFailed to create image view for KTX2 texture: " << ktxPath << std::endl;
-            current++;
-            std::cout << "\r" << label << " cached " << current << "/" << total << std::flush;
+            Log::error("Failed to create image view for KTX2 texture: ", ktxPath);
             continue;
         }
 
@@ -361,17 +312,13 @@ void SceneLoader::cacheCompressedTextures(const std::vector<std::string>& origin
 
         // Add to resource manager - Store with the KTX2 path
         resourceManager.addTexture(path, std::move(texture));
-        succesfullyLoadedCompressedTexturePaths.push_back(path);
+        successfullyLoadedCompressedTexturePaths.push_back(path);
         // Cleanup
         ktxTexture2_Destroy(kTexture2);
         ktxVulkanDeviceInfo_Destruct(&vkDeviceInfo);
-
-        current++;
-        std::cout << "\r" << label << " cached " << current << "/" << total << std::flush;
     }
-    std::cout << std::endl;
 
-    for (const std::string& compressedPath : succesfullyLoadedCompressedTexturePaths) {
+    for (const std::string& compressedPath : successfullyLoadedCompressedTexturePaths) {
         std::filesystem::path compPath(compressedPath);
         std::string filename = compPath.stem().string();
 
@@ -387,15 +334,10 @@ void SceneLoader::cacheCompressedTextures(const std::vector<std::string>& origin
 }
 
 void SceneLoader::cacheMaterials(const std::vector<std::string>& materialPaths) {
-    size_t total = materialPaths.size();
-    size_t current = 0;
-
     for (const auto& materialPath : materialPaths) {
         std::ifstream file(materialPath);
         if (!file.is_open()) {
-            std::cerr << "\nFailed to open material file: " << materialPath << std::endl;
-            current++;
-            std::cout << "\rMaterials cached " << current << "/" << total << std::flush;
+            Log::error("Failed to open material file: ", materialPath);
             continue;
         }
 
@@ -482,17 +424,12 @@ void SceneLoader::cacheMaterials(const std::vector<std::string>& materialPaths) 
             }
 
             resourceManager.addMaterial(materialId, std::move(material));
-            current++;
-            std::cout << "\rMaterials cached " << current << "/" << total << std::flush;
 
         } catch (const std::exception& e) {
-            std::cerr << "\nERROR: Failed to create material '" << materialId << "': " << e.what() << std::endl;
-            current++;
-            std::cout << "\rMaterials cached " << current << "/" << total << std::flush;
+            Log::error("Failed to create material '", materialId, "': ", e.what());
             throw;
         }
     }
-    std::cout << std::endl;
 }
 
 void SceneLoader::createEntityFromUnityData(const DeserializedGameObject& gameObject) {
@@ -627,7 +564,7 @@ std::vector<std::string> SceneLoader::getCompressedTexturePaths() {
     const std::string directory = "Assets/Scene/textures";
     std::vector<std::string> compressedTexturePaths{};
     if (!std::filesystem::exists(directory)) {
-        std::cerr << "Directory does not exist: " << directory << std::endl;
+        Log::error("Directory does not exist: ", directory);
         return compressedTexturePaths;
     }
 

@@ -1,6 +1,5 @@
 #include "view_frustum.hpp"
 
-#include <iostream>
 namespace Math {
 
 ViewFrustum ViewFrustum::createPerspective(float fovY, float aspectRatio, float nearZ, float farZ,

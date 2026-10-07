@@ -2,7 +2,6 @@
 #include <vector>
 #include <string>
 #include <memory>
-#include <iostream>
 #include "external/libraries/json.hpp"
 #include "core.hpp"
 using json = nlohmann::json;

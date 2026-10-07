@@ -1,5 +1,6 @@
 #include "Scene/scene.hpp"
-#include <iostream>
+
+using namespace Math;
 
 using namespace ECS;
 using namespace Systems;

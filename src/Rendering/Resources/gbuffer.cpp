@@ -76,7 +76,6 @@ void GBuffer::cleanup() {
     cleanupArray(normalImages, normalMemories, normalViews);
     cleanupArray(albedoImages, albedoMemories, albedoViews);
     cleanupArray(materialImages, materialMemories, materialViews);
-    std::cout << "GBuffer cleaned up" << std::endl;
 }
 
 void GBuffer::createAttachments() {

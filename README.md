@@ -211,9 +211,9 @@ Each major system has its own documentation with implementation details:
 | [ECS](ECS/README.md) | Entity Component System architecture |
 | [Rendering](Rendering/README.md) | Vulkan rendering pipeline overview |
 | [Geometry Pass](Rendering/RenderPasses/Geometry/README.md) | G-Buffer generation |
-| [Direct Lighting](Rendering/RenderPasses/Direct%20Lighting/README.md) | PBR shading with shadows |
+| [Direct Lighting](Rendering/RenderPasses/direct_lighting/README.md) | PBR shading with shadows |
 | [Shadow Mapping](Rendering/RenderPasses/Shadowmapping/README.md) | Cascaded and cubemap shadows |
-| [Radiance Cascades](Rendering/RenderPasses/Radiance%20Cascades/README.md) | Screen-space global illumination |
+| [Radiance Cascades](Rendering/RenderPasses/radiance_cascades/README.md) | Screen-space global illumination |
 | [Transparency](Rendering/RenderPasses/Transparency/README.md) | Order-independent transparency |
 
 ## Building

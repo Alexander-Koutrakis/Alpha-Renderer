@@ -2,7 +2,6 @@
 #include "render_passes.hpp"
 #include <stdexcept>
 #include <array>
-#include <iostream>
 
 namespace Rendering {
 

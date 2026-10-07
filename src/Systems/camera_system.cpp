@@ -1,6 +1,8 @@
 #include "camera_system.hpp"
 #include "Engine/alpha_engine.hpp"
 
+using namespace Rendering;
+
 using namespace ECS;
 namespace Systems {
 

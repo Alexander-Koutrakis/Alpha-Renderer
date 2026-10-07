@@ -1,9 +1,9 @@
 #include "rendering_resources.hpp"
+#include "Engine/log.hpp"
 #include "Rendering/Core/barriers.hpp"
 #include "Rendering/Core/images.hpp"
 #include "Rendering/Core/samplers.hpp"
 #include <stdexcept>
-#include <iostream>
 #include <algorithm>
 #include "Scene/scene.hpp"
 #include "external/smaa_textures/AreaTex.h"
@@ -54,11 +54,10 @@ RenderingResources::RenderingResources(Device& device, SwapChain& swapChain) : d
     createDescriptorSets();
     createShadowMapSamplerDescriptorSets();
 
-    // TODO: Replace with proper skybox texture when implemented
-    // For now, use a placeholder to avoid validation errors
+    // Bind the scene skybox, or a placeholder when the scene has none, so the descriptor is always valid
     initializeSkyboxFromScene();
 
-    std::cout << "RenderingResources created with " << width << "x" << height << std::endl;
+    Log::info("RenderingResources created with ", width, "x", height);
 }
 
 RenderingResources::~RenderingResources() {
@@ -106,15 +105,15 @@ void RenderingResources::findResourcesFormats() {
         device.findSupportedFormat({VK_FORMAT_R8G8B8A8_UNORM}, VK_IMAGE_TILING_OPTIMAL,
                                    VK_FORMAT_FEATURE_COLOR_ATTACHMENT_BIT | VK_FORMAT_FEATURE_SAMPLED_IMAGE_BIT);
 
-    std::cout << "RenderingResources formats found:" << std::endl;
-    std::cout << "  Depth: " << depthFormat << std::endl;
-    std::cout << "  Position: " << positionFormat << std::endl;
-    std::cout << "  Normal: " << normalFormat << std::endl;
-    std::cout << "  Albedo: " << albedoFormat << std::endl;
-    std::cout << "  Material: " << materialFormat << std::endl;
-    std::cout << "  Revealage: " << revealageFormat << std::endl;
-    std::cout << "  GI Indirect: " << giIndirectFormat << std::endl;
-    std::cout << "  Depth Pyramid: " << depthPyramidFormat << std::endl;
+    Log::debug("RenderingResources formats found:");
+    Log::debug("  Depth: ", depthFormat);
+    Log::debug("  Position: ", positionFormat);
+    Log::debug("  Normal: ", normalFormat);
+    Log::debug("  Albedo: ", albedoFormat);
+    Log::debug("  Material: ", materialFormat);
+    Log::debug("  Revealage: ", revealageFormat);
+    Log::debug("  GI Indirect: ", giIndirectFormat);
+    Log::debug("  Depth Pyramid: ", depthPyramidFormat);
 }
 
 void RenderingResources::createDepthResources() {
@@ -135,7 +134,7 @@ void RenderingResources::createDepthResources() {
         setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)depthMemories[i], "DepthMemory_Frame" + std::to_string(i));
     }
 
-    std::cout << "Depth resources created: " << width << "x" << height << " format=" << depthFormat << std::endl;
+    Log::debug("Depth resources created: ", width, "x", height, " format=", depthFormat);
 }
 
 void RenderingResources::createDepthPyramidResources() {
@@ -207,16 +206,14 @@ void RenderingResources::createDepthPyramidResources() {
         setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)depthPyramidSampler, "DepthPyramidSampler");
     }
 
-    std::cout << "Depth pyramid created with " << mipLevels << " mips at " << width << "x" << height << std::endl;
+    Log::debug("Depth pyramid created with ", mipLevels, " mips at ", width, "x", height);
 }
 
 void RenderingResources::createLightPassResources() {
-    std::cout << "Creating light pass resources" << std::endl;
     // Create a sampler for the light pass result
     lightPassSampler = createSampler(device.getDevice(), VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR,
                                      VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK, 0.0f);
 
-    std::cout << "Light pass sampler created" << std::endl;
     // Create light pass render target images
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         VkImageCreateInfo imageInfo = imageCreateInfo2D(
@@ -578,12 +575,9 @@ void RenderingResources::cleanup() {
 
     // Clean up descriptor pool (unique_ptr will handle destruction automatically)
     descriptorPool.reset();
-
-    std::cout << "RenderingResources cleaned up completely" << std::endl;
 }
 
 void RenderingResources::createBuffers() {
-    std::cout << "Creating camera, model, and normal matrix buffers..." << std::endl;
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         cameraUniformBuffers[i] =
             std::make_unique<Buffer>(device, sizeof(CameraUbo), 1, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
@@ -609,9 +603,7 @@ void RenderingResources::createBuffers() {
         setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)normalMatrixBuffers[i]->getBuffer(),
                      "NormalMatrixBuffer_Frame" + std::to_string(i));
     }
-    std::cout << "Camera, model, and normal matrix buffers created successfully." << std::endl;
 
-    std::cout << "Creating light array uniform buffers..." << std::endl;
     VkDeviceSize unifiedLightBufferSize = sizeof(UnifiedLightBuffer);
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         lightArrayUniformBuffers[i] =
@@ -621,9 +613,7 @@ void RenderingResources::createBuffers() {
         setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)lightArrayUniformBuffers[i]->getBuffer(),
                      "LightArrayUniformBuffer_Frame" + std::to_string(i));
     }
-    std::cout << "Light array uniform buffers created successfully." << std::endl;
 
-    std::cout << "Creating cascade splits buffers..." << std::endl;
     // Add cascade splits buffer creation
     VkDeviceSize cascadeSplitsBufferSize = sizeof(DirectionalLightCascadesBuffer);
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
@@ -632,9 +622,7 @@ void RenderingResources::createBuffers() {
                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         cascadeSplitsBuffers[i]->map();
     }
-    std::cout << "Cascade splits buffers created successfully." << std::endl;
 
-    std::cout << "Creating scene lighting buffers..." << std::endl;
     VkDeviceSize sceneLightingBufferSize = sizeof(SceneLightingUbo);
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         sceneLightingBuffers[i] =
@@ -644,9 +632,7 @@ void RenderingResources::createBuffers() {
         setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)sceneLightingBuffers[i]->getBuffer(),
                      "SceneLightingBuffer_Frame" + std::to_string(i));
     }
-    std::cout << "Scene lighting buffers created successfully." << std::endl;
 
-    std::cout << "Creating light matrix buffers..." << std::endl;
     VkDeviceSize bufferSize = sizeof(ShadowcastingLightMatrices);
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         lightMatrixBuffers[i] =
@@ -654,9 +640,7 @@ void RenderingResources::createBuffers() {
                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         lightMatrixBuffers[i]->map();
     }
-    std::cout << "Light matrix buffers created successfully." << std::endl;
 
-    std::cout << "Creating shadow model matrix buffers..." << std::endl;
     VkDeviceSize shadowModelMatrixBuffer = sizeof(glm::mat4);
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         shadowModelMatrixBuffers[i] = std::make_unique<Buffer>(
@@ -665,9 +649,7 @@ void RenderingResources::createBuffers() {
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         shadowModelMatrixBuffers[i]->map();
     }
-    std::cout << "Shadow model matrix buffers created successfully." << std::endl;
 
-    std::cout << "Creating transparency buffers..." << std::endl;
     VkDeviceSize matrixBufferSize = sizeof(glm::mat4);
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         transparencyModelMatrixBuffers[i] = std::make_unique<Buffer>(
@@ -680,13 +662,10 @@ void RenderingResources::createBuffers() {
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         transparencyNormalMatrixBuffers[i]->map();
     }
-    std::cout << "Transparency buffers created successfully." << std::endl;
 }
 
 void RenderingResources::createDescriptorPool() {
-    std::cout << "Creating descriptor pool..." << std::endl;
     // Recompute descriptor pool sizes with current pipelines (including RC and depth pyramid)
-    std::cout << "Calculating descriptor pool sizes..." << std::endl;
     uint32_t pyrMaxMips = 0;
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         pyrMaxMips = std::max(pyrMaxMips, depthPyramidMipLevels[i]);
@@ -726,11 +705,10 @@ void RenderingResources::createDescriptorPool() {
     const uint32_t storageImageCount =
         MAX_FRAMES_IN_FLIGHT * (RC_CASCADE_COUNT + 2 + pyramidExtraSetsPerFrame); // +2 = depth seed + gi output
 
-    std::cout << "Pool sizes: " << totalDescriptorSets << " sets, " << uniformBufferCount << " uniform buffers, "
-              << storageBufferCount << " storage buffers, " << combinedImageSamplerCount << " combined image samplers, "
-              << storageImageCount << " storage images" << std::endl;
+    Log::debug("Pool sizes: ", totalDescriptorSets, " sets, ", uniformBufferCount, " uniform buffers, ",
+               storageBufferCount, " storage buffers, ", combinedImageSamplerCount, " combined image samplers, ",
+               storageImageCount, " storage images");
 
-    std::cout << "Building descriptor pool..." << std::endl;
     descriptorPool = DescriptorPool::Builder(device)
                          .setMaxSets(totalDescriptorSets)
                          .addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, uniformBufferCount)
@@ -738,11 +716,9 @@ void RenderingResources::createDescriptorPool() {
                          .addPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, storageImageCount)
                          .addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, combinedImageSamplerCount)
                          .build();
-    std::cout << "Descriptor pool created successfully." << std::endl;
 }
 
 void RenderingResources::createDescriptorSetLayouts() {
-    std::cout << "Creating models descriptor set layout..." << std::endl;
     // Create descriptor set layout for instance storage buffers
     modelsDescriptorSetLayout = createDescriptorSetLayout(
         device, {
@@ -751,9 +727,7 @@ void RenderingResources::createDescriptorSetLayouts() {
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)modelsDescriptorSetLayout,
                  "ModelsDescriptorSetLayout");
-    std::cout << "Models descriptor set layout created successfully." << std::endl;
 
-    std::cout << "Creating material descriptor set layout..." << std::endl;
     materialDescriptorSetLayout = createDescriptorSetLayout(
         device, {
                     layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
@@ -764,19 +738,15 @@ void RenderingResources::createDescriptorSetLayouts() {
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)materialDescriptorSetLayout,
                  "MaterialDescriptorSetLayout");
-    std::cout << "Material descriptor set layout created successfully." << std::endl;
 
     //Create descriptor set layout for camera uniform buffer
-    std::cout << "Creating camera descriptor set layout..." << std::endl;
     cameraDescriptorSetLayout = createDescriptorSetLayout(
         device, {
                     layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)cameraDescriptorSetLayout,
                  "CameraDescriptorSetLayout");
-    std::cout << "Camera descriptor set layout created successfully." << std::endl;
 
-    std::cout << "Creating GBuffer descriptor set layout..." << std::endl;
     gBufferDescriptorSetLayout = createDescriptorSetLayout(
         device, {
                     layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
@@ -786,37 +756,29 @@ void RenderingResources::createDescriptorSetLayouts() {
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)gBufferDescriptorSetLayout,
                  "GBufferDescriptorSetLayout");
-    std::cout << "GBuffer descriptor set layout created successfully." << std::endl;
 
-    std::cout << "Creating light array descriptor set layout..." << std::endl;
     lightArrayDescriptorSetLayout = createDescriptorSetLayout(
         device, {
                     layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)lightArrayDescriptorSetLayout,
                  "LightArrayDescriptorSetLayout");
-    std::cout << "Light array descriptor set layout created successfully." << std::endl;
 
-    std::cout << "Creating cascade splits descriptor set layout..." << std::endl;
     cascadeSplitsSetLayout = createDescriptorSetLayout(
         device, {
                     layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)cascadeSplitsSetLayout,
                  "CascadeSplitsDescriptorSetLayout");
-    std::cout << "Cascade splits descriptor set layout created successfully." << std::endl;
 
-    std::cout << "Creating scene lighting descriptor set layout..." << std::endl;
     sceneLightingDescriptorSetLayout = createDescriptorSetLayout(
         device, {
                     layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)sceneLightingDescriptorSetLayout,
                  "SceneLightingDescriptorSetLayout");
-    std::cout << "Scene lighting descriptor set layout created successfully." << std::endl;
 
     // Create descriptor set layout (shared between both pipelines)
-    std::cout << "Creating shadow light matrix descriptor set layout..." << std::endl;
     shadowcastinglightMatrixDescriptorSetLayout = createDescriptorSetLayout(
         device,
         {
@@ -825,10 +787,8 @@ void RenderingResources::createDescriptorSetLayouts() {
         });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowcastinglightMatrixDescriptorSetLayout,
                  "ShadowLightMatrixDescriptorSetLayout");
-    std::cout << "Shadow light matrix descriptor set layout created successfully." << std::endl;
 
     // Create descriptor set layout for shadow map samplers
-    std::cout << "Creating shadow map sampler descriptor set layout..." << std::endl;
     shadowMapSamplerLayout = createDescriptorSetLayout(
         device,
         {
@@ -839,30 +799,24 @@ void RenderingResources::createDescriptorSetLayouts() {
         });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowMapSamplerLayout,
                  "ShadowMapSamplerDescriptorSetLayout");
-    std::cout << "Shadow map sampler descriptor set layout created successfully." << std::endl;
 
     //Create descriptor set layout for shadow model matrix
-    std::cout << "Creating shadow model matrix descriptor set layout..." << std::endl;
     shadowModelMatrixDescriptorSetLayout = createDescriptorSetLayout(
         device, {
                     layoutBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowModelMatrixDescriptorSetLayout,
                  "ShadowModelMatrixDescriptorSetLayout");
-    std::cout << "Shadow model matrix descriptor set layout created successfully." << std::endl;
 
     //Create descriptor set layout for skybox
-    std::cout << "Creating skybox descriptor set layout..." << std::endl;
     skyboxDescriptorSetLayout = createDescriptorSetLayout(
         device, {
                     layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)skyboxDescriptorSetLayout,
                  "SkyboxDescriptorSetLayout");
-    std::cout << "Skybox descriptor set layout created successfully." << std::endl;
 
     //Create descriptor set layout for transparency model matrix
-    std::cout << "Creating transparency model descriptor set layout..." << std::endl;
     transparencyModelDescriptorSetLayout = createDescriptorSetLayout(
         device, {
                     layoutBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
@@ -870,10 +824,8 @@ void RenderingResources::createDescriptorSetLayouts() {
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)transparencyModelDescriptorSetLayout,
                  "TransparencyModelDescriptorSetLayout");
-    std::cout << "Transparency model descriptor set layout created successfully." << std::endl;
 
     // Create descriptor set layout for composition textures
-    std::cout << "Creating composition descriptor set layout..." << std::endl;
     compositionSetLayout = createDescriptorSetLayout(
         device, {
                     layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
@@ -883,19 +835,15 @@ void RenderingResources::createDescriptorSetLayouts() {
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)compositionSetLayout,
                  "CompositionDescriptorSetLayout");
-    std::cout << "Composition descriptor set layout created successfully." << std::endl;
 
     // SMAA edge descriptor set layout (compositionColor input)
-    std::cout << "Creating SMAA edge descriptor set layout..." << std::endl;
     smaaEdgeSetLayout = createDescriptorSetLayout(
         device, {
                     layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)smaaEdgeSetLayout, "SMAAEdgeDescriptorSetLayout");
-    std::cout << "SMAA edge descriptor set layout created successfully." << std::endl;
 
     // SMAA weight descriptor set layout (edges + area/search LUT)
-    std::cout << "Creating SMAA weight descriptor set layout..." << std::endl;
     smaaWeightSetLayout = createDescriptorSetLayout(
         device, {
                     layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
@@ -903,30 +851,24 @@ void RenderingResources::createDescriptorSetLayouts() {
                     layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)smaaWeightSetLayout, "SMAAWeightDescriptorSetLayout");
-    std::cout << "SMAA weight descriptor set layout created successfully." << std::endl;
 
     // SMAA blend descriptor set layout (compositionColor + blend weights)
-    std::cout << "Creating SMAA blend descriptor set layout..." << std::endl;
     smaaBlendSetLayout = createDescriptorSetLayout(
         device, {
                     layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
                     layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)smaaBlendSetLayout, "SMAABlendDescriptorSetLayout");
-    std::cout << "SMAA blend descriptor set layout created successfully." << std::endl;
 
     // Color correction descriptor set layout (post-AA color input)
-    std::cout << "Creating color correction descriptor set layout..." << std::endl;
     colorCorrectionSetLayout = createDescriptorSetLayout(
         device, {
                     layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)colorCorrectionSetLayout,
                  "ColorCorrectionDescriptorSetLayout");
-    std::cout << "Color correction descriptor set layout created successfully." << std::endl;
 
     // RC Build descriptor set layout
-    std::cout << "Creating RC build descriptor set layout..." << std::endl;
     // NOTE: β is packed into uRadiance alpha (radiance.rgb, beta.a), so we only need one storage atlas array.
     rcBuildSetLayout = createDescriptorSetLayout(
         device, {
@@ -940,10 +882,8 @@ void RenderingResources::createDescriptorSetLayouts() {
                     layoutBinding(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, RC_CASCADE_COUNT),
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)rcBuildSetLayout, "RCBuildDescriptorSetLayout");
-    std::cout << "RC build descriptor set layout created successfully." << std::endl;
 
     // RC Resolve descriptor set layout
-    std::cout << "Creating RC resolve descriptor set layout..." << std::endl;
     // NOTE: keep binding numbers stable (skip binding 6) to avoid shifting shader bindings:
     // binding 5 = radiance (rgba16f, beta in alpha), binding 7 = gi out, binding 8/9 = history/prev pos.
     rcResolveSetLayout = createDescriptorSetLayout(
@@ -966,10 +906,8 @@ void RenderingResources::createDescriptorSetLayouts() {
                                   VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)rcResolveSetLayout, "RCResolveDescriptorSetLayout");
-    std::cout << "RC resolve descriptor set layout created successfully." << std::endl;
 
     // Depth pyramid build descriptor set layout (centralized)
-    std::cout << "Creating depth pyramid descriptor set layout..." << std::endl;
     depthPyramidSetLayout = createDescriptorSetLayout(
         device, {
                     layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
@@ -977,16 +915,11 @@ void RenderingResources::createDescriptorSetLayouts() {
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)depthPyramidSetLayout,
                  "DepthPyramidDescriptorSetLayout");
-    std::cout << "Depth pyramid descriptor set layout created successfully." << std::endl;
 }
 
 void RenderingResources::createDescriptorSets() {
-    std::cout << "Creating descriptor sets..." << std::endl;
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        std::cout << "Creating descriptor sets for frame " << i << std::endl;
-
         //Create descriptor set for instance buffer
-        std::cout << "  Creating models descriptor set..." << std::endl;
         modelsDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, modelsDescriptorSetLayout);
         DescriptorWriter()
             .buffer(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, modelMatrixBuffers[i]->descriptorInfo())
@@ -994,20 +927,16 @@ void RenderingResources::createDescriptorSets() {
             .update(device, modelsDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)modelsDescriptorSets[i],
                      "ModelsDescriptorSet_Frame" + std::to_string(i));
-        std::cout << "  Models descriptor set created successfully." << std::endl;
 
         //Create descriptor set for camera buffer
-        std::cout << "  Creating camera descriptor set..." << std::endl;
         cameraDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, cameraDescriptorSetLayout);
         DescriptorWriter()
             .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, cameraUniformBuffers[i]->descriptorInfo())
             .update(device, cameraDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)cameraDescriptorSets[i],
                      "CameraDescriptorSet_Frame" + std::to_string(i));
-        std::cout << "  Camera descriptor set created successfully." << std::endl;
 
         //Create descriptor set for gbuffer
-        std::cout << "  Creating GBuffer descriptor set..." << std::endl;
 
         gBufferDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, gBufferDescriptorSetLayout);
         const VkSampler gBufferSampler = gBuffer->getSampler();
@@ -1023,10 +952,8 @@ void RenderingResources::createDescriptorSets() {
             .update(device, gBufferDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)gBufferDescriptorSets[i],
                      "GBufferDescriptorSet_Frame" + std::to_string(i));
-        std::cout << "  GBuffer descriptor set created successfully." << std::endl;
 
         //Create descriptor set for light array buffer
-        std::cout << "  Creating light array descriptor set..." << std::endl;
         lightArrayDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, lightArrayDescriptorSetLayout);
         DescriptorWriter()
             .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -1034,57 +961,45 @@ void RenderingResources::createDescriptorSets() {
             .update(device, lightArrayDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)lightArrayDescriptorSets[i],
                      "LightArrayDescriptorSet_Frame" + std::to_string(i));
-        std::cout << "  Light array descriptor set created successfully." << std::endl;
 
         //Create descriptor set for cascade splits buffer
-        std::cout << "  Creating cascade splits descriptor set..." << std::endl;
         cascadeSplitsDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, cascadeSplitsSetLayout);
         DescriptorWriter()
             .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
                     cascadeSplitsBuffers[i]->descriptorInfo(cascadeSplitsBuffers[i]->getBufferSize()))
             .update(device, cascadeSplitsDescriptorSets[i]);
-        std::cout << "  Cascade splits descriptor set created successfully." << std::endl;
 
         //Create descriptor set for scene lighting buffer
-        std::cout << "  Creating scene lighting descriptor set..." << std::endl;
         sceneLightingDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, sceneLightingDescriptorSetLayout);
         DescriptorWriter()
             .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
                     sceneLightingBuffers[i]->descriptorInfo(sceneLightingBuffers[i]->getBufferSize()))
             .update(device, sceneLightingDescriptorSets[i]);
-        std::cout << "  Scene lighting descriptor set created successfully." << std::endl;
 
         //Create descriptor set for light matrix
-        std::cout << "  Creating light matrix descriptor set..." << std::endl;
         lightMatrixDescriptorSets[i] =
             allocateDescriptorSet(*descriptorPool, shadowcastinglightMatrixDescriptorSetLayout);
         DescriptorWriter()
             .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
                     lightMatrixBuffers[i]->descriptorInfo(lightMatrixBuffers[i]->getBufferSize()))
             .update(device, lightMatrixDescriptorSets[i]);
-        std::cout << "  Light matrix descriptor set created successfully." << std::endl;
 
         //Create descriptor sets for show model matrices
-        std::cout << "  Creating shadow model matrix descriptor set..." << std::endl;
         shadowModelMatrixDescriptorSets[i] =
             allocateDescriptorSet(*descriptorPool, shadowModelMatrixDescriptorSetLayout);
         DescriptorWriter()
             .buffer(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
                     shadowModelMatrixBuffers[i]->descriptorInfo(shadowModelMatrixBuffers[i]->getBufferSize()))
             .update(device, shadowModelMatrixDescriptorSets[i]);
-        std::cout << "  Shadow model matrix descriptor set created successfully." << std::endl;
 
         //Create descriptor set for transparency model matrix
-        std::cout << "  Creating transparency model matrix descriptor set..." << std::endl;
         transparencyModelMatrixDescriptorSets[i] =
             allocateDescriptorSet(*descriptorPool, transparencyModelDescriptorSetLayout);
         DescriptorWriter()
             .buffer(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, transparencyModelMatrixBuffers[i]->descriptorInfo())
             .buffer(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, transparencyNormalMatrixBuffers[i]->descriptorInfo())
             .update(device, transparencyModelMatrixDescriptorSets[i]);
-        std::cout << "  Transparency model matrix descriptor set created successfully." << std::endl;
 
-        std::cout << "  Creating composition descriptor set..." << std::endl;
         compositionDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, compositionSetLayout);
         // The indirect GI buffer stays in GENERAL because RCGI computes and readers share it within one frame.
         DescriptorWriter()
@@ -1102,10 +1017,8 @@ void RenderingResources::createDescriptorSets() {
             .update(device, compositionDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)compositionDescriptorSets[i],
                      "CompositionDescriptorSet_Frame" + std::to_string(i));
-        std::cout << "  Composition descriptor set created successfully." << std::endl;
 
         // Create descriptor set for SMAA edge pass
-        std::cout << "  Creating SMAA edge descriptor set..." << std::endl;
         smaaEdgeDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, smaaEdgeSetLayout);
         DescriptorWriter()
             .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -1113,10 +1026,8 @@ void RenderingResources::createDescriptorSets() {
             .update(device, smaaEdgeDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)smaaEdgeDescriptorSets[i],
                      "SMAAEdgeDescriptorSet_Frame" + std::to_string(i));
-        std::cout << "  SMAA edge descriptor set created successfully." << std::endl;
 
         // Create descriptor set for SMAA weight pass
-        std::cout << "  Creating SMAA weight descriptor set..." << std::endl;
         smaaWeightDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, smaaWeightSetLayout);
         DescriptorWriter()
             .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -1128,10 +1039,8 @@ void RenderingResources::createDescriptorSets() {
             .update(device, smaaWeightDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)smaaWeightDescriptorSets[i],
                      "SMAAWeightDescriptorSet_Frame" + std::to_string(i));
-        std::cout << "  SMAA weight descriptor set created successfully." << std::endl;
 
         // Create descriptor set for SMAA blend pass
-        std::cout << "  Creating SMAA blend descriptor set..." << std::endl;
         smaaBlendDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, smaaBlendSetLayout);
         DescriptorWriter()
             .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -1141,10 +1050,8 @@ void RenderingResources::createDescriptorSets() {
             .update(device, smaaBlendDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)smaaBlendDescriptorSets[i],
                      "SMAABlendDescriptorSet_Frame" + std::to_string(i));
-        std::cout << "  SMAA blend descriptor set created successfully." << std::endl;
 
         // Create descriptor set for color correction pass
-        std::cout << "  Creating color correction descriptor set..." << std::endl;
         colorCorrectionDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, colorCorrectionSetLayout);
         DescriptorWriter()
             .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -1152,10 +1059,8 @@ void RenderingResources::createDescriptorSets() {
             .update(device, colorCorrectionDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)colorCorrectionDescriptorSets[i],
                      "ColorCorrectionDescriptorSet_Frame" + std::to_string(i));
-        std::cout << "  Color correction descriptor set created successfully." << std::endl;
 
         // Create descriptor set for depth pyramid build (src depth + dst pyramid mip0)
-        std::cout << "  Creating depth pyramid descriptor set..." << std::endl;
         depthPyramidDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, depthPyramidSetLayout);
         // Source depth is point sampled; the destination is pyramid mip 0 as a storage image, transitioned
         // to GENERAL before the dispatch.
@@ -1187,9 +1092,6 @@ void RenderingResources::createDescriptorSets() {
                        {VK_NULL_HANDLE, depthPyramidMipStorageViews[i][m], VK_IMAGE_LAYOUT_GENERAL})
                 .update(device, depthPyramidMipDescriptorSets[i][m]);
         }
-        std::cout << "  Depth pyramid descriptor set created successfully." << std::endl;
-
-        std::cout << "Descriptor sets for frame " << i << " completed successfully." << std::endl;
     }
 
     // RC build/resolve descriptor sets per frame
@@ -1259,11 +1161,9 @@ void RenderingResources::createDescriptorSets() {
     }
 
     // Create skybox descriptor set (single set, not per frame)
-    std::cout << "Creating skybox descriptor set..." << std::endl;
     // Note: We need a skybox texture to properly populate this, for now just allocate the set
     skyboxDescriptorSet = allocateDescriptorSet(*descriptorPool, skyboxDescriptorSetLayout);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)skyboxDescriptorSet, "SkyboxDescriptorSet");
-    std::cout << "Skybox descriptor set allocated successfully (requires texture to populate)." << std::endl;
 }
 
 void RenderingResources::createShadowMapSamplerDescriptorSets() {
@@ -1533,8 +1433,8 @@ void RenderingResources::loadSMAALUTTextures() {
         setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)smaaSearchSampler, "SMAA_Search_Sampler");
     }
 
-    std::cout << "SMAA LUT textures loaded (Area: " << AREATEX_WIDTH << "x" << AREATEX_HEIGHT
-              << ", Search: " << SEARCHTEX_WIDTH << "x" << SEARCHTEX_HEIGHT << ")" << std::endl;
+    Log::debug("SMAA LUT textures loaded (Area: ", AREATEX_WIDTH, "x", AREATEX_HEIGHT, ", Search: ", SEARCHTEX_WIDTH,
+               "x", SEARCHTEX_HEIGHT, ")");
 }
 
 void RenderingResources::createRCAtlases() {
@@ -1569,8 +1469,8 @@ void RenderingResources::createRCAtlases() {
             setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)rcRadianceMemories[cascade][frame],
                          "RCRadianceMemory_" + cascadeFrameStr);
 
-            std::cout << "RC atlas c=" << cascade << " f=" << frame << " size=" << atlasWidth << "x" << atlasHeight
-                      << " stridePx=" << stridePx << " tile=" << tileSize << std::endl;
+            Log::debug("RC atlas c=", cascade, " f=", frame, " size=", atlasWidth, "x", atlasHeight,
+                       " stridePx=", stridePx, " tile=", tileSize);
         }
     }
 
@@ -1712,22 +1612,18 @@ void RenderingResources::updateSkyboxDescriptorSet(VkImageView skyboxImageView, 
 }
 
 void RenderingResources::initializeSkyboxFromScene() {
-    std::cout << "Initializing skybox from scene..." << std::endl;
-
     // Get the scene environment lighting
     const Scene::EnvironmentLighting& envLighting = Scene::Scene::getInstance().getEnvironmentLighting();
 
     if (envLighting.skyboxTexture != nullptr) {
         // Use the actual skybox cubemap from the scene
         updateSkyboxDescriptorSet(envLighting.skyboxTexture->getImageView(), envLighting.skyboxTexture->getSampler());
-        std::cout << "Skybox initialized from scene environment lighting." << std::endl;
     } else {
         // Fallback to placeholder if no skybox texture is found
-        std::cout << "No skybox texture found in scene, using placeholder..." << std::endl;
+        Log::warn("No skybox texture found in scene, using placeholder");
         VkImageView placeholderView = gBuffer->getAlbedoView(0);
         VkSampler placeholderSampler = lightPassSampler;
         updateSkyboxDescriptorSet(placeholderView, placeholderSampler);
-        std::cout << "Placeholder skybox created." << std::endl;
     }
 }
 

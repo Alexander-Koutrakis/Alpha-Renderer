@@ -103,12 +103,12 @@ add_executable(main
   "src/Rendering/RenderPasses/SMAA/smaa_weight_pass.cpp"
   "src/Rendering/RenderPasses/SMAA/smaa_edge_pass.cpp"
   "src/Rendering/RenderPasses/SMAA/smaa_blend_pass.cpp"
-  "src/Rendering/RenderPasses/Radiance Cascades/rc_gi_pass.cpp"
+  "src/Rendering/RenderPasses/radiance_cascades/rc_gi_pass.cpp"
   "src/Rendering/RenderPasses/Geometry/geometry_pass.cpp"
   "src/Rendering/RenderPasses/General/skybox_pass.cpp"
-  "src/Rendering/RenderPasses/Direct Lighting/light_pass.cpp"
+  "src/Rendering/RenderPasses/direct_lighting/light_pass.cpp"
   "src/Rendering/RenderPasses/Composition/composition_pass.cpp"
-  "src/Rendering/RenderPasses/Color Correction/color_correction_pass.cpp"
+  "src/Rendering/RenderPasses/color_correction/color_correction_pass.cpp"
 
   # Systems
   "src/Systems/camera_system.cpp"
@@ -154,8 +154,13 @@ if(NOT MSVC)
   endif()
 endif()
 
-# Turns the Vulkan validation layers on (used by scripts/validation_check.ps1; the product build keeps them off).
-option(ALPHA_ENABLE_VALIDATION "Enable Vulkan validation layers" OFF)
+# Vulkan validation layers: on by default in Debug builds, off otherwise. Pass -DALPHA_ENABLE_VALIDATION=ON/OFF to override.
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(ALPHA_VALIDATION_DEFAULT ON)
+else()
+  set(ALPHA_VALIDATION_DEFAULT OFF)
+endif()
+option(ALPHA_ENABLE_VALIDATION "Enable Vulkan validation layers" ${ALPHA_VALIDATION_DEFAULT})
 if(ALPHA_ENABLE_VALIDATION)
   target_compile_definitions(main PRIVATE ALPHA_ENABLE_VALIDATION)
 endif()
