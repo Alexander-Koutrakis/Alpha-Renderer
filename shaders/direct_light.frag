@@ -198,7 +198,7 @@ int findCascadeForUnifiedLight(Light light, vec3 worldPos, out float blendFactor
     }
     
     int cascadeSplitsIndex = light.lightMatrixOffset / MAX_CASCADE_COUNT;
-    if (cascadeSplitsIndex < 0 || cascadeSplitsIndex >= MAX_SHADOWCASTING_LIGHT_MATRICES) {
+    if (cascadeSplitsIndex < 0 || cascadeSplitsIndex >= MAX_SHADOWCASTING_DIRECTIONAL) {
         blendFactor = 0.0;
         distanceFade = 1.0;
         return -1;

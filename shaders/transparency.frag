@@ -183,7 +183,7 @@ int findCascadeForUnifiedLight(Light light, vec3 worldPos) {
     
     int cascadeSplitsIndex = light.lightMatrixOffset / MAX_CASCADE_COUNT;
     
-    if (cascadeSplitsIndex < 0 || cascadeSplitsIndex >= MAX_SHADOWCASTING_LIGHT_MATRICES) {
+    if (cascadeSplitsIndex < 0 || cascadeSplitsIndex >= MAX_SHADOWCASTING_DIRECTIONAL) {
         return -1;
     }
     
