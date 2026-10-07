@@ -12,6 +12,8 @@
 #
 # And the pipeline layout log: -Header scripts/pipeline_layout_call_log/pipeline_layout_log.hpp -Prefix PLOG -CompleteLine '\.\s*$' -BuildDir build/pipeline-layout-log
 #
+# And the render pass / framebuffer log: -Header scripts/render_pass_call_log/render_pass_log.hpp -Prefix RLOG -CompleteLine '\.\s*$' -BuildDir build/render-pass-log
+#
 # Builds a separate scratch tree (build/descriptor-log, git-ignored) with descriptor_log.hpp force-included, starts the
 # app, waits until it has created every descriptor, stops it, and keeps only the DSLOG lines. The product build is not touched.
 param(
