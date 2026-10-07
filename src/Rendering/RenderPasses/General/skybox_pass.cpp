@@ -1,5 +1,6 @@
 #include "skybox_pass.hpp"
 #include "Rendering/Core/barriers.hpp"
+#include "Rendering/Core/pipeline_layouts.hpp"
 #include "ECS/components.hpp"
 #include <vector>
 
@@ -119,14 +120,7 @@ void SkyboxPass::createPipeline(const CreateInfo& createInfo) {
         createInfo.skyboxDescriptorSetLayout  // Cubemap texture (set = 1)
     };
 
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(descriptorSetLayouts.size());
-    pipelineLayoutInfo.pSetLayouts = descriptorSetLayouts.data();
-
-    if (vkCreatePipelineLayout(device.getDevice(), &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create skybox pipeline layout!");
-    }
+    pipelineLayout = createPipelineLayout(device.getDevice(), descriptorSetLayouts);
 
     // Create pipeline
     PipelineConfigInfo pipelineConfig{};

@@ -1,4 +1,5 @@
 #include "composition_pass.hpp"
+#include "Rendering/Core/pipeline_layouts.hpp"
 #include <stdexcept>
 #include <array>
 #include <vector>
@@ -105,18 +106,9 @@ void CompositionPass::createFramebuffers() {
 
 void CompositionPass::createPipeline(const CreateInfo& createInfo) {
     // Create pipeline layout
-    VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
     VkDescriptorSetLayout compositionSetLayout = createInfo.compositionDescriptorSetLayout;
 
-    pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pipelineLayoutInfo.setLayoutCount = 1;
-    pipelineLayoutInfo.pSetLayouts = &compositionSetLayout;
-    pipelineLayoutInfo.pushConstantRangeCount = 0;
-    pipelineLayoutInfo.pPushConstantRanges = nullptr;
-
-    if (vkCreatePipelineLayout(device.getDevice(), &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create pipeline layout!");
-    }
+    pipelineLayout = createPipelineLayout(device.getDevice(), compositionSetLayout);
 
     // Create pipeline configuration
     PipelineConfigInfo pipelineConfig{};

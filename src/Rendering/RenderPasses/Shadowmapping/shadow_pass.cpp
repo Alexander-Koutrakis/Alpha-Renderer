@@ -1,5 +1,6 @@
 #include "shadow_pass.hpp"
 #include "Rendering/Core/barriers.hpp"
+#include "Rendering/Core/pipeline_layouts.hpp"
 #include "Rendering/Resources/mesh.hpp"
 #include <stdexcept>
 #include <iostream>
@@ -120,62 +121,27 @@ void ShadowPass::createRenderPass() {
 }
 
 void ShadowPass::createPipelines(const CreateInfo& createInfo) {
-    VkPushConstantRange directionalPushConstant{};
-    directionalPushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    directionalPushConstant.offset = 0;
-    directionalPushConstant.size = sizeof(InstancedPushConstants);
-
-    VkPushConstantRange spotPushConstant{};
-    spotPushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    spotPushConstant.offset = 0;
-    spotPushConstant.size = sizeof(InstancedPushConstants);
-
-    VkPushConstantRange pointPushConstant{};
-    pointPushConstant.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
-    pointPushConstant.offset = 0;
-    pointPushConstant.size = sizeof(InstancedPushConstants);
-
     //Directional light layout
     std::array<VkDescriptorSetLayout, 3> setLayouts = {createInfo.lightMatrixDescriptorSetLayout,
                                                        createInfo.shadowModelMatrixDescriptorSetLayout,
                                                        createInfo.materialDescriptorSetLayout};
 
-    VkPipelineLayoutCreateInfo directionalLayoutInfo{};
-    directionalLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    directionalLayoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-    directionalLayoutInfo.pSetLayouts = setLayouts.data();
-    directionalLayoutInfo.pushConstantRangeCount = 1;
-    directionalLayoutInfo.pPushConstantRanges = &directionalPushConstant;
-
     //Spot light layout
-    VkPipelineLayoutCreateInfo spotLayoutInfo{};
-    spotLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    spotLayoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-    spotLayoutInfo.pSetLayouts = setLayouts.data();
-    spotLayoutInfo.pushConstantRangeCount = 1;
-    spotLayoutInfo.pPushConstantRanges = &spotPushConstant;
 
     //Point light layout
-    VkPipelineLayoutCreateInfo pointLayoutInfo{};
-    pointLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-    pointLayoutInfo.setLayoutCount = static_cast<uint32_t>(setLayouts.size());
-    pointLayoutInfo.pSetLayouts = setLayouts.data();
-    pointLayoutInfo.pushConstantRangeCount = 1;
-    pointLayoutInfo.pPushConstantRanges = &pointPushConstant;
 
     //Create pipeline layouts
-    if (vkCreatePipelineLayout(device.getDevice(), &directionalLayoutInfo, nullptr, &directionalPipelineLayout) !=
-        VK_SUCCESS) {
-        throw std::runtime_error("failed to create instanced pipeline layout!");
-    }
+    directionalPipelineLayout = createPipelineLayout(
+        device.getDevice(), setLayouts,
+        pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(InstancedPushConstants)));
 
-    if (vkCreatePipelineLayout(device.getDevice(), &spotLayoutInfo, nullptr, &spotPipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create instanced pipeline layout!");
-    }
+    spotPipelineLayout = createPipelineLayout(
+        device.getDevice(), setLayouts,
+        pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(InstancedPushConstants)));
 
-    if (vkCreatePipelineLayout(device.getDevice(), &pointLayoutInfo, nullptr, &pointPipelineLayout) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create instanced pipeline layout!");
-    }
+    pointPipelineLayout = createPipelineLayout(
+        device.getDevice(), setLayouts,
+        pushConstantRange(VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, sizeof(InstancedPushConstants)));
 
     // Create pipeline configuration
     PipelineConfigInfo pipelineConfig{};
