@@ -57,21 +57,34 @@ private:
     VkDescriptorPool descriptorPool{VK_NULL_HANDLE};
 };
 
+// Allocates one descriptor set with the given layout from the pool. Throws if the pool cannot provide it.
+VkDescriptorSet allocateDescriptorSet(DescriptorPool& pool, VkDescriptorSetLayout layout);
+
+// Collects descriptor writes and applies them to a set in one vkUpdateDescriptorSets call, in the order they were added.
+// The infos are copied, so the writer does not depend on the lifetime of the caller's structs.
+//
+//   DescriptorWriter()
+//       .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, cameraBuffer->descriptorInfo())
+//       .image(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, {sampler, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+//       .update(device, set);
 class DescriptorWriter {
 public:
-    DescriptorWriter(VkDescriptorSetLayout layout, DescriptorPool& pool);
+    DescriptorWriter& buffer(uint32_t binding, VkDescriptorType type, const VkDescriptorBufferInfo& info);
+    DescriptorWriter& image(uint32_t binding, VkDescriptorType type, const VkDescriptorImageInfo& info);
+    // Array binding: one write covering `count` consecutive array elements starting at element 0.
+    DescriptorWriter& images(uint32_t binding, VkDescriptorType type, const VkDescriptorImageInfo* infos,
+                             uint32_t count);
 
-    DescriptorWriter& writeBuffer(uint32_t binding, VkDescriptorBufferInfo* bufferInfo,
-                                  VkDescriptorType descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
-    DescriptorWriter& writeImage(uint32_t binding, VkDescriptorImageInfo* imageInfo);
-    DescriptorWriter& writeInputAttachment(uint32_t binding, VkDescriptorImageInfo* imageInfo);
-    bool build(VkDescriptorSet& set);
-    void overwrite(VkDescriptorSet& set);
+    void update(Device& device, VkDescriptorSet set) const;
 
 private:
-    VkDescriptorSetLayout setLayout;
-    DescriptorPool& pool;
-    std::vector<VkWriteDescriptorSet> writes;
+    struct Entry {
+        uint32_t binding = 0;
+        VkDescriptorType type = VK_DESCRIPTOR_TYPE_SAMPLER;
+        std::vector<VkDescriptorBufferInfo> buffers;
+        std::vector<VkDescriptorImageInfo> images;
+    };
+    std::vector<Entry> entries;
 };
 
 } // namespace Rendering

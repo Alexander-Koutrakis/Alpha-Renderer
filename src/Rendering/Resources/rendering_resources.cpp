@@ -1108,26 +1108,21 @@ void RenderingResources::createDescriptorSets() {
 
         //Create descriptor set for instance buffer
         std::cout << "  Creating models descriptor set..." << std::endl;
-        VkDescriptorBufferInfo modelBufferInfo = modelMatrixBuffers[i]->descriptorInfo();
-        VkDescriptorBufferInfo normalBufferInfo = normalMatrixBuffers[i]->descriptorInfo();
-        if (!DescriptorWriter(modelsDescriptorSetLayout, *descriptorPool)
-                 .writeBuffer(0, &modelBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                 .writeBuffer(1, &normalBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                 .build(modelsDescriptorSets[i])) {
-            throw std::runtime_error("Failed to create instance buffer descriptor set");
-        }
+        modelsDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, modelsDescriptorSetLayout);
+        DescriptorWriter()
+            .buffer(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, modelMatrixBuffers[i]->descriptorInfo())
+            .buffer(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, normalMatrixBuffers[i]->descriptorInfo())
+            .update(device, modelsDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)modelsDescriptorSets[i],
                      "ModelsDescriptorSet_Frame" + std::to_string(i));
         std::cout << "  Models descriptor set created successfully." << std::endl;
 
         //Create descriptor set for camera buffer
         std::cout << "  Creating camera descriptor set..." << std::endl;
-        VkDescriptorBufferInfo cameraBufferInfo = cameraUniformBuffers[i]->descriptorInfo();
-        if (!DescriptorWriter(cameraDescriptorSetLayout, *descriptorPool)
-                 .writeBuffer(0, &cameraBufferInfo, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER)
-                 .build(cameraDescriptorSets[i])) {
-            throw std::runtime_error("Failed to create camera buffer descriptor set");
-        }
+        cameraDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, cameraDescriptorSetLayout);
+        DescriptorWriter()
+            .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, cameraUniformBuffers[i]->descriptorInfo())
+            .update(device, cameraDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)cameraDescriptorSets[i],
                      "CameraDescriptorSet_Frame" + std::to_string(i));
         std::cout << "  Camera descriptor set created successfully." << std::endl;
@@ -1135,471 +1130,183 @@ void RenderingResources::createDescriptorSets() {
         //Create descriptor set for gbuffer
         std::cout << "  Creating GBuffer descriptor set..." << std::endl;
 
-        // First allocate the descriptor set
-        VkDescriptorSetAllocateInfo allocInfoGBuffer{};
-        allocInfoGBuffer.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfoGBuffer.descriptorPool = descriptorPool->getDescriptorPool();
-        allocInfoGBuffer.descriptorSetCount = 1;
-        allocInfoGBuffer.pSetLayouts = &gBufferDescriptorSetLayout;
-
-        if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoGBuffer, &gBufferDescriptorSets[i]) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to allocate GBuffer descriptor set");
-        }
-
-        // Then prepare the image infos and update the descriptor set
-        std::array<VkDescriptorImageInfo, 4> gbufferImageInfos{};
-        gbufferImageInfos[0] = {gBuffer->getSampler(), gBuffer->getPositionView(i),
-                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-        gbufferImageInfos[1] = {gBuffer->getSampler(), gBuffer->getNormalView(i),
-                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-        gbufferImageInfos[2] = {gBuffer->getSampler(), gBuffer->getAlbedoView(i),
-                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-        gbufferImageInfos[3] = {gBuffer->getSampler(), gBuffer->getMaterialView(i),
-                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-
-        std::array<VkWriteDescriptorSet, 4> gbufferDescriptorWrites{};
-        for (size_t j = 0; j < gbufferDescriptorWrites.size(); j++) {
-            gbufferDescriptorWrites[j].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            gbufferDescriptorWrites[j].dstSet = gBufferDescriptorSets[i];
-            gbufferDescriptorWrites[j].dstBinding = j;
-            gbufferDescriptorWrites[j].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            gbufferDescriptorWrites[j].descriptorCount = 1;
-            gbufferDescriptorWrites[j].pImageInfo = &gbufferImageInfos[j];
-        }
-
-        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(gbufferDescriptorWrites.size()),
-                               gbufferDescriptorWrites.data(), 0, nullptr);
+        gBufferDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, gBufferDescriptorSetLayout);
+        const VkSampler gBufferSampler = gBuffer->getSampler();
+        DescriptorWriter()
+            .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {gBufferSampler, gBuffer->getPositionView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+            .image(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {gBufferSampler, gBuffer->getNormalView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+            .image(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {gBufferSampler, gBuffer->getAlbedoView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+            .image(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {gBufferSampler, gBuffer->getMaterialView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+            .update(device, gBufferDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)gBufferDescriptorSets[i],
                      "GBufferDescriptorSet_Frame" + std::to_string(i));
         std::cout << "  GBuffer descriptor set created successfully." << std::endl;
 
         //Create descriptor set for light array buffer
         std::cout << "  Creating light array descriptor set..." << std::endl;
-        VkDescriptorSetAllocateInfo allocInfoUnifiedLight{};
-        allocInfoUnifiedLight.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfoUnifiedLight.descriptorPool = descriptorPool->getDescriptorPool();
-        allocInfoUnifiedLight.descriptorSetCount = 1;
-        allocInfoUnifiedLight.pSetLayouts = &lightArrayDescriptorSetLayout;
-
-        if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoUnifiedLight, &lightArrayDescriptorSets[i]) !=
-            VK_SUCCESS) {
-            throw std::runtime_error("Failed to allocate light array buffer descriptor set");
-        }
-        VkDescriptorBufferInfo bufferInfoUnifiedLight{};
-        bufferInfoUnifiedLight.buffer = lightArrayUniformBuffers[i]->getBuffer();
-        bufferInfoUnifiedLight.offset = 0;
-        bufferInfoUnifiedLight.range = lightArrayUniformBuffers[i]->getBufferSize();
-
-        VkWriteDescriptorSet writeUnifiedLight{};
-        writeUnifiedLight.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writeUnifiedLight.dstSet = lightArrayDescriptorSets[i];
-        writeUnifiedLight.dstBinding = 0;
-        writeUnifiedLight.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        writeUnifiedLight.descriptorCount = 1;
-        writeUnifiedLight.pBufferInfo = &bufferInfoUnifiedLight;
-
-        vkUpdateDescriptorSets(device.getDevice(), 1, &writeUnifiedLight, 0, nullptr);
+        lightArrayDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, lightArrayDescriptorSetLayout);
+        DescriptorWriter()
+            .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                    lightArrayUniformBuffers[i]->descriptorInfo(lightArrayUniformBuffers[i]->getBufferSize()))
+            .update(device, lightArrayDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)lightArrayDescriptorSets[i],
                      "LightArrayDescriptorSet_Frame" + std::to_string(i));
         std::cout << "  Light array descriptor set created successfully." << std::endl;
 
         //Create descriptor set for cascade splits buffer
         std::cout << "  Creating cascade splits descriptor set..." << std::endl;
-        VkDescriptorSetAllocateInfo allocInfoCascadeSplits{};
-        allocInfoCascadeSplits.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfoCascadeSplits.descriptorPool = descriptorPool->getDescriptorPool();
-        allocInfoCascadeSplits.descriptorSetCount = 1;
-        allocInfoCascadeSplits.pSetLayouts = &cascadeSplitsSetLayout;
-
-        if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoCascadeSplits, &cascadeSplitsDescriptorSets[i]) !=
-            VK_SUCCESS) {
-            throw std::runtime_error("Failed to allocate cascade splits buffer descriptor set");
-        }
-
-        VkDescriptorBufferInfo bufferInfoCascadeSplits{};
-        bufferInfoCascadeSplits.buffer = cascadeSplitsBuffers[i]->getBuffer();
-        bufferInfoCascadeSplits.offset = 0;
-        bufferInfoCascadeSplits.range = cascadeSplitsBuffers[i]->getBufferSize();
-
-        VkWriteDescriptorSet writeCascadeSplits{};
-        writeCascadeSplits.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writeCascadeSplits.dstSet = cascadeSplitsDescriptorSets[i];
-        writeCascadeSplits.dstBinding = 0;
-        writeCascadeSplits.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        writeCascadeSplits.descriptorCount = 1;
-        writeCascadeSplits.pBufferInfo = &bufferInfoCascadeSplits;
-
-        vkUpdateDescriptorSets(device.getDevice(), 1, &writeCascadeSplits, 0, nullptr);
+        cascadeSplitsDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, cascadeSplitsSetLayout);
+        DescriptorWriter()
+            .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                    cascadeSplitsBuffers[i]->descriptorInfo(cascadeSplitsBuffers[i]->getBufferSize()))
+            .update(device, cascadeSplitsDescriptorSets[i]);
         std::cout << "  Cascade splits descriptor set created successfully." << std::endl;
 
         //Create descriptor set for scene lighting buffer
         std::cout << "  Creating scene lighting descriptor set..." << std::endl;
-        VkDescriptorSetAllocateInfo allocInfoSceneLightingUbo{};
-        allocInfoSceneLightingUbo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfoSceneLightingUbo.descriptorPool = descriptorPool->getDescriptorPool();
-        allocInfoSceneLightingUbo.descriptorSetCount = 1;
-        allocInfoSceneLightingUbo.pSetLayouts = &sceneLightingDescriptorSetLayout;
-
-        if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoSceneLightingUbo, &sceneLightingDescriptorSets[i]) !=
-            VK_SUCCESS) {
-            throw std::runtime_error("Failed to allocate scene lighting descriptor set");
-        }
-
-        // Update with scene lighting buffer
-        VkDescriptorBufferInfo bufferInfoSceneLightingUbo{};
-        bufferInfoSceneLightingUbo.buffer = sceneLightingBuffers[i]->getBuffer();
-        bufferInfoSceneLightingUbo.offset = 0;
-        bufferInfoSceneLightingUbo.range = sceneLightingBuffers[i]->getBufferSize();
-
-        VkWriteDescriptorSet writeSceneLightingUbo{};
-        writeSceneLightingUbo.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        writeSceneLightingUbo.dstSet = sceneLightingDescriptorSets[i];
-        writeSceneLightingUbo.dstBinding = 0;
-        writeSceneLightingUbo.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        writeSceneLightingUbo.descriptorCount = 1;
-        writeSceneLightingUbo.pBufferInfo = &bufferInfoSceneLightingUbo;
-
-        vkUpdateDescriptorSets(device.getDevice(), 1, &writeSceneLightingUbo, 0, nullptr);
+        sceneLightingDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, sceneLightingDescriptorSetLayout);
+        DescriptorWriter()
+            .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                    sceneLightingBuffers[i]->descriptorInfo(sceneLightingBuffers[i]->getBufferSize()))
+            .update(device, sceneLightingDescriptorSets[i]);
         std::cout << "  Scene lighting descriptor set created successfully." << std::endl;
 
         //Create descriptor set for light matrix
         std::cout << "  Creating light matrix descriptor set..." << std::endl;
-        VkDescriptorBufferInfo bufferInfoLightMatrix{};
-        bufferInfoLightMatrix.buffer = lightMatrixBuffers[i]->getBuffer();
-        bufferInfoLightMatrix.offset = 0;
-        bufferInfoLightMatrix.range = lightMatrixBuffers[i]->getBufferSize();
-
-        DescriptorWriter(shadowcastinglightMatrixDescriptorSetLayout, *descriptorPool)
-            .writeBuffer(0, &bufferInfoLightMatrix)
-            .build(lightMatrixDescriptorSets[i]);
+        lightMatrixDescriptorSets[i] =
+            allocateDescriptorSet(*descriptorPool, shadowcastinglightMatrixDescriptorSetLayout);
+        DescriptorWriter()
+            .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                    lightMatrixBuffers[i]->descriptorInfo(lightMatrixBuffers[i]->getBufferSize()))
+            .update(device, lightMatrixDescriptorSets[i]);
         std::cout << "  Light matrix descriptor set created successfully." << std::endl;
 
         //Create descriptor sets for show model matrices
         std::cout << "  Creating shadow model matrix descriptor set..." << std::endl;
-        VkDescriptorBufferInfo bufferInfoModelMatrix{};
-        bufferInfoModelMatrix.buffer = shadowModelMatrixBuffers[i]->getBuffer();
-        bufferInfoModelMatrix.offset = 0;
-        bufferInfoModelMatrix.range = shadowModelMatrixBuffers[i]->getBufferSize();
-
-        DescriptorWriter(shadowModelMatrixDescriptorSetLayout, *descriptorPool)
-            .writeBuffer(0, &bufferInfoModelMatrix, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-            .build(shadowModelMatrixDescriptorSets[i]);
+        shadowModelMatrixDescriptorSets[i] =
+            allocateDescriptorSet(*descriptorPool, shadowModelMatrixDescriptorSetLayout);
+        DescriptorWriter()
+            .buffer(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                    shadowModelMatrixBuffers[i]->descriptorInfo(shadowModelMatrixBuffers[i]->getBufferSize()))
+            .update(device, shadowModelMatrixDescriptorSets[i]);
         std::cout << "  Shadow model matrix descriptor set created successfully." << std::endl;
 
         //Create descriptor set for transparency model matrix
         std::cout << "  Creating transparency model matrix descriptor set..." << std::endl;
-        VkDescriptorBufferInfo transparencyModelBufferInfo = transparencyModelMatrixBuffers[i]->descriptorInfo();
-        VkDescriptorBufferInfo transparencyNormalBufferInfo = transparencyNormalMatrixBuffers[i]->descriptorInfo();
-        if (!DescriptorWriter(transparencyModelDescriptorSetLayout, *descriptorPool)
-                 .writeBuffer(0, &transparencyModelBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                 .writeBuffer(1, &transparencyNormalBufferInfo, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER)
-                 .build(transparencyModelMatrixDescriptorSets[i])) {
-            throw std::runtime_error("Failed to create transparency instance buffer descriptor set");
-        }
+        transparencyModelMatrixDescriptorSets[i] =
+            allocateDescriptorSet(*descriptorPool, transparencyModelDescriptorSetLayout);
+        DescriptorWriter()
+            .buffer(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, transparencyModelMatrixBuffers[i]->descriptorInfo())
+            .buffer(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, transparencyNormalMatrixBuffers[i]->descriptorInfo())
+            .update(device, transparencyModelMatrixDescriptorSets[i]);
         std::cout << "  Transparency model matrix descriptor set created successfully." << std::endl;
 
         std::cout << "  Creating composition descriptor set..." << std::endl;
-        VkDescriptorSetAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfo.descriptorPool = descriptorPool->getDescriptorPool();
-        allocInfo.descriptorSetCount = 1;
-        allocInfo.pSetLayouts = &compositionSetLayout;
-
-        if (vkAllocateDescriptorSets(device.getDevice(), &allocInfo, &compositionDescriptorSets[i]) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to allocate composition descriptor set");
-        }
-
-        // Prepare image infos
-        std::array<VkDescriptorImageInfo, 4> compositionImageInfos{};
-
-        // Opaque render result from light pass
-        compositionImageInfos[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        compositionImageInfos[0].imageView = lightPassResultViews[i];
-        compositionImageInfos[0].sampler = lightPassSampler;
-
-        // Transparency accumulation buffer
-        compositionImageInfos[1].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        compositionImageInfos[1].imageView = accumulationViews[i];
-        compositionImageInfos[1].sampler = lightPassSampler;
-
-        // Transparency revealage buffer
-        compositionImageInfos[2].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        compositionImageInfos[2].imageView = revealageViews[i];
-        compositionImageInfos[2].sampler = lightPassSampler;
-
-        // Indirect GI buffer stays in GENERAL because RCGI computes and readers share it within one frame.
-        compositionImageInfos[3].imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-        compositionImageInfos[3].imageView = giIndirectViews[i];
-        compositionImageInfos[3].sampler = lightPassSampler;
-
-        // Prepare write descriptor sets
-        std::array<VkWriteDescriptorSet, 4> compositionDescriptorWrites{};
-        for (size_t j = 0; j < compositionDescriptorWrites.size(); j++) {
-            compositionDescriptorWrites[j].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            compositionDescriptorWrites[j].dstSet = compositionDescriptorSets[i];
-            compositionDescriptorWrites[j].dstBinding = j;
-            compositionDescriptorWrites[j].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            compositionDescriptorWrites[j].descriptorCount = 1;
-            compositionDescriptorWrites[j].pImageInfo = &compositionImageInfos[j];
-        }
-
-        // Update descriptor sets
-        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(compositionDescriptorWrites.size()),
-                               compositionDescriptorWrites.data(), 0, nullptr);
+        compositionDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, compositionSetLayout);
+        // The indirect GI buffer stays in GENERAL because RCGI computes and readers share it within one frame.
+        DescriptorWriter()
+            .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {lightPassSampler, lightPassResultViews[i],
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}) // opaque result of the light pass
+            .image(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {lightPassSampler, accumulationViews[i],
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}) // transparency accumulation
+            .image(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {lightPassSampler, revealageViews[i],
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}) // transparency revealage
+            .image(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {lightPassSampler, giIndirectViews[i], VK_IMAGE_LAYOUT_GENERAL}) // indirect GI
+            .update(device, compositionDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)compositionDescriptorSets[i],
                      "CompositionDescriptorSet_Frame" + std::to_string(i));
         std::cout << "  Composition descriptor set created successfully." << std::endl;
 
         // Create descriptor set for SMAA edge pass
         std::cout << "  Creating SMAA edge descriptor set..." << std::endl;
-        VkDescriptorSetAllocateInfo smaaEdgeAlloc{};
-        smaaEdgeAlloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        smaaEdgeAlloc.descriptorPool = descriptorPool->getDescriptorPool();
-        smaaEdgeAlloc.descriptorSetCount = 1;
-        smaaEdgeAlloc.pSetLayouts = &smaaEdgeSetLayout;
-
-        if (vkAllocateDescriptorSets(device.getDevice(), &smaaEdgeAlloc, &smaaEdgeDescriptorSets[i]) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to allocate SMAA edge descriptor set");
-        }
-
-        VkDescriptorImageInfo smaaEdgeInput{};
-        smaaEdgeInput.sampler = postProcessSampler;
-        smaaEdgeInput.imageView = compositionColorViews[i];
-        smaaEdgeInput.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        VkWriteDescriptorSet smaaEdgeWrite{};
-        smaaEdgeWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        smaaEdgeWrite.dstSet = smaaEdgeDescriptorSets[i];
-        smaaEdgeWrite.dstBinding = 0;
-        smaaEdgeWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        smaaEdgeWrite.descriptorCount = 1;
-        smaaEdgeWrite.pImageInfo = &smaaEdgeInput;
-
-        vkUpdateDescriptorSets(device.getDevice(), 1, &smaaEdgeWrite, 0, nullptr);
+        smaaEdgeDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, smaaEdgeSetLayout);
+        DescriptorWriter()
+            .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {postProcessSampler, compositionColorViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+            .update(device, smaaEdgeDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)smaaEdgeDescriptorSets[i],
                      "SMAAEdgeDescriptorSet_Frame" + std::to_string(i));
         std::cout << "  SMAA edge descriptor set created successfully." << std::endl;
 
         // Create descriptor set for SMAA weight pass
         std::cout << "  Creating SMAA weight descriptor set..." << std::endl;
-        VkDescriptorSetAllocateInfo smaaWeightAlloc{};
-        smaaWeightAlloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        smaaWeightAlloc.descriptorPool = descriptorPool->getDescriptorPool();
-        smaaWeightAlloc.descriptorSetCount = 1;
-        smaaWeightAlloc.pSetLayouts = &smaaWeightSetLayout;
-
-        if (vkAllocateDescriptorSets(device.getDevice(), &smaaWeightAlloc, &smaaWeightDescriptorSets[i]) !=
-            VK_SUCCESS) {
-            throw std::runtime_error("Failed to allocate SMAA weight descriptor set");
-        }
-
-        VkDescriptorImageInfo smaaEdgesInfo{};
-        smaaEdgesInfo.sampler = postProcessSampler;
-        smaaEdgesInfo.imageView = smaaEdgeViews[i];
-        smaaEdgesInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        VkDescriptorImageInfo areaInfo{};
-        areaInfo.sampler = smaaAreaSampler;
-        areaInfo.imageView = smaaAreaView;
-        areaInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        VkDescriptorImageInfo searchInfo{};
-        searchInfo.sampler = smaaSearchSampler;
-        searchInfo.imageView = smaaSearchView;
-        searchInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        std::array<VkWriteDescriptorSet, 3> smaaWeightWrites{};
-        smaaWeightWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        smaaWeightWrites[0].dstSet = smaaWeightDescriptorSets[i];
-        smaaWeightWrites[0].dstBinding = 0;
-        smaaWeightWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        smaaWeightWrites[0].descriptorCount = 1;
-        smaaWeightWrites[0].pImageInfo = &smaaEdgesInfo;
-
-        smaaWeightWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        smaaWeightWrites[1].dstSet = smaaWeightDescriptorSets[i];
-        smaaWeightWrites[1].dstBinding = 1;
-        smaaWeightWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        smaaWeightWrites[1].descriptorCount = 1;
-        smaaWeightWrites[1].pImageInfo = &areaInfo;
-
-        smaaWeightWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        smaaWeightWrites[2].dstSet = smaaWeightDescriptorSets[i];
-        smaaWeightWrites[2].dstBinding = 2;
-        smaaWeightWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        smaaWeightWrites[2].descriptorCount = 1;
-        smaaWeightWrites[2].pImageInfo = &searchInfo;
-
-        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(smaaWeightWrites.size()),
-                               smaaWeightWrites.data(), 0, nullptr);
+        smaaWeightDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, smaaWeightSetLayout);
+        DescriptorWriter()
+            .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {postProcessSampler, smaaEdgeViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+            .image(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {smaaAreaSampler, smaaAreaView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+            .image(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {smaaSearchSampler, smaaSearchView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+            .update(device, smaaWeightDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)smaaWeightDescriptorSets[i],
                      "SMAAWeightDescriptorSet_Frame" + std::to_string(i));
         std::cout << "  SMAA weight descriptor set created successfully." << std::endl;
 
         // Create descriptor set for SMAA blend pass
         std::cout << "  Creating SMAA blend descriptor set..." << std::endl;
-        VkDescriptorSetAllocateInfo smaaBlendAlloc{};
-        smaaBlendAlloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        smaaBlendAlloc.descriptorPool = descriptorPool->getDescriptorPool();
-        smaaBlendAlloc.descriptorSetCount = 1;
-        smaaBlendAlloc.pSetLayouts = &smaaBlendSetLayout;
-
-        if (vkAllocateDescriptorSets(device.getDevice(), &smaaBlendAlloc, &smaaBlendDescriptorSets[i]) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to allocate SMAA blend descriptor set");
-        }
-
-        VkDescriptorImageInfo blendColor{};
-        blendColor.sampler = postProcessSampler;
-        blendColor.imageView = compositionColorViews[i];
-        blendColor.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        VkDescriptorImageInfo blendWeights{};
-        blendWeights.sampler = postProcessSampler;
-        blendWeights.imageView = smaaBlendViews[i];
-        blendWeights.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        std::array<VkWriteDescriptorSet, 2> smaaBlendWrites{};
-        smaaBlendWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        smaaBlendWrites[0].dstSet = smaaBlendDescriptorSets[i];
-        smaaBlendWrites[0].dstBinding = 0;
-        smaaBlendWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        smaaBlendWrites[0].descriptorCount = 1;
-        smaaBlendWrites[0].pImageInfo = &blendColor;
-
-        smaaBlendWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        smaaBlendWrites[1].dstSet = smaaBlendDescriptorSets[i];
-        smaaBlendWrites[1].dstBinding = 1;
-        smaaBlendWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        smaaBlendWrites[1].descriptorCount = 1;
-        smaaBlendWrites[1].pImageInfo = &blendWeights;
-
-        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(smaaBlendWrites.size()),
-                               smaaBlendWrites.data(), 0, nullptr);
+        smaaBlendDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, smaaBlendSetLayout);
+        DescriptorWriter()
+            .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {postProcessSampler, compositionColorViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+            .image(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {postProcessSampler, smaaBlendViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+            .update(device, smaaBlendDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)smaaBlendDescriptorSets[i],
                      "SMAABlendDescriptorSet_Frame" + std::to_string(i));
         std::cout << "  SMAA blend descriptor set created successfully." << std::endl;
 
         // Create descriptor set for color correction pass
         std::cout << "  Creating color correction descriptor set..." << std::endl;
-        VkDescriptorSetAllocateInfo colorCorrectAlloc{};
-        colorCorrectAlloc.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        colorCorrectAlloc.descriptorPool = descriptorPool->getDescriptorPool();
-        colorCorrectAlloc.descriptorSetCount = 1;
-        colorCorrectAlloc.pSetLayouts = &colorCorrectionSetLayout;
-
-        if (vkAllocateDescriptorSets(device.getDevice(), &colorCorrectAlloc, &colorCorrectionDescriptorSets[i]) !=
-            VK_SUCCESS) {
-            throw std::runtime_error("Failed to allocate color correction descriptor set");
-        }
-
-        VkDescriptorImageInfo postAAInfo{};
-        postAAInfo.sampler = postProcessSampler;
-        postAAInfo.imageView = postAAColorViews[i];
-        postAAInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        VkWriteDescriptorSet colorCorrectWrite{};
-        colorCorrectWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        colorCorrectWrite.dstSet = colorCorrectionDescriptorSets[i];
-        colorCorrectWrite.dstBinding = 0;
-        colorCorrectWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        colorCorrectWrite.descriptorCount = 1;
-        colorCorrectWrite.pImageInfo = &postAAInfo;
-
-        vkUpdateDescriptorSets(device.getDevice(), 1, &colorCorrectWrite, 0, nullptr);
+        colorCorrectionDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, colorCorrectionSetLayout);
+        DescriptorWriter()
+            .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {postProcessSampler, postAAColorViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+            .update(device, colorCorrectionDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)colorCorrectionDescriptorSets[i],
                      "ColorCorrectionDescriptorSet_Frame" + std::to_string(i));
         std::cout << "  Color correction descriptor set created successfully." << std::endl;
 
         // Create descriptor set for depth pyramid build (src depth + dst pyramid mip0)
         std::cout << "  Creating depth pyramid descriptor set..." << std::endl;
-        VkDescriptorSetAllocateInfo allocInfoPyr{};
-        allocInfoPyr.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfoPyr.descriptorPool = descriptorPool->getDescriptorPool();
-        allocInfoPyr.descriptorSetCount = 1;
-        allocInfoPyr.pSetLayouts = &depthPyramidSetLayout;
-
-        if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoPyr, &depthPyramidDescriptorSets[i]) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to allocate depth pyramid descriptor set");
-        }
-
-        VkDescriptorImageInfo srcDepthInfo{};
-        srcDepthInfo.sampler = depthPyramidSampler; // point sampling for depth
-        srcDepthInfo.imageView = depthViews[i];
-        srcDepthInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-
-        VkDescriptorImageInfo dstPyrInfo{};
-        dstPyrInfo.sampler = VK_NULL_HANDLE;
-        // write mip0 storage view for seed
-        dstPyrInfo.imageView = depthPyramidMipStorageViews[i][0];
-        dstPyrInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL; // will be transitioned before dispatch
-
-        std::array<VkWriteDescriptorSet, 2> pyrWrites{};
-        pyrWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        pyrWrites[0].dstSet = depthPyramidDescriptorSets[i];
-        pyrWrites[0].dstBinding = 0;
-        pyrWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        pyrWrites[0].descriptorCount = 1;
-        pyrWrites[0].pImageInfo = &srcDepthInfo;
-
-        pyrWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        pyrWrites[1].dstSet = depthPyramidDescriptorSets[i];
-        pyrWrites[1].dstBinding = 1;
-        pyrWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        pyrWrites[1].descriptorCount = 1;
-        pyrWrites[1].pImageInfo = &dstPyrInfo;
-
-        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(pyrWrites.size()), pyrWrites.data(), 0,
-                               nullptr);
+        depthPyramidDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, depthPyramidSetLayout);
+        // Source depth is point sampled; the destination is pyramid mip 0 as a storage image, transitioned
+        // to GENERAL before the dispatch.
+        DescriptorWriter()
+            .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {depthPyramidSampler, depthViews[i], VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL})
+            .image(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                   {VK_NULL_HANDLE, depthPyramidMipStorageViews[i][0], VK_IMAGE_LAYOUT_GENERAL})
+            .update(device, depthPyramidDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)depthPyramidDescriptorSets[i],
                      "DepthPyramidDescriptorSet_Frame" + std::to_string(i));
 
         // Allocate per-mip descriptor sets (mips 1..N-1) for the downsample loop
         depthPyramidMipDescriptorSets[i].resize(depthPyramidMipLevels[i]);
         for (uint32_t m = 1; m < depthPyramidMipLevels[i]; ++m) {
-            VkDescriptorSetAllocateInfo allocInfoMip{};
-            allocInfoMip.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-            allocInfoMip.descriptorPool = descriptorPool->getDescriptorPool();
-            allocInfoMip.descriptorSetCount = 1;
-            allocInfoMip.pSetLayouts = &depthPyramidSetLayout;
-            if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoMip, &depthPyramidMipDescriptorSets[i][m]) !=
-                VK_SUCCESS) {
-                throw std::runtime_error("Failed to allocate depth pyramid per-mip descriptor set");
-            }
+            depthPyramidMipDescriptorSets[i][m] = allocateDescriptorSet(*descriptorPool, depthPyramidSetLayout);
             setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)depthPyramidMipDescriptorSets[i][m],
                          "DepthPyramidMipDescriptorSet_Frame" + std::to_string(i) + "_Mip" + std::to_string(m));
 
-            // Write the descriptor set immediately after allocation to avoid validation errors
-            // Source: previous mip level (m-1) as sampled input
-            // Note: The source mip will be in SHADER_READ_ONLY_OPTIMAL at dispatch time (transitioned by setMipLevelBarriers)
-            VkDescriptorImageInfo srcMipInfo{};
-            srcMipInfo.sampler = depthPyramidSampler;
-            srcMipInfo.imageView = depthPyramidMipStorageViews[i][m - 1];
-            srcMipInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-            // Destination: current mip level (m) as storage output
-            // Note: The destination mip will be in GENERAL at dispatch time (transitioned by setMipLevelBarriers)
-            VkDescriptorImageInfo dstMipInfo{};
-            dstMipInfo.sampler = VK_NULL_HANDLE;
-            dstMipInfo.imageView = depthPyramidMipStorageViews[i][m];
-            dstMipInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-            std::array<VkWriteDescriptorSet, 2> mipWrites{};
-            mipWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            mipWrites[0].dstSet = depthPyramidMipDescriptorSets[i][m];
-            mipWrites[0].dstBinding = 0;
-            mipWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            mipWrites[0].descriptorCount = 1;
-            mipWrites[0].pImageInfo = &srcMipInfo;
-
-            mipWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            mipWrites[1].dstSet = depthPyramidMipDescriptorSets[i][m];
-            mipWrites[1].dstBinding = 1;
-            mipWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-            mipWrites[1].descriptorCount = 1;
-            mipWrites[1].pImageInfo = &dstMipInfo;
-
-            vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(mipWrites.size()), mipWrites.data(), 0,
-                                   nullptr);
+            // Source: previous mip level (m-1), sampled. It is in SHADER_READ_ONLY_OPTIMAL at dispatch time
+            // (transitioned by setMipLevelBarriers).
+            // Destination: current mip level (m), written as a storage image. It is in GENERAL at dispatch time
+            // (also transitioned by setMipLevelBarriers).
+            DescriptorWriter()
+                .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                       {depthPyramidSampler, depthPyramidMipStorageViews[i][m - 1],
+                        VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+                .image(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                       {VK_NULL_HANDLE, depthPyramidMipStorageViews[i][m], VK_IMAGE_LAYOUT_GENERAL})
+                .update(device, depthPyramidMipDescriptorSets[i][m]);
         }
         std::cout << "  Depth pyramid descriptor set created successfully." << std::endl;
 
@@ -1609,180 +1316,65 @@ void RenderingResources::createDescriptorSets() {
     // RC build/resolve descriptor sets per frame
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         // RC Build
-        VkDescriptorSetAllocateInfo allocRCBuild{};
-        allocRCBuild.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocRCBuild.descriptorPool = descriptorPool->getDescriptorPool();
-        allocRCBuild.descriptorSetCount = 1;
-        allocRCBuild.pSetLayouts = &rcBuildSetLayout;
-        if (vkAllocateDescriptorSets(device.getDevice(), &allocRCBuild, &rcBuildDescriptorSets[i]) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to allocate RC build descriptor set");
-        }
+        rcBuildDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, rcBuildSetLayout);
 
-        // Camera UBO
-        VkDescriptorBufferInfo camUbo = cameraUniformBuffers[i]->descriptorInfo();
-        // GBuffer images
-        std::array<VkDescriptorImageInfo, 4> gbInfos{};
-        gbInfos[0] = {gBuffer->getSampler(), gBuffer->getPositionView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-        gbInfos[1] = {gBuffer->getSampler(), gBuffer->getNormalView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-        gbInfos[2] = {gBuffer->getSampler(), gBuffer->getAlbedoView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-        gbInfos[3] = {gBuffer->getSampler(), gBuffer->getMaterialView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-        // Depth pyramid must use point sampling; light pass can use linear.
-        VkDescriptorImageInfo depthPyrInfo{depthPyramidSampler, depthPyramidViews[i],
-                                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-        VkDescriptorImageInfo lightPassInfo{lightPassSampler, lightIncidentViews[i],
-                                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-        // RC atlases as storage image arrays
+        // GBuffer images (position, normal, albedo, material), reused by the resolve set below.
+        const std::array<VkDescriptorImageInfo, 4> gbInfos{{
+            {gBuffer->getSampler(), gBuffer->getPositionView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {gBuffer->getSampler(), gBuffer->getNormalView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {gBuffer->getSampler(), gBuffer->getAlbedoView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+            {gBuffer->getSampler(), gBuffer->getMaterialView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
+        }};
+        // RC atlases as a storage image array
         std::vector<VkDescriptorImageInfo> radStorageInfos(RC_CASCADE_COUNT);
         for (uint32_t c = 0; c < RC_CASCADE_COUNT; ++c) {
             radStorageInfos[c] = {VK_NULL_HANDLE, rcRadianceViews[c][i], VK_IMAGE_LAYOUT_GENERAL};
         }
 
-        std::vector<VkWriteDescriptorSet> writesBuild;
-        writesBuild.reserve(1 + 4 + 1 + 1 + 2);
-
-        VkWriteDescriptorSet w0{};
-        w0.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        w0.dstSet = rcBuildDescriptorSets[i];
-        w0.dstBinding = 0;
-        w0.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        w0.descriptorCount = 1;
-        w0.pBufferInfo = &camUbo;
-        writesBuild.push_back(w0);
+        DescriptorWriter buildWriter;
+        buildWriter.buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, cameraUniformBuffers[i]->descriptorInfo());
         for (uint32_t b = 0; b < 4; ++b) {
-            VkWriteDescriptorSet w{};
-            w.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            w.dstSet = rcBuildDescriptorSets[i];
-            w.dstBinding = 1 + b;
-            w.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            w.descriptorCount = 1;
-            w.pImageInfo = &gbInfos[b];
-            writesBuild.push_back(w);
+            buildWriter.image(1 + b, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, gbInfos[b]);
         }
-        VkWriteDescriptorSet w5{};
-        w5.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        w5.dstSet = rcBuildDescriptorSets[i];
-        w5.dstBinding = 5;
-        w5.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        w5.descriptorCount = 1;
-        w5.pImageInfo = &depthPyrInfo;
-        writesBuild.push_back(w5);
-        VkWriteDescriptorSet w6{};
-        w6.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        w6.dstSet = rcBuildDescriptorSets[i];
-        w6.dstBinding = 6;
-        w6.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        w6.descriptorCount = 1;
-        w6.pImageInfo = &lightPassInfo;
-        writesBuild.push_back(w6);
-        VkWriteDescriptorSet w7{};
-        w7.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        w7.dstSet = rcBuildDescriptorSets[i];
-        w7.dstBinding = 7;
-        w7.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        w7.descriptorCount = RC_CASCADE_COUNT;
-        w7.pImageInfo = radStorageInfos.data();
-        writesBuild.push_back(w7);
-
-        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(writesBuild.size()), writesBuild.data(), 0,
-                               nullptr);
+        // Depth pyramid must use point sampling; the light pass result can use linear.
+        buildWriter
+            .image(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {depthPyramidSampler, depthPyramidViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+            .image(6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {lightPassSampler, lightIncidentViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+            .images(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, radStorageInfos.data(), RC_CASCADE_COUNT)
+            .update(device, rcBuildDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)rcBuildDescriptorSets[i],
                      "RCBuildDescriptorSet_Frame" + std::to_string(i));
 
         // RC Resolve
-        VkDescriptorSetAllocateInfo allocRCResolve{};
-        allocRCResolve.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocRCResolve.descriptorPool = descriptorPool->getDescriptorPool();
-        allocRCResolve.descriptorSetCount = 1;
-        allocRCResolve.pSetLayouts = &rcResolveSetLayout;
-        if (vkAllocateDescriptorSets(device.getDevice(), &allocRCResolve, &rcResolveDescriptorSets[i]) != VK_SUCCESS) {
-            throw std::runtime_error("Failed to allocate RC resolve descriptor set");
-        }
+        rcResolveDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, rcResolveSetLayout);
 
-        // Camera
-        VkDescriptorBufferInfo camUboResolve = cameraUniformBuffers[i]->descriptorInfo();
-        // GBuffer again
-        std::array<VkDescriptorImageInfo, 4> gbInfosResolve = gbInfos;
-        // RC atlases sampled arrays (use lightPassSampler as generic sampler)
+        // RC atlases as sampled arrays (lightPassSampler as the generic sampler). They stay in GENERAL during
+        // build and resolve, so sample from GENERAL to avoid layout mismatches.
         std::vector<VkDescriptorImageInfo> radSampleInfos(RC_CASCADE_COUNT);
         for (uint32_t c = 0; c < RC_CASCADE_COUNT; ++c) {
-            // Atlases are kept in GENERAL during build+resolve; sample from GENERAL to avoid layout mismatches.
             radSampleInfos[c] = {lightPassSampler, rcRadianceViews[c][i], VK_IMAGE_LAYOUT_GENERAL};
         }
-        // Output GI storage image
-        VkDescriptorImageInfo giOut{};
-        giOut.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-        giOut.imageView = giIndirectViews[i];
-        giOut.sampler = VK_NULL_HANDLE;
 
-        // GI history: use previous frame's GI output for temporal accumulation
-        // Frame i uses frame (i-1+MAX_FRAMES_IN_FLIGHT) % MAX_FRAMES_IN_FLIGHT as history
-        uint32_t historyFrameIndex = (i + MAX_FRAMES_IN_FLIGHT - 1) % MAX_FRAMES_IN_FLIGHT;
-        VkDescriptorImageInfo giHistoryInfo{};
-        giHistoryInfo.sampler = lightPassSampler;
-        giHistoryInfo.imageView = giIndirectViews[historyFrameIndex];
-        giHistoryInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+        // GI history: frame i uses the previous frame's GI output for temporal accumulation, and the previous
+        // frame's position buffer for temporal validation.
+        const uint32_t historyFrameIndex = (i + MAX_FRAMES_IN_FLIGHT - 1) % MAX_FRAMES_IN_FLIGHT;
 
-        // Previous frame position buffer for temporal validation
-        VkDescriptorImageInfo prevPosInfo{};
-        prevPosInfo.sampler = gBuffer->getSampler();
-        prevPosInfo.imageView = gBuffer->getPositionView(historyFrameIndex);
-        prevPosInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        std::vector<VkWriteDescriptorSet> writesResolve;
-        writesResolve.reserve(1 + 4 + 2 + 1 + 1 + 1);
-        VkWriteDescriptorSet r0{};
-        r0.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        r0.dstSet = rcResolveDescriptorSets[i];
-        r0.dstBinding = 0;
-        r0.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        r0.descriptorCount = 1;
-        r0.pBufferInfo = &camUboResolve;
-        writesResolve.push_back(r0);
+        DescriptorWriter resolveWriter;
+        resolveWriter.buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, cameraUniformBuffers[i]->descriptorInfo());
         for (uint32_t b = 0; b < 4; ++b) {
-            VkWriteDescriptorSet r{};
-            r.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            r.dstSet = rcResolveDescriptorSets[i];
-            r.dstBinding = 1 + b;
-            r.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            r.descriptorCount = 1;
-            r.pImageInfo = &gbInfosResolve[b];
-            writesResolve.push_back(r);
+            resolveWriter.image(1 + b, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, gbInfos[b]);
         }
-        VkWriteDescriptorSet r5{};
-        r5.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        r5.dstSet = rcResolveDescriptorSets[i];
-        r5.dstBinding = 5;
-        r5.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        r5.descriptorCount = RC_CASCADE_COUNT;
-        r5.pImageInfo = radSampleInfos.data();
-        writesResolve.push_back(r5);
-        VkWriteDescriptorSet r7{};
-        r7.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        r7.dstSet = rcResolveDescriptorSets[i];
-        r7.dstBinding = 7;
-        r7.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        r7.descriptorCount = 1;
-        r7.pImageInfo = &giOut;
-        writesResolve.push_back(r7);
-        VkWriteDescriptorSet r8{};
-        r8.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        r8.dstSet = rcResolveDescriptorSets[i];
-        r8.dstBinding = 8;
-        r8.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        r8.descriptorCount = 1;
-        r8.pImageInfo = &giHistoryInfo;
-        writesResolve.push_back(r8);
-        VkWriteDescriptorSet r9{};
-        r9.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        r9.dstSet = rcResolveDescriptorSets[i];
-        r9.dstBinding = 9;
-        r9.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        r9.descriptorCount = 1;
-        r9.pImageInfo = &prevPosInfo;
-        writesResolve.push_back(r9);
-
-        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(writesResolve.size()), writesResolve.data(), 0,
-                               nullptr);
+        resolveWriter.images(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, radSampleInfos.data(), RC_CASCADE_COUNT)
+            .image(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                   {VK_NULL_HANDLE, giIndirectViews[i], VK_IMAGE_LAYOUT_GENERAL}) // GI output
+            .image(8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {lightPassSampler, giIndirectViews[historyFrameIndex], VK_IMAGE_LAYOUT_GENERAL})
+            .image(9, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                   {gBuffer->getSampler(), gBuffer->getPositionView(historyFrameIndex),
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+            .update(device, rcResolveDescriptorSets[i]);
         setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)rcResolveDescriptorSets[i],
                      "RCResolveDescriptorSet_Frame" + std::to_string(i));
     }
@@ -1790,15 +1382,7 @@ void RenderingResources::createDescriptorSets() {
     // Create skybox descriptor set (single set, not per frame)
     std::cout << "Creating skybox descriptor set..." << std::endl;
     // Note: We need a skybox texture to properly populate this, for now just allocate the set
-    VkDescriptorSetAllocateInfo allocInfoSkybox{};
-    allocInfoSkybox.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-    allocInfoSkybox.descriptorPool = descriptorPool->getDescriptorPool();
-    allocInfoSkybox.descriptorSetCount = 1;
-    allocInfoSkybox.pSetLayouts = &skyboxDescriptorSetLayout;
-
-    if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoSkybox, &skyboxDescriptorSet) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to allocate skybox descriptor set");
-    }
+    skyboxDescriptorSet = allocateDescriptorSet(*descriptorPool, skyboxDescriptorSetLayout);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)skyboxDescriptorSet, "SkyboxDescriptorSet");
     std::cout << "Skybox descriptor set allocated successfully (requires texture to populate)." << std::endl;
 }
@@ -1806,16 +1390,7 @@ void RenderingResources::createDescriptorSets() {
 void RenderingResources::createShadowMapSamplerDescriptorSets() {
     // Allocate descriptor sets for each frame
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VkDescriptorSetAllocateInfo allocInfoShadowMapSampler{};
-        allocInfoShadowMapSampler.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-        allocInfoShadowMapSampler.descriptorPool = descriptorPool->getDescriptorPool();
-        allocInfoShadowMapSampler.descriptorSetCount = 1;
-        allocInfoShadowMapSampler.pSetLayouts = &shadowMapSamplerLayout;
-
-        if (vkAllocateDescriptorSets(device.getDevice(), &allocInfoShadowMapSampler, &shadowMapSamplerSets[i]) !=
-            VK_SUCCESS) {
-            throw std::runtime_error("Failed to allocate shadow map sampler descriptor set");
-        }
+        shadowMapSamplerSets[i] = allocateDescriptorSet(*descriptorPool, shadowMapSamplerLayout);
     }
 
     // Update descriptor sets for each frame with frame-specific shadow maps
@@ -1850,36 +1425,15 @@ void RenderingResources::createShadowMapSamplerDescriptorSets() {
             }
         }
 
-        // Write descriptor sets for this frame
-        std::array<VkWriteDescriptorSet, 3> descriptorWrites{};
-
-        // Directional lights
-        descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[0].dstSet = shadowMapSamplerSets[frameIndex];
-        descriptorWrites[0].dstBinding = 0;
-        descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorWrites[0].descriptorCount = static_cast<uint32_t>(directionalImageInfos.size());
-        descriptorWrites[0].pImageInfo = directionalImageInfos.data();
-
-        // Spot lights
-        descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[1].dstSet = shadowMapSamplerSets[frameIndex];
-        descriptorWrites[1].dstBinding = 1;
-        descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorWrites[1].descriptorCount = static_cast<uint32_t>(spotImageInfos.size());
-        descriptorWrites[1].pImageInfo = spotImageInfos.data();
-
-        // Point lights
-        descriptorWrites[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrites[2].dstSet = shadowMapSamplerSets[frameIndex];
-        descriptorWrites[2].dstBinding = 2;
-        descriptorWrites[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorWrites[2].descriptorCount = static_cast<uint32_t>(pointImageInfos.size());
-        descriptorWrites[2].pImageInfo = pointImageInfos.data();
-
-        // Update the descriptor sets for this frame
-        vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(descriptorWrites.size()),
-                               descriptorWrites.data(), 0, nullptr);
+        // One array write per light type; the array sizes are however many shadow maps exist this frame.
+        DescriptorWriter()
+            .images(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, directionalImageInfos.data(),
+                    static_cast<uint32_t>(directionalImageInfos.size()))
+            .images(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, spotImageInfos.data(),
+                    static_cast<uint32_t>(spotImageInfos.size()))
+            .images(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, pointImageInfos.data(),
+                    static_cast<uint32_t>(pointImageInfos.size()))
+            .update(device, shadowMapSamplerSets[frameIndex]);
     }
 }
 
@@ -2473,20 +2027,10 @@ std::array<FrameContext, MAX_FRAMES_IN_FLIGHT> RenderingResources::createFrameCo
 }
 
 void RenderingResources::updateSkyboxDescriptorSet(VkImageView skyboxImageView, VkSampler skyboxSampler) {
-    VkDescriptorImageInfo imageInfo{};
-    imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-    imageInfo.imageView = skyboxImageView;
-    imageInfo.sampler = skyboxSampler;
-
-    VkWriteDescriptorSet descriptorWrite{};
-    descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    descriptorWrite.dstSet = skyboxDescriptorSet;
-    descriptorWrite.dstBinding = 0;
-    descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    descriptorWrite.descriptorCount = 1;
-    descriptorWrite.pImageInfo = &imageInfo;
-
-    vkUpdateDescriptorSets(device.getDevice(), 1, &descriptorWrite, 0, nullptr);
+    DescriptorWriter()
+        .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+               {skyboxSampler, skyboxImageView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+        .update(device, skyboxDescriptorSet);
 }
 
 void RenderingResources::initializeSkyboxFromScene() {

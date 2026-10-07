@@ -49,7 +49,6 @@ private:
 
     void transitionGBufferImages(VkCommandBuffer commandBuffer);
     void setBarriers(FrameContext& frameContext);
-    VkWriteDescriptorSet createWrite(VkDescriptorSet dstSet, uint32_t binding, VkDescriptorImageInfo* imageInfo);
     void beginRenderPass(FrameContext& frameContext);
     void endRenderPass(FrameContext& frameContext);
 
