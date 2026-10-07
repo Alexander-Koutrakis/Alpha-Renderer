@@ -1482,7 +1482,7 @@ void RenderingResources::createDescriptorSets() {
         }
 
         // Then prepare the image infos and update the descriptor set
-        std::array<VkDescriptorImageInfo, 4> gbufferImageInfos;
+        std::array<VkDescriptorImageInfo, 4> gbufferImageInfos{};
         gbufferImageInfos[0] = {gBuffer->getSampler(), gBuffer->getPositionView(i),
                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
         gbufferImageInfos[1] = {gBuffer->getSampler(), gBuffer->getNormalView(i),
@@ -1645,7 +1645,7 @@ void RenderingResources::createDescriptorSets() {
         }
 
         // Prepare image infos
-        std::array<VkDescriptorImageInfo, 4> compositionImageInfos;
+        std::array<VkDescriptorImageInfo, 4> compositionImageInfos{};
 
         // Opaque render result from light pass
         compositionImageInfos[0].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;

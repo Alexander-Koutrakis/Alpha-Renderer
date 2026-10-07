@@ -45,12 +45,12 @@ private:
     VkBuffer buffer = VK_NULL_HANDLE;
     VkDeviceMemory memory = VK_NULL_HANDLE;
 
-    VkDeviceSize bufferSize;
-    uint32_t instanceCount;
-    VkDeviceSize instanceSize;
-    VkDeviceSize alignmentSize;
-    VkBufferUsageFlags usageFlags;
-    VkMemoryPropertyFlags memoryPropertyFlags;
+    VkDeviceSize bufferSize = 0;
+    uint32_t instanceCount = 0;
+    VkDeviceSize instanceSize = 0;
+    VkDeviceSize alignmentSize = 0;
+    VkBufferUsageFlags usageFlags = 0;
+    VkMemoryPropertyFlags memoryPropertyFlags = 0;
 };
 
 } // namespace Rendering

@@ -40,9 +40,9 @@ public:
         void updateBounds(const AABB& newBounds) { bounds = newBounds; }
 
     private:
-        T* data;
+        T* data = nullptr;
         AABB bounds;
-        Node* currentNode;
+        Node* currentNode = nullptr;
 
         friend class Octree;
         friend class Node;
@@ -66,7 +66,7 @@ public:
 
     private:
         AABB bounds;
-        uint32_t depth;
+        uint32_t depth = 0;
         std::vector<OctreeObject*> objects;
         std::array<std::unique_ptr<Node>, 8> children;
         Node* parent = nullptr;

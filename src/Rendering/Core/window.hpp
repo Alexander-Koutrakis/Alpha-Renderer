@@ -26,11 +26,11 @@ private:
     static void framebufferResizeCallback(GLFWwindow* window, int width, int height);
     void initWindow();
 
-    int width;
-    int height;
+    int width = 0;
+    int height = 0;
     bool framebufferResized = false;
 
     std::string windowName;
-    GLFWwindow* window;
+    GLFWwindow* window = nullptr;
 };
 } // namespace Rendering

@@ -166,7 +166,7 @@ ViewFrustum ViewFrustum::createOrthographic(float left, float right, float botto
     glm::mat4 invView = glm::inverse(viewMatrix);
 
     // Calculate the eight corners of the frustum in world space
-    std::array<glm::vec3, 8> corners;
+    std::array<glm::vec3, 8> corners{};
     corners[0] = glm::vec3(left, bottom, -nearZ);  // near bottom left
     corners[1] = glm::vec3(right, bottom, -nearZ); // near bottom right
     corners[2] = glm::vec3(right, top, -nearZ);    // near top right

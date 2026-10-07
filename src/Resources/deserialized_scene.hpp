@@ -21,21 +21,21 @@ enum class ComponentType {
 
 struct DeserializedMaterial {
     std::string id;
-    MaterialType type;
+    MaterialType type{MaterialType::Opaque};
     std::string albedoPath;
     std::string normalPath;
     std::string metallicSmoothnessPath;
     std::string heightPath;
     std::string occlusionPath;
     std::string detailMaskPath;
-    glm::vec4 albedoColor;
-    float metallic;
-    float smoothness;
-    float ao;
-    float alpha;
-    float alphaCutoff;
-    float normalStrength;
-    bool enableGPUInstancing;
+    glm::vec4 albedoColor{0.0f};
+    float metallic{0.0f};
+    float smoothness{0.0f};
+    float ao{0.0f};
+    float alpha{1.0f};
+    float alphaCutoff{0.0f};
+    float normalStrength{0.0f};
+    bool enableGPUInstancing{false};
     static DeserializedMaterial from_json(const json& j);
 };
 
@@ -47,8 +47,8 @@ struct DeserializedMesh {
     std::vector<glm::vec4> tangents;
     std::vector<uint32_t> indices;
     struct Submesh {
-        uint32_t indexStart;
-        uint32_t indexCount;
+        uint32_t indexStart{0};
+        uint32_t indexCount{0};
     };
     std::vector<Submesh> submeshes;
     static DeserializedMesh from_json(const json& j);
@@ -60,17 +60,17 @@ struct Component {
 };
 
 struct DeserializedTransform : Component {
-    glm::vec3 position;
-    glm::quat rotation;
-    glm::vec3 scale;
+    glm::vec3 position{0.0f};
+    glm::quat rotation{1.0f, 0.0f, 0.0f, 0.0f};
+    glm::vec3 scale{1.0f};
 
     static std::shared_ptr<DeserializedTransform> from_json(const json& j);
 };
 
 struct DeserializedCamera : Component {
-    float fieldOfView;
-    float nearPlane;
-    float farPlane;
+    float fieldOfView{0.0f};
+    float nearPlane{0.0f};
+    float farPlane{0.0f};
 
     static std::shared_ptr<DeserializedCamera> from_json(const json& j);
 };
@@ -78,17 +78,17 @@ struct DeserializedCamera : Component {
 struct DeserializedMeshRenderer : Component {
     std::string meshId;
     std::vector<std::string> materialIds;
-    bool castingShadows;
+    bool castingShadows{false};
 
     static std::shared_ptr<DeserializedMeshRenderer> from_json(const json& j);
 };
 
 struct DeserializedDirectionalLight : Component {
-    glm::vec4 direction;
-    glm::vec3 color;
-    float intensity;
-    bool isCastingShadows;
-    float shadowStrength;
+    glm::vec4 direction{0.0f};
+    glm::vec3 color{1.0f};
+    float intensity{1.0f};
+    bool isCastingShadows{false};
+    float shadowStrength{1.0f};
     static std::shared_ptr<DeserializedDirectionalLight> from_json(const json& j);
 };
 
@@ -98,8 +98,8 @@ struct DeserializedSpotLight : Component {
     float innerCutoff{12.5f}; // Inner cone angle in degrees (where light is at full intensity)
     float outerCutoff{17.5f}; // Outer cone angle in degrees (where light begins to fade out)
     glm::vec3 color{1.0f};    // Light color (RGB)
-    bool isCastingShadows;
-    float shadowStrength;
+    bool isCastingShadows{false};
+    float shadowStrength{1.0f};
     static std::shared_ptr<DeserializedSpotLight> from_json(const json& j);
 };
 
@@ -107,13 +107,13 @@ struct DeserializedPointLight : Component {
     float intensity{1.0f};
     float range{1.0f};
     glm::vec3 color{1.0f};
-    bool isCastingShadows;
-    float shadowStrength;
+    bool isCastingShadows{false};
+    float shadowStrength{1.0f};
     static std::shared_ptr<DeserializedPointLight> from_json(const json& j);
 };
 
 struct DeserializedGameObject {
-    int entityId;
+    int entityId{0};
     std::vector<std::shared_ptr<Component>> components;
 
     static DeserializedGameObject from_json(const json& j) {
@@ -143,10 +143,10 @@ struct DeserializedGameObject {
 };
 
 struct EnvironmentLighting {
-    glm::vec3 ambientColor;
-    float ambientIntensity;
+    glm::vec3 ambientColor{0.0f};
+    float ambientIntensity{0.0f};
     std::array<std::string, 6> skyboxPaths;
-    float reflectionIntensity;
+    float reflectionIntensity{0.0f};
     static EnvironmentLighting from_json(const json& j);
 };
 

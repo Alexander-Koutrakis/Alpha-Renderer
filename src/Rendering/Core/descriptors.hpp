@@ -35,7 +35,7 @@ public:
 
 private:
     Device& device;
-    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorSetLayout descriptorSetLayout{VK_NULL_HANDLE};
     std::unordered_map<uint32_t, VkDescriptorSetLayoutBinding> bindings;
 };
 
@@ -69,7 +69,7 @@ public:
 
 private:
     Device& device_;
-    VkDescriptorPool descriptorPool;
+    VkDescriptorPool descriptorPool{VK_NULL_HANDLE};
 };
 
 class DescriptorWriter {

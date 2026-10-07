@@ -52,19 +52,19 @@ private:
     void emitComputeBarrier(VkCommandBuffer cmd) const;
 
     struct CascadeBuildPushConstants {
-        int cascadeIndex;
-        int probeStridePx;
-        int tileSize;
-        int depthMipCount;
-        int frameIndex;
-        float tStart;
-        float segmentLen;
+        int cascadeIndex = 0;
+        int probeStridePx = 0;
+        int tileSize = 0;
+        int depthMipCount = 0;
+        int frameIndex = 0;
+        float tStart = 0.0f;
+        float segmentLen = 0.0f;
     };
     struct ResolvePushConstants {
-        glm::mat4 prevViewProj; // Previous frame's view-projection matrix for reprojection
-        int probeStridePx;
-        int tileSize;
-        int temporalFrame; // Frame counter for jittering
+        glm::mat4 prevViewProj{1.0f}; // Previous frame's view-projection matrix for reprojection
+        int probeStridePx = 0;
+        int tileSize = 0;
+        int temporalFrame = 0; // Frame counter for jittering
     };
     struct CascadeDispatchInfo {
         CascadeBuildPushConstants push{};
@@ -75,14 +75,14 @@ private:
     };
 
     struct DepthPyramidPushConstants {
-        float cameraNear;
-        float cameraFar;
-        float padding;
+        float cameraNear = 0.0f;
+        float cameraFar = 0.0f;
+        float padding = 0.0f;
     };
 
     struct CascadeBand {
-        float start;
-        float length;
+        float start = 0.0f;
+        float length = 0.0f;
     };
     CascadeDispatchInfo prepareCascadeDispatch(uint32_t cascadeIndex, const CascadeBand& band) const;
     void dispatchCascade(VkCommandBuffer cmd, const CascadeDispatchInfo& dispatchInfo) const;

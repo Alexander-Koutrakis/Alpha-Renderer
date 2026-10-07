@@ -12,60 +12,31 @@ struct ShaderStageInfo {
     std::string spirvFilepath;
 };
 
+// Holds the fixed-function state for a graphics pipeline. Some members point into other members
+// (colorBlendInfo.pAttachments, dynamicStateInfo.pDynamicStates), so copying would leave the copy
+// pointing at the original: the type is non-copyable on purpose. Fill it in place with
+// Pipeline::defaultPipelineConfigInfo and pass it by reference.
 struct PipelineConfigInfo {
     PipelineConfigInfo() = default;
-    PipelineConfigInfo(const PipelineConfigInfo& other) {
-        // Copy all members
-        bindingDescriptions = other.bindingDescriptions;
-        attributeDescriptions = other.attributeDescriptions;
-        viewportInfo = other.viewportInfo;
-        inputAssemblyInfo = other.inputAssemblyInfo;
-        rasterizationInfo = other.rasterizationInfo;
-        multisampleInfo = other.multisampleInfo;
-        colorBlendAttachment = other.colorBlendAttachment;
-        colorBlendInfo = other.colorBlendInfo;
-        depthStencilInfo = other.depthStencilInfo;
-        dynamicStateEnables = other.dynamicStateEnables;
-        dynamicStateInfo = other.dynamicStateInfo;
-        pipelineLayout = other.pipelineLayout;
-        renderPass = other.renderPass;
-        subpass = other.subpass;
-    }
-
-    PipelineConfigInfo& operator=(const PipelineConfigInfo& other) {
-        if (this != &other) {
-            bindingDescriptions = other.bindingDescriptions;
-            attributeDescriptions = other.attributeDescriptions;
-            viewportInfo = other.viewportInfo;
-            inputAssemblyInfo = other.inputAssemblyInfo;
-            rasterizationInfo = other.rasterizationInfo;
-            multisampleInfo = other.multisampleInfo;
-            colorBlendAttachment = other.colorBlendAttachment;
-            colorBlendInfo = other.colorBlendInfo;
-            depthStencilInfo = other.depthStencilInfo;
-            dynamicStateEnables = other.dynamicStateEnables;
-            dynamicStateInfo = other.dynamicStateInfo;
-            pipelineLayout = other.pipelineLayout;
-            renderPass = other.renderPass;
-            subpass = other.subpass;
-        }
-        return *this;
-    }
+    PipelineConfigInfo(const PipelineConfigInfo&) = delete;
+    PipelineConfigInfo& operator=(const PipelineConfigInfo&) = delete;
 
     std::vector<VkVertexInputBindingDescription> bindingDescriptions{};
     std::vector<VkVertexInputAttributeDescription> attributeDescriptions{};
 
-    VkPipelineViewportStateCreateInfo viewportInfo;
-    VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo;
-    VkPipelineRasterizationStateCreateInfo rasterizationInfo;
-    VkPipelineMultisampleStateCreateInfo multisampleInfo;
-    VkPipelineColorBlendAttachmentState colorBlendAttachment;
-    VkPipelineColorBlendStateCreateInfo colorBlendInfo;
-    VkPipelineDepthStencilStateCreateInfo depthStencilInfo;
-    std::vector<VkDynamicState> dynamicStateEnables;
-    VkPipelineDynamicStateCreateInfo dynamicStateInfo;
-    VkPipelineLayout pipelineLayout = nullptr;
-    VkRenderPass renderPass = nullptr;
+    VkPipelineViewportStateCreateInfo viewportInfo{VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO};
+    VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo{
+        VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO};
+    VkPipelineRasterizationStateCreateInfo rasterizationInfo{
+        VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO};
+    VkPipelineMultisampleStateCreateInfo multisampleInfo{VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO};
+    VkPipelineColorBlendAttachmentState colorBlendAttachment{};
+    VkPipelineColorBlendStateCreateInfo colorBlendInfo{VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO};
+    VkPipelineDepthStencilStateCreateInfo depthStencilInfo{VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO};
+    std::vector<VkDynamicState> dynamicStateEnables{};
+    VkPipelineDynamicStateCreateInfo dynamicStateInfo{VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO};
+    VkPipelineLayout pipelineLayout = VK_NULL_HANDLE;
+    VkRenderPass renderPass = VK_NULL_HANDLE;
     uint32_t subpass = 0;
 };
 
@@ -100,7 +71,7 @@ private:
     void createShaderModule(const std::vector<char>& code, VkShaderModule* shaderModule);
 
     Device& device;
-    VkPipeline graphicsPipeline;
-    VkPipelineLayout pipelineLayout; // Store just the layout instead of entire config
+    VkPipeline graphicsPipeline = VK_NULL_HANDLE;
+    VkPipelineLayout pipelineLayout = VK_NULL_HANDLE; // Store just the layout instead of entire config
 };
 } // namespace Rendering

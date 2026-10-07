@@ -33,9 +33,9 @@ SwapChain::~SwapChain() {
     }
     swapChainImageViews.clear();
 
-    if (vkSwapChain != nullptr) {
+    if (vkSwapChain != VK_NULL_HANDLE) {
         vkDestroySwapchainKHR(device.getDevice(), vkSwapChain, nullptr);
-        vkSwapChain = nullptr;
+        vkSwapChain = VK_NULL_HANDLE;
     }
 
     // cleanup synchronization objects

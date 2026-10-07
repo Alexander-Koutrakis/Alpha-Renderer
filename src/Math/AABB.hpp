@@ -4,8 +4,8 @@
 
 namespace Math {
 struct AABB {
-    glm::vec3 center;
-    glm::vec3 extents;
+    glm::vec3 center{0.0f};
+    glm::vec3 extents{0.0f};
 
     AABB(glm::vec3 center, glm::vec3 extents) : center(center), extents(extents) {};
     AABB(const glm::vec3 corners[8]) { fromCorners(corners); };

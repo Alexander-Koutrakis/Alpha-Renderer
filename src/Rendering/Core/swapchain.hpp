@@ -42,16 +42,16 @@ private:
     VkPresentModeKHR chooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
     VkExtent2D chooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities);
 
-    VkFormat swapChainImageFormat;
-    VkExtent2D swapChainExtent;
+    VkFormat swapChainImageFormat = VK_FORMAT_UNDEFINED;
+    VkExtent2D swapChainExtent{};
 
     std::vector<VkImage> swapChainImages;
     std::vector<VkImageView> swapChainImageViews;
 
     Device& device;
-    VkExtent2D windowExtent;
+    VkExtent2D windowExtent{};
 
-    VkSwapchainKHR vkSwapChain;
+    VkSwapchainKHR vkSwapChain = VK_NULL_HANDLE;
     std::shared_ptr<SwapChain> oldSwapChain;
 
     std::vector<VkSemaphore> imageAvailableSemaphores;

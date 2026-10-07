@@ -10,25 +10,17 @@
 namespace Rendering {
 
 struct SwapChainSupportDetails {
-    VkSurfaceCapabilitiesKHR capabilities;
+    VkSurfaceCapabilitiesKHR capabilities{};
     std::vector<VkSurfaceFormatKHR> formats;
     std::vector<VkPresentModeKHR> presentModes;
 };
 
 struct QueueFamilyIndices {
-    uint32_t graphicsFamily;
-    uint32_t presentFamily;
+    uint32_t graphicsFamily = 0;
+    uint32_t presentFamily = 0;
     bool graphicsFamilyHasValue = false;
     bool presentFamilyHasValue = false;
     bool isComplete() { return graphicsFamilyHasValue && presentFamilyHasValue; }
-};
-
-struct KTXVulkanDeviceInfo {
-    VkDevice device;
-    VkQueue queue;
-    VkCommandPool cmdPool;
-    VkPhysicalDevice physicalDevice;
-    const VkAllocationCallbacks* pAllocator;
 };
 
 class Device {
@@ -75,7 +67,7 @@ public:
     // Helper to find the best supported compressed format
     VkFormat findBestCompressedFormat(bool srgb = true, bool hasAlpha = true);
 
-    VkPhysicalDeviceProperties deviceProperties;
+    VkPhysicalDeviceProperties deviceProperties{};
     VkFormat getDepthFormat();
 
     ktxVulkanDeviceInfo getVulkanUploadContext() const {
@@ -101,21 +93,20 @@ private:
     std::vector<const char*> getRequiredExtensions();
     bool checkValidationLayerSupport();
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
-    void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo);
     void hasGflwRequiredInstanceExtensions();
     bool checkDeviceExtensionSupport(VkPhysicalDevice device);
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
 
-    VkInstance instance;
-    VkDebugUtilsMessengerEXT debugMessenger;
+    VkInstance instance = VK_NULL_HANDLE;
+    VkDebugUtilsMessengerEXT debugMessenger = VK_NULL_HANDLE;
     VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
     Window& window;
-    VkCommandPool commandPool;
+    VkCommandPool commandPool = VK_NULL_HANDLE;
 
-    VkDevice device_;
-    VkSurfaceKHR surface_;
-    VkQueue graphicsQueue_;
-    VkQueue presentQueue_;
+    VkDevice device_ = VK_NULL_HANDLE;
+    VkSurfaceKHR surface_ = VK_NULL_HANDLE;
+    VkQueue graphicsQueue_ = VK_NULL_HANDLE;
+    VkQueue presentQueue_ = VK_NULL_HANDLE;
 
     VkFormat depthFormat{VK_FORMAT_UNDEFINED};
     const std::vector<const char*> validationLayers = {"VK_LAYER_KHRONOS_validation"};
