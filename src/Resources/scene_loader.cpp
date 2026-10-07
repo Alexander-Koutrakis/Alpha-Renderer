@@ -8,6 +8,7 @@
 #define TINYGLTF_NO_STB_IMAGE_WRITE
 
 #include "scene_loader.hpp"
+#include "Rendering/Core/images.hpp"
 #if defined(_MSC_VER)
 #pragma warning(pop)
 #endif
@@ -335,18 +336,11 @@ void SceneLoader::cacheCompressedTextures(const std::vector<std::string>& origin
 
         // Create image view
         VkImageView imageView;
-        VkImageViewCreateInfo viewInfo{};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = vkTexture.image;
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = vkTexture.imageFormat;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = vkTexture.levelCount;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = vkTexture.layerCount;
-
-        if (vkCreateImageView(device.getDevice(), &viewInfo, nullptr, &imageView) != VK_SUCCESS) {
+        try {
+            imageView = Rendering::createImageView(device.getDevice(), vkTexture.image, vkTexture.imageFormat,
+                                                   VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT, 0,
+                                                   vkTexture.levelCount, 0, vkTexture.layerCount);
+        } catch (const std::runtime_error&) {
             vkTexture.vkDestroyImage(device.getDevice(), vkTexture.image, nullptr);
             vkTexture.vkFreeMemory(device.getDevice(), vkTexture.deviceMemory, nullptr);
             ktxTexture2_Destroy(kTexture2);

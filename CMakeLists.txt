@@ -84,6 +84,7 @@ add_executable(main
   "src/Rendering/Core/compute_pipeline.cpp"
   "src/Rendering/Core/buffer.cpp"
   "src/Rendering/Core/barriers.cpp"
+  "src/Rendering/Core/images.cpp"
 
   # Rendering Resources
   "src/Rendering/Resources/rendering_resources.cpp"
