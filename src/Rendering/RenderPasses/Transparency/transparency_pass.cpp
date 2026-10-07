@@ -1,4 +1,5 @@
 #include "transparency_pass.hpp"
+#include "Rendering/Core/barriers.hpp"
 #include <stdexcept>
 #include <array>
 #include <iostream>
@@ -346,69 +347,14 @@ void TransparencyPass::updateDescriptorSets(FrameContext& frameContext) {
 }
 
 void TransparencyPass::setBarriers(FrameContext& frameContext) {
-    VkCommandBuffer commandBuffer = frameContext.commandBuffer;
-
-    // Create barriers for all required buffers
-    std::array<VkBufferMemoryBarrier, 5> barriers{};
-
-    // Instance model matrices barrier
-    barriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    barriers[0].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    barriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[0].buffer = frameContext.transparencyModelMatrixBuffer->getBuffer();
-    barriers[0].offset = 0;
-    barriers[0].size = VK_WHOLE_SIZE;
-
-    // Instance normal matrices barrier
-    barriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    barriers[1].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    barriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[1].buffer = frameContext.transparencyNormalMatrixBuffer->getBuffer();
-    barriers[1].offset = 0;
-    barriers[1].size = VK_WHOLE_SIZE;
-
-    // Scene lighting UBO barrier
-    barriers[2].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    barriers[2].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    barriers[2].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    barriers[2].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[2].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[2].buffer = frameContext.sceneLightingBuffer->getBuffer();
-    barriers[2].offset = 0;
-    barriers[2].size = VK_WHOLE_SIZE;
-
-    // Light matrix buffer barrier
-    barriers[3].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    barriers[3].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    barriers[3].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    barriers[3].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[3].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[3].buffer = frameContext.lightMatrixBuffer->getBuffer();
-    barriers[3].offset = 0;
-    barriers[3].size = VK_WHOLE_SIZE;
-
-    // Cascade splits buffer barrier
-    barriers[4].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    barriers[4].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    barriers[4].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    barriers[4].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[4].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[4].buffer = frameContext.cascadeSplitsBuffer->getBuffer();
-    barriers[4].offset = 0;
-    barriers[4].size = VK_WHOLE_SIZE;
-
-    vkCmdPipelineBarrier(commandBuffer,
-                         VK_PIPELINE_STAGE_HOST_BIT, // Source: CPU writes
-                         VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                         0,                                                       // No dependency flags needed
-                         0, nullptr,                                              // No memory barriers
-                         static_cast<uint32_t>(barriers.size()), barriers.data(), // Buffer barriers
-                         0, nullptr                                               // No image barriers
-    );
+    cmdBufferBarriers(
+        frameContext.commandBuffer, VK_PIPELINE_STAGE_HOST_BIT,
+        VK_PIPELINE_STAGE_VERTEX_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        {BufferBarrierDesc::hostWriteToShaderRead(frameContext.transparencyModelMatrixBuffer->getBuffer()),
+         BufferBarrierDesc::hostWriteToShaderRead(frameContext.transparencyNormalMatrixBuffer->getBuffer()),
+         BufferBarrierDesc::hostWriteToShaderRead(frameContext.sceneLightingBuffer->getBuffer()),
+         BufferBarrierDesc::hostWriteToShaderRead(frameContext.lightMatrixBuffer->getBuffer()),
+         BufferBarrierDesc::hostWriteToShaderRead(frameContext.cascadeSplitsBuffer->getBuffer())});
 }
 
 } // namespace Rendering

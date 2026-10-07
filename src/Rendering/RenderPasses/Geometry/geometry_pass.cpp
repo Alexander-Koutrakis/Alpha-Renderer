@@ -1,4 +1,5 @@
 #include "geometry_pass.hpp"
+#include "Rendering/Core/barriers.hpp"
 #include <array>
 #include <stdexcept>
 #include <iostream>
@@ -278,41 +279,10 @@ void GeometryPass::drawBatches(FrameContext& frameContext) {
 }
 
 void GeometryPass::setBarriers(FrameContext& frameContext) {
-    VkCommandBuffer commandBuffer = frameContext.commandBuffer;
-    // We need barriers for instance model matrices, normal matrices, and camera UBO
-    std::array<VkBufferMemoryBarrier, 3> barriers{};
-
-    // Instance model matrices barrier
-    barriers[0].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    barriers[0].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    barriers[0].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    barriers[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[0].buffer = frameContext.modelMatrixBuffer->getBuffer();
-    barriers[0].offset = 0;
-    barriers[0].size = VK_WHOLE_SIZE;
-
-    // Instance normal matrices barrier
-    barriers[1].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    barriers[1].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    barriers[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    barriers[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[1].buffer = frameContext.normalMatrixBuffer->getBuffer();
-    barriers[1].offset = 0;
-    barriers[1].size = VK_WHOLE_SIZE;
-
-    // Camera uniform buffer barrier
-    barriers[2].sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER;
-    barriers[2].srcAccessMask = VK_ACCESS_HOST_WRITE_BIT;
-    barriers[2].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    barriers[2].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[2].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    barriers[2].buffer = frameContext.cameraUniformBuffer->getBuffer();
-    barriers[2].offset = 0;
-    barriers[2].size = VK_WHOLE_SIZE;
-
-    vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT, 0, 0, nullptr,
-                         static_cast<uint32_t>(barriers.size()), barriers.data(), 0, nullptr);
+    // Instance model/normal matrices and the camera UBO are written by the host before the vertex stage reads them.
+    cmdBufferBarriers(frameContext.commandBuffer, VK_PIPELINE_STAGE_HOST_BIT, VK_PIPELINE_STAGE_VERTEX_SHADER_BIT,
+                      {BufferBarrierDesc::hostWriteToShaderRead(frameContext.modelMatrixBuffer->getBuffer()),
+                       BufferBarrierDesc::hostWriteToShaderRead(frameContext.normalMatrixBuffer->getBuffer()),
+                       BufferBarrierDesc::hostWriteToShaderRead(frameContext.cameraUniformBuffer->getBuffer())});
 }
 } // namespace Rendering
