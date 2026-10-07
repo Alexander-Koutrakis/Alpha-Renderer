@@ -47,6 +47,10 @@ const float INV_WIDTH = 1.0 / float(RESOLVE_WIDTH);
 const float INV_HEIGHT = 1.0 / float(RESOLVE_HEIGHT);
 const float PI = 3.14159265359;
 const float GI_BOOST = 3.0;
+// How much skybox radiance rays with remaining transmittance bring into GI. Screen-space tracing reports any ray it
+// cannot resolve (off-screen, behind geometry) as a miss, so in an enclosed scene most rays "see the sky" and the
+// whole room floods with sky light. Kept at 0 until misses can be told apart from rays that truly escape.
+const float SKY_GI_INTENSITY = 0.0;
 const float RC_BASE_INTERVAL_LENGTH = 0.08; // Must match Rendering::RC_BASE_INTERVAL_LENGTH
 const float TEMPORAL_DEPTH_THRESHOLD = 0.6;      
 const float TEMPORAL_NORMAL_THRESHOLD = 0.75;    
@@ -382,7 +386,7 @@ IntegrationResult integrateDiffuseGI(ivec2 pixel, const ScreenSample screenSampl
 
             vec3 rayRadiance = interval.radiance;
             if (interval.beta > 0.0) {
-                rayRadiance += interval.beta * texture(uSkybox, worldDir).rgb;
+                rayRadiance += interval.beta * texture(uSkybox, worldDir).rgb * SKY_GI_INTENSITY;
             }
 
             totalIrradiance += rayRadiance * ndotl;
