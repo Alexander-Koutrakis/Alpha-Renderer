@@ -75,13 +75,13 @@ layout(location = 1) out vec4 outIncident;
 //=============================================================================
 // UNIFORMS
 //=============================================================================
-layout(set = 0, binding = 0) uniform EnviromentLightingUbo {
+layout(set = 0, binding = 0) uniform EnvironmentLightingUbo {
     mat4 viewMatrix;
     mat4 projectionMatrix;
     vec4 cameraPosition;
     float ambientIntensity;
     float reflectionIntensity;
-} enviromentLighting;
+} environmentLighting;
 
 layout(set = 1, binding = 0) uniform LightUbo {
     Light lights[MAX_LIGHTS];
@@ -101,7 +101,7 @@ layout(set = 4, binding = 0) uniform ShadowcastingLightMatrices {
     mat4 shadowcastingLightMatrices[MAX_SHADOWCASTING_LIGHT_MATRICES];
 } lightMatrices;
 
-layout(set = 5, binding = 0) uniform samplerCube enviromentMap;
+layout(set = 5, binding = 0) uniform samplerCube environmentMap;
 
 layout(set = 6, binding = 0) uniform DirectionalLightCascadeSplits {
     vec4 cascadeSplits[MAX_SHADOWCASTING_DIRECTIONAL];
@@ -204,7 +204,7 @@ int findCascadeForUnifiedLight(Light light, vec3 worldPos, out float blendFactor
         return -1;
     }
     
-    float viewDepth = abs((enviromentLighting.viewMatrix * vec4(worldPos, 1.0)).z);
+    float viewDepth = abs((environmentLighting.viewMatrix * vec4(worldPos, 1.0)).z);
     vec4 cascadeSplits = directionalCascadeSplits.cascadeSplits[cascadeSplitsIndex];
     return findCascade(viewDepth, cascadeSplits, blendFactor, distanceFade);
 }
@@ -497,18 +497,18 @@ float SpecularEnergyCompensation(float roughness) {
 
 vec3 sampleDiffuseIBL(vec3 normal) {
     // Sample the lowest mip to approximate an irradiance-like blur
-    float mipCount = float(textureQueryLevels(enviromentMap));
+    float mipCount = float(textureQueryLevels(environmentMap));
     float diffuseMip = max(mipCount - 1.0, 0.0);
-    return textureLod(enviromentMap, normal, diffuseMip).rgb;
+    return textureLod(environmentMap, normal, diffuseMip).rgb;
 }
 
 vec3 calculateIBLSpecular(vec3 normal, vec3 viewDir, vec3 albedo, float roughness, float metallic) {
     vec3 R = normalize(reflect(-viewDir, normal));
     vec3 F0 = mix(vec3(0.04), albedo, metallic);
 
-    float mipCount = float(textureQueryLevels(enviromentMap));
+    float mipCount = float(textureQueryLevels(environmentMap));
     float mipLevel = roughness * max(mipCount - 1.0, 0.0);
-    vec3 prefilteredColor = textureLod(enviromentMap, R, mipLevel).rgb;
+    vec3 prefilteredColor = textureLod(environmentMap, R, mipLevel).rgb;
 
     float NdotV = max(dot(normal, viewDir), 0.0);
     vec3 F = FresnelSchlickRoughness(NdotV, F0, roughness);
@@ -608,7 +608,7 @@ void main() {
     vec3 worldPos = texture(positionTexture, inUV).xyz;
     vec3 normal = normalize(texture(normalTexture, inUV).rgb * 2.0 - 1.0);
     vec4 material = texture(materialTexture, inUV);
-    vec3 viewDir = normalize(enviromentLighting.cameraPosition.xyz - worldPos);
+    vec3 viewDir = normalize(environmentLighting.cameraPosition.xyz - worldPos);
     float metallic = material.r;
     float roughness = clamp(1.0-material.g, 0.045, 1.0);
     float ao = material.b;
@@ -642,13 +642,13 @@ void main() {
 
     // Add sky/ambient irradiance into the incident buffer so GI has energy on unlit walls.
     // This is pre-albedo, pre-kD by design (build shader applies albedo and kD).
-    vec3 skyIrradiance = sampleDiffuseIBL(normal) * enviromentLighting.ambientIntensity;
+    vec3 skyIrradiance = sampleDiffuseIBL(normal) * environmentLighting.ambientIntensity;
     directIncident += skyIrradiance;
     directIncident += ambientColor;
     vec3 iblDiffuse = skyIrradiance * albedo * kD * ao;
     // Specular IBL (reflection probe / skybox prefilter)
     vec3 iblSpecular = calculateIBLSpecular(normal, viewDir, albedo, roughness, metallic);
-    iblSpecular *= enviromentLighting.reflectionIntensity * kS;
+    iblSpecular *= environmentLighting.reflectionIntensity * kS;
 
     vec3 indirect = iblDiffuse + iblSpecular;
     

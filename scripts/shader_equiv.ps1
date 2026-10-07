@@ -1,6 +1,7 @@
 # Compare every shader at a git ref against the working tree. Each shader is compiled with glslc, canonicalised with
 # spirv-opt -O, disassembled, and reduced to its sorted instruction lines with all ids renamed to "%". Identical output
 # means the same set of operations, constants and types: a refactor that only moves code is reported as unchanged.
+# Debug names (OpName / OpMemberName) are dropped so renames do not count as changes.
 # This ignores instruction order, so it proves "nothing added, removed or altered", not "same schedule".
 # Usage: ./scripts/shader_equiv.ps1 [-BaseRef main] [-Expect shader1.frag,shader2.comp]
 # Shaders listed in -Expect must differ and have their diff printed; any other difference fails.
@@ -36,6 +37,7 @@ function Get-Canonical($shaderRoot, $file, $tag) {
     & $opt -O --target-env=vulkan1.3 $spv -o $optSpv
     if ($LASTEXITCODE -ne 0) { throw "spirv-opt failed ($tag): $($file.Name)" }
     & $dis --no-header $optSpv |
+        Where-Object { $_ -notmatch '^\s*Op(Member)?Name ' } |
         ForEach-Object { ($_ -replace '%[0-9A-Za-z_]+', '%').Trim() -replace '\s+', ' ' } |
         Sort-Object
 }
