@@ -18,14 +18,23 @@ void main() {
         return;
     }
 
+    // Mip sizes are max(1, size >> 1). An odd source size leaves one extra row/column that no 2x2 block covers,
+    // so the last destination texel also takes it; a source size of 1 is clamped instead of reading out of bounds.
+    ivec2 srcSize = textureSize(uPyramid, 0);
     ivec2 srcCoord = dstCoord * 2;
-    vec2 d00 = texelFetch(uPyramid, srcCoord + ivec2(0, 0), 0).rg;
-    vec2 d10 = texelFetch(uPyramid, srcCoord + ivec2(1, 0), 0).rg;
-    vec2 d01 = texelFetch(uPyramid, srcCoord + ivec2(0, 1), 0).rg;
-    vec2 d11 = texelFetch(uPyramid, srcCoord + ivec2(1, 1), 0).rg;
+    int extentX = 2 + ((dstCoord.x == dstSize.x - 1 && (srcSize.x & 1) == 1) ? 1 : 0);
+    int extentY = 2 + ((dstCoord.y == dstSize.y - 1 && (srcSize.y & 1) == 1) ? 1 : 0);
 
-    float minDepth = min(min(d00.r, d10.r), min(d01.r, d11.r));
-    float maxDepth = max(max(d00.g, d10.g), max(d01.g, d11.g));
+    float minDepth = 3.402823e38;
+    float maxDepth = -3.402823e38;
+    for (int y = 0; y < extentY; ++y) {
+        for (int x = 0; x < extentX; ++x) {
+            ivec2 coord = min(srcCoord + ivec2(x, y), srcSize - ivec2(1));
+            vec2 d = texelFetch(uPyramid, coord, 0).rg;
+            minDepth = min(minDepth, d.r);
+            maxDepth = max(maxDepth, d.g);
+        }
+    }
     imageStore(uDstMip, dstCoord, vec4(minDepth, maxDepth, 0.0, 0.0));
 }
 
