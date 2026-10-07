@@ -5,8 +5,6 @@
 #include "core.hpp"
 #include <array>
 #include "ecs_types.hpp"
-using namespace Rendering;
-using namespace Systems;
 
 namespace ECS {
 // Move INVALID_ENTITY_ID inside the ECS namespace where EntityID is defined
@@ -32,10 +30,11 @@ struct Transform : public Component {
 
 // Rest of your components with default constructors...
 struct MeshRenderer : public Component {
-    Mesh* mesh = nullptr;
-    std::vector<Material*> materials{nullptr};
+    Rendering::Mesh* mesh = nullptr;
+    std::vector<Rendering::Material*> materials{nullptr};
     bool castingShadows{false};
-    MeshRenderer(EntityID owner, Mesh* mesh, std::vector<Material*> materials, bool castingShadows = false)
+    MeshRenderer(EntityID owner, Rendering::Mesh* mesh, std::vector<Rendering::Material*> materials,
+                 bool castingShadows = false)
         : Component(owner), mesh(mesh), materials(materials), castingShadows(castingShadows) {};
 
     // Default constructor for array allocation
@@ -71,8 +70,8 @@ struct Light : public Component {
 
 struct DirectionalLight : public Light {
     glm::vec4 direction{1.0f, 0, 0, 0};
-    std::array<glm::mat4, MAX_SHADOW_CASCADE_COUNT> viewProjectionMatrix{};
-    std::array<float, MAX_SHADOW_CASCADE_COUNT> cascadeSplits{};
+    std::array<glm::mat4, Rendering::MAX_SHADOW_CASCADE_COUNT> viewProjectionMatrix{};
+    std::array<float, Rendering::MAX_SHADOW_CASCADE_COUNT> cascadeSplits{};
 
     DirectionalLight(EntityID owner, float lightIntensity = 1.0f, glm::vec3 lightColor = glm::vec3(1.0f),
                      glm::vec4 lightDirection = glm::vec4(1.0f, 0, 0, 0), bool castShadows = false,
@@ -135,7 +134,7 @@ struct Camera : public Component {
 };
 
 struct SkyboxComponent : public Component {
-    Texture* cubemapTexture{nullptr};
+    Rendering::Texture* cubemapTexture{nullptr};
     float exposure{1.0f};
     SkyboxComponent(EntityID owner) : Component(owner) {}
     SkyboxComponent() : Component(INVALID_ENTITY_ID) {}
@@ -145,11 +144,13 @@ struct Renderable : public Component {
     Transform transform;
     MeshRenderer meshRenderer;
     Renderable(EntityID owner)
-        : Component(owner), transform(owner), meshRenderer(owner, nullptr, std::vector<Material*>(), false) {}
+        : Component(owner),
+          transform(owner),
+          meshRenderer(owner, nullptr, std::vector<Rendering::Material*>(), false) {}
     Renderable()
         : Component(INVALID_ENTITY_ID),
           transform(INVALID_ENTITY_ID),
-          meshRenderer(INVALID_ENTITY_ID, nullptr, std::vector<Material*>(), false) {}
+          meshRenderer(INVALID_ENTITY_ID, nullptr, std::vector<Rendering::Material*>(), false) {}
 };
 
 } // namespace ECS

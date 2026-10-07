@@ -3,6 +3,10 @@
 
 #include <chrono>
 
+using namespace Rendering;
+using namespace Resources;
+using namespace Systems;
+
 // Define deltaTime here
 float AlphaEngine::deltaTime = 0.0f;
 

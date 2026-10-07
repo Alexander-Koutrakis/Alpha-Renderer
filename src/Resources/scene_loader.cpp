@@ -21,6 +21,8 @@
 #include <ktx.h>
 #include <ktxvulkan.h>
 
+using namespace ECS;
+
 namespace Resources {
 
 SceneLoader::SceneLoader(ResourceManager& resManager, Rendering::Device& dev)

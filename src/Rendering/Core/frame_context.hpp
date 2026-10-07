@@ -9,8 +9,6 @@
 #include "Rendering/Resources/material.hpp"
 #include "Math/view_frustum.hpp"
 #include <array>
-using namespace ECS;
-using namespace Math;
 namespace Rendering {
 
 // Maps for instanced rendering - use mesh pointer as key along with material
@@ -29,8 +27,8 @@ struct MeshMaterialSubmeshKey {
 namespace std {
 template <> struct hash<Rendering::MeshMaterialSubmeshKey> {
     std::size_t operator()(const Rendering::MeshMaterialSubmeshKey& key) const {
-        std::size_t h1 = std::hash<Mesh*>{}(key.mesh);
-        std::size_t h2 = std::hash<Material*>{}(key.material);
+        std::size_t h1 = std::hash<Rendering::Mesh*>{}(key.mesh);
+        std::size_t h2 = std::hash<Rendering::Material*>{}(key.material);
         std::size_t h3 = std::hash<uint32_t>{}(key.submeshIndex);
         return h1 ^ (h2 << 1) ^ (h3 << 2);
     }
@@ -41,24 +39,29 @@ template <> struct hash<Rendering::MeshMaterialSubmeshKey> {
 namespace Rendering {
 
 struct LightData {
-    std::vector<SpotLight*> spotLights;
-    std::vector<PointLight*> pointLights;
-    std::vector<DirectionalLight*> directionalLights;
+    std::vector<ECS::SpotLight*> spotLights;
+    std::vector<ECS::PointLight*> pointLights;
+    std::vector<ECS::DirectionalLight*> directionalLights;
 };
 
 struct ShadowcastingData {
     // Per-light storage of model matrices to keep cascades/faces independent
-    std::unordered_map<DirectionalLight*, std::array<std::unordered_map<MeshMaterialSubmeshKey, std::vector<glm::mat4>>,
-                                                     MAX_SHADOW_CASCADE_COUNT>>
+    std::unordered_map<
+        ECS::DirectionalLight*,
+        std::array<std::unordered_map<MeshMaterialSubmeshKey, std::vector<glm::mat4>>, MAX_SHADOW_CASCADE_COUNT>>
         directionalShadowModelsByCascade;
-    std::unordered_map<SpotLight*, std::unordered_map<MeshMaterialSubmeshKey, std::vector<glm::mat4>>> spotShadowModels;
-    std::unordered_map<PointLight*, std::array<std::unordered_map<MeshMaterialSubmeshKey, std::vector<glm::mat4>>, 6>>
+    std::unordered_map<ECS::SpotLight*, std::unordered_map<MeshMaterialSubmeshKey, std::vector<glm::mat4>>>
+        spotShadowModels;
+    std::unordered_map<ECS::PointLight*,
+                       std::array<std::unordered_map<MeshMaterialSubmeshKey, std::vector<glm::mat4>>, 6>>
         pointShadowModelsByFace;
 
-    std::unordered_map<DirectionalLight*, std::array<std::vector<MeshMaterialSubmeshKey>, MAX_SHADOW_CASCADE_COUNT>>
+    std::unordered_map<ECS::DirectionalLight*,
+                       std::array<std::vector<MeshMaterialSubmeshKey>, MAX_SHADOW_CASCADE_COUNT>>
         directionalShadowcastingKeyMapByCascade;
-    std::unordered_map<SpotLight*, std::vector<MeshMaterialSubmeshKey>> spotShadowcastingKeyMap;
-    std::unordered_map<PointLight*, std::array<std::vector<MeshMaterialSubmeshKey>, 6>> pointShadowcastingKeyMapByFace;
+    std::unordered_map<ECS::SpotLight*, std::vector<MeshMaterialSubmeshKey>> spotShadowcastingKeyMap;
+    std::unordered_map<ECS::PointLight*, std::array<std::vector<MeshMaterialSubmeshKey>, 6>>
+        pointShadowcastingKeyMapByFace;
     uint32_t directionalShadowCastingCount = 0;
     uint32_t spotShadowCastingCount = 0;
     uint32_t pointShadowCastingCount = 0;
@@ -82,7 +85,7 @@ struct MeshRenderingData {
 };
 
 struct CameraData {
-    ViewFrustum viewFrustum{};
+    Math::ViewFrustum viewFrustum{};
     glm::mat4 viewProjectionMatrix{1.0f};
     glm::mat4 viewMatrix{1.0f};
     glm::mat4 invViewMatrix{1.0f};
@@ -206,15 +209,15 @@ struct FrameContext {
     std::array<MaterialBatch, BASE_INSTANCED_RENDERABLES> transparentMaterialBatches{};
     uint32_t transparentMaterialBatchCount = 0;
 
-    std::unordered_map<DirectionalLight*, std::array<std::vector<MaterialBatch>, MAX_SHADOW_CASCADE_COUNT>>
+    std::unordered_map<ECS::DirectionalLight*, std::array<std::vector<MaterialBatch>, MAX_SHADOW_CASCADE_COUNT>>
         directionalShadowcastingMaterialMap;
-    std::unordered_map<SpotLight*, std::vector<MaterialBatch>> spotShadowcastingMaterialMap;
-    std::unordered_map<PointLight*, std::array<std::vector<MaterialBatch>, 6>> pointShadowcastingMaterialMapByFace;
+    std::unordered_map<ECS::SpotLight*, std::vector<MaterialBatch>> spotShadowcastingMaterialMap;
+    std::unordered_map<ECS::PointLight*, std::array<std::vector<MaterialBatch>, 6>> pointShadowcastingMaterialMapByFace;
 
     // Matrix base indices in lightMatrixBuffer for each light type
-    std::unordered_map<DirectionalLight*, uint32_t> directionalLightMatrixBase;
-    std::unordered_map<SpotLight*, uint32_t> spotLightMatrixBase;
-    std::unordered_map<PointLight*, uint32_t> pointLightMatrixBase;
+    std::unordered_map<ECS::DirectionalLight*, uint32_t> directionalLightMatrixBase;
+    std::unordered_map<ECS::SpotLight*, uint32_t> spotLightMatrixBase;
+    std::unordered_map<ECS::PointLight*, uint32_t> pointLightMatrixBase;
 };
 
 } // namespace Rendering

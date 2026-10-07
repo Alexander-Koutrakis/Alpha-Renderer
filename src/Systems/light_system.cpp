@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <iomanip>
 #include <unordered_set>
+
+using namespace Rendering;
 using namespace ECS;
 using namespace Math;
 

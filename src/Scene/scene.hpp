@@ -8,7 +8,6 @@
 #include <unordered_map>
 #include "Systems/transform_system.hpp"
 using EntityID = std::uint32_t;
-using namespace ECS;
 
 namespace Scene {
 
@@ -24,31 +23,31 @@ public:
     Scene(Scene&&) = default;
     Scene& operator=(Scene&&) = default;
 
-    void addRenderer(Renderable& renderable);
+    void addRenderer(ECS::Renderable& renderable);
     void addLight(ECS::Light& light);
-    void removeRenderer(const Renderable& renderable);
+    void removeRenderer(const ECS::Renderable& renderable);
     void removeLight(const ECS::Light& light);
     void updateRenderer(ECS::Renderable& renderable);
     void updateLight(ECS::Light& light);
     void setEnvironmentLighting(const EnvironmentLighting* environmentLighting);
 
-    std::vector<Renderable*> getVisibleRenderers(const ViewFrustum& frustum);
-    std::vector<ECS::Light*> getVisibleLights(const ViewFrustum& frustum);
-    std::vector<Renderable*> getIntersectingRenderers(const AABB& bounds);
-    std::vector<ECS::Light*> getIntersectingLights(const AABB& bounds);
+    std::vector<ECS::Renderable*> getVisibleRenderers(const Math::ViewFrustum& frustum);
+    std::vector<ECS::Light*> getVisibleLights(const Math::ViewFrustum& frustum);
+    std::vector<ECS::Renderable*> getIntersectingRenderers(const Math::AABB& bounds);
+    std::vector<ECS::Light*> getIntersectingLights(const Math::AABB& bounds);
     const EnvironmentLighting& getEnvironmentLighting() const { return environmentLighting; }
-    void getVisibleBounds(const ViewFrustum& frustum, AABB& sceneBounds);
+    void getVisibleBounds(const Math::ViewFrustum& frustum, Math::AABB& sceneBounds);
 
 private:
     Scene();
-    void createSpotLightAABB(SpotLight& light, AABB& worldAABB);
-    void createPointLightAABB(PointLight& light, AABB& worldAABB);
-    Octree<Renderable> rendererTree;
-    Octree<ECS::Light> lightTree;
-    std::unordered_map<const Renderable*, typename Octree<Renderable>::OctreeObject*> rendererMap{};
-    std::unordered_map<const ECS::Light*, typename Octree<ECS::Light>::OctreeObject*> lightMap{};
+    void createSpotLightAABB(ECS::SpotLight& light, Math::AABB& worldAABB);
+    void createPointLightAABB(ECS::PointLight& light, Math::AABB& worldAABB);
+    Math::Octree<ECS::Renderable> rendererTree;
+    Math::Octree<ECS::Light> lightTree;
+    std::unordered_map<const ECS::Renderable*, typename Math::Octree<ECS::Renderable>::OctreeObject*> rendererMap{};
+    std::unordered_map<const ECS::Light*, typename Math::Octree<ECS::Light>::OctreeObject*> lightMap{};
 
-    AABB calculateSceneBounds();
+    Math::AABB calculateSceneBounds();
     EnvironmentLighting environmentLighting;
 };
 } // namespace Scene

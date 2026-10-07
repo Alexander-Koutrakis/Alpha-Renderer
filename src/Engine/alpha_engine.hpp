@@ -10,10 +10,6 @@
 
 #include <unordered_map>
 
-using namespace Rendering;
-using namespace Systems;
-using namespace Resources;
-
 class AlphaEngine {
     using id_t = unsigned int;
 
@@ -29,11 +25,11 @@ public:
     static float getDeltaTime() { return deltaTime; }
 
 private:
-    std::unique_ptr<Window> window;
-    std::unique_ptr<Device> device;
-    std::unique_ptr<Renderer> renderer;
-    std::unique_ptr<KeyboardMovementSystem> keyboardMovementSystem;
-    std::unique_ptr<ResourceManager> resourceManager;
+    std::unique_ptr<Rendering::Window> window;
+    std::unique_ptr<Rendering::Device> device;
+    std::unique_ptr<Rendering::Renderer> renderer;
+    std::unique_ptr<Systems::KeyboardMovementSystem> keyboardMovementSystem;
+    std::unique_ptr<Resources::ResourceManager> resourceManager;
     static float deltaTime;
     void init();
     void loadScene();

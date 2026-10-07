@@ -9,43 +9,47 @@
 #include "Math/view_frustum.hpp"
 #include "Rendering/Core/frame_context.hpp"
 #include "Scene/scene.hpp"
-using namespace ECS;
-using namespace Rendering;
 
 namespace Systems {
 
 class LightSystem {
 public:
-    static void updateFrameContext(FrameContext& frameContext);
+    static void updateFrameContext(Rendering::FrameContext& frameContext);
 
 private:
-    static void calculateCascadeSplits(DirectionalLight& directionalLight, float nearClip, float farClip);
-    static void calculateCascadeViewProjections(DirectionalLight& directionalLight, CameraData& cameraData);
+    static void calculateCascadeSplits(ECS::DirectionalLight& directionalLight, float nearClip, float farClip);
+    static void calculateCascadeViewProjections(ECS::DirectionalLight& directionalLight,
+                                                Rendering::CameraData& cameraData);
 
-    static void frustumCullLights(CameraData& cameraData, LightData& lightData);
+    static void frustumCullLights(Rendering::CameraData& cameraData, Rendering::LightData& lightData);
 
-    static void lightFrustumCullShadowCasters(LightData& lightData, ShadowcastingData& shadowcastingData,
-                                              const CameraData& cameraData);
-    static void processDirectionalLightShadowCasters(DirectionalLight& directionalLight,
-                                                     ShadowcastingData& shadowcastingData, Scene::Scene& scene,
-                                                     const CameraData& cameraData);
+    static void lightFrustumCullShadowCasters(Rendering::LightData& lightData,
+                                              Rendering::ShadowcastingData& shadowcastingData,
+                                              const Rendering::CameraData& cameraData);
+    static void processDirectionalLightShadowCasters(ECS::DirectionalLight& directionalLight,
+                                                     Rendering::ShadowcastingData& shadowcastingData,
+                                                     Scene::Scene& scene, const Rendering::CameraData& cameraData);
 
-    static void processSpotLightShadowCasters(SpotLight& spotLight, Rendering::ShadowcastingData& shadowcastingData,
-                                              Scene::Scene& scene, const glm::vec3& cameraPosition);
+    static void processSpotLightShadowCasters(ECS::SpotLight& spotLight,
+                                              Rendering::ShadowcastingData& shadowcastingData, Scene::Scene& scene,
+                                              const glm::vec3& cameraPosition);
 
-    static void processPointLightShadowCasters(PointLight& pointLight, ShadowcastingData& shadowcastingData,
-                                               Scene::Scene& scene, const glm::vec3& cameraPosition);
+    static void processPointLightShadowCasters(ECS::PointLight& pointLight,
+                                               Rendering::ShadowcastingData& shadowcastingData, Scene::Scene& scene,
+                                               const glm::vec3& cameraPosition);
 
-    static void updateDirectionalLight(DirectionalLight& directionalLight, const Transform& transform,
-                                       CameraData& cameraData);
+    static void updateDirectionalLight(ECS::DirectionalLight& directionalLight, const ECS::Transform& transform,
+                                       Rendering::CameraData& cameraData);
 
-    static void updatePointLight(PointLight& pointLight);
-    static void updateSpotLight(SpotLight& spotLight);
-    static void updateSceneLightBuffer(FrameContext& frameContext);
-    static void updateLightArrayBuffer(FrameContext& frameContext, LightData& lightData);
-    static void updateCascadeSplitsBuffer(FrameContext& frameContext, LightData& lightData);
-    static void updateShadowLightMatrixBuffer(FrameContext& frameContext, ShadowcastingData& shadowcastingData);
-    static void updateShadowModelMatrixBuffer(FrameContext& frameContext, ShadowcastingData& shadowcastingData);
-    static void updateShadowcastingData(FrameContext& frameContext, LightData& lightData);
+    static void updatePointLight(ECS::PointLight& pointLight);
+    static void updateSpotLight(ECS::SpotLight& spotLight);
+    static void updateSceneLightBuffer(Rendering::FrameContext& frameContext);
+    static void updateLightArrayBuffer(Rendering::FrameContext& frameContext, Rendering::LightData& lightData);
+    static void updateCascadeSplitsBuffer(Rendering::FrameContext& frameContext, Rendering::LightData& lightData);
+    static void updateShadowLightMatrixBuffer(Rendering::FrameContext& frameContext,
+                                              Rendering::ShadowcastingData& shadowcastingData);
+    static void updateShadowModelMatrixBuffer(Rendering::FrameContext& frameContext,
+                                              Rendering::ShadowcastingData& shadowcastingData);
+    static void updateShadowcastingData(Rendering::FrameContext& frameContext, Rendering::LightData& lightData);
 };
 } // namespace Systems
