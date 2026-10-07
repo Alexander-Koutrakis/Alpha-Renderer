@@ -21,6 +21,7 @@ layout(push_constant) uniform MergePC {
     int probeStridePx;     // Probe stride for THIS cascade (already scaled)
     int tileSize;          // Tile size for THIS cascade (already scaled)
     int depthMipCount;     // Unused in merge, but part of shared layout
+    int frameIndex;        // Unused in merge
     float tStart;          // Unused in merge
     float segmentLen;      // Unused in merge
 } pc;
