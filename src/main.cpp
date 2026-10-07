@@ -17,7 +17,5 @@ int main() {
         std::cerr << "Unknown exception in main" << '\n';
         return EXIT_FAILURE;
     }
-    std::cout << "Program ending... Press Enter to exit." << std::endl;
-    std::cin.get();
     return EXIT_SUCCESS;
 }

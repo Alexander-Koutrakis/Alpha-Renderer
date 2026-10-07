@@ -16,7 +16,6 @@
 #include <stdexcept>
 #include <iostream>
 #include <filesystem>
-#include <future>
 #include <fstream>
 #include <sstream>
 #include <ktx.h>
@@ -176,18 +175,6 @@ bool SceneLoader::loadUnityScene(const std::string& jsonPath) {
     createSkyboxEntity();
     std::cout << "\n=== Unity Scene Loading Completed Successfully ===" << std::endl;
     return true;
-}
-
-std::future<bool> SceneLoader::loadUnitySceneAsync(const std::string& jsonPath) {
-    // Launch loading in background thread using std::async
-    return std::async(std::launch::async, [this, jsonPath]() {
-        try {
-            return loadUnityScene(jsonPath);
-        } catch (const std::exception& e) {
-            std::cerr << "Async scene loading failed: " << e.what() << std::endl;
-            return false;
-        }
-    });
 }
 
 void SceneLoader::cacheMeshes(const std::vector<std::string>& meshPaths) {

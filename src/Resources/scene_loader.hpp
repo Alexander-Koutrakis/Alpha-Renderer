@@ -21,7 +21,6 @@
 #include <string>
 #include <memory>
 #include <vector>
-#include <future>
 #include <unordered_map>
 
 namespace Resources {
@@ -34,9 +33,6 @@ public:
     SceneLoader& operator=(const SceneLoader&) = delete;
 
     bool loadUnityScene(const std::string& jsonPath);
-
-    // Async version of the scene loader
-    std::future<bool> loadUnitySceneAsync(const std::string& jsonPath);
 
 private:
     void cacheMeshes(const std::vector<std::string>& meshPaths);

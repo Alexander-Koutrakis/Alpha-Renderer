@@ -3,7 +3,6 @@
 
 #include <chrono>
 #include <iostream>
-#include <vector>
 
 // Define deltaTime here
 float AlphaEngine::deltaTime = 0.0f;
@@ -12,9 +11,6 @@ void AlphaEngine::run() {
     init();
     auto currentTime = std::chrono::high_resolution_clock::now();
     deltaTime = 0.0f;
-
-    // Store frame times for analysis
-    std::vector<float> frameTimes;
 
     // FPS calculation variables
     float fpsUpdateTimer = 0.0f;
@@ -26,11 +22,6 @@ void AlphaEngine::run() {
         auto newTime = std::chrono::high_resolution_clock::now();
         deltaTime = std::chrono::duration<float, std::chrono::seconds::period>(newTime - currentTime).count();
         currentTime = newTime;
-
-        // Store this frame's duration (in ms)
-        if (deltaTime * 1000.0f > 16.0f) {
-            frameTimes.push_back(deltaTime * 1000.0f);
-        }
 
         // Calculate FPS (update every 0.5 seconds for smooth display)
         frameCount++;
@@ -52,14 +43,6 @@ void AlphaEngine::run() {
     }
 
     VK_CHECK(vkDeviceWaitIdle(device->getDevice()));
-
-    // --- Debug: Report stutter frames after the loop ---
-    int stutterCount = 0;
-    for (size_t i = 0; i < frameTimes.size(); ++i) {
-        ++stutterCount;
-    }
-
-    std::cout << "Total stutter frames (>16ms): " << stutterCount << " out of " << frameTimes.size() << std::endl;
 }
 
 void AlphaEngine::init() {
@@ -77,11 +60,6 @@ void AlphaEngine::init() {
 void AlphaEngine::loadScene() {
     Resources::SceneLoader sceneLoader{*resourceManager, *device};
     sceneLoader.loadUnityScene("Assets/Scene/Scene.json");
-}
-
-std::future<bool> AlphaEngine::loadSceneAsync() {
-    Resources::SceneLoader sceneLoader{*resourceManager, *device};
-    return sceneLoader.loadUnitySceneAsync("Assets/Scene/Scene.json");
 }
 
 AlphaEngine::~AlphaEngine() {

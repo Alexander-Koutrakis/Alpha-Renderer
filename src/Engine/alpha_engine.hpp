@@ -9,7 +9,6 @@
 #include "Rendering/renderer.hpp"
 
 #include <unordered_map>
-#include <future>
 
 using namespace Rendering;
 using namespace Systems;
@@ -38,5 +37,4 @@ private:
     static float deltaTime;
     void init();
     void loadScene();
-    std::future<bool> loadSceneAsync();
 };
