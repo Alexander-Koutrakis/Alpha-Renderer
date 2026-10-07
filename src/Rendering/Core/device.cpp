@@ -110,6 +110,19 @@ void Device::createInstance() {
     hasGflwRequiredInstanceExtensions();
 }
 
+static int deviceTypeRank(VkPhysicalDeviceType type) {
+    switch (type) {
+        case VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU:
+            return 3;
+        case VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU:
+            return 2;
+        case VK_PHYSICAL_DEVICE_TYPE_VIRTUAL_GPU:
+            return 1;
+        default:
+            return 0;
+    }
+}
+
 void Device::pickPhysicalDevice() {
     uint32_t deviceCount = 0;
     vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
@@ -119,17 +132,19 @@ void Device::pickPhysicalDevice() {
     std::vector<VkPhysicalDevice> devices(deviceCount);
     vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
 
-    // Prefer NVIDIA GPU
+    // Pick the suitable device with the best type; on a tie the first one enumerated wins.
+    int bestRank = -1;
     for (const auto& device : devices) {
-        VkPhysicalDeviceProperties deviceproperties;
-        vkGetPhysicalDeviceProperties(device, &deviceproperties);
-
-        // Check for NVIDIA GPU
-        if (deviceproperties.vendorID == 0x10DE && isDeviceSuitable(device)) {
+        VkPhysicalDeviceProperties properties{};
+        vkGetPhysicalDeviceProperties(device, &properties);
+        if (!isDeviceSuitable(device)) {
+            continue;
+        }
+        const int rank = deviceTypeRank(properties.deviceType);
+        if (rank > bestRank) {
+            bestRank = rank;
             physicalDevice = device;
-            deviceProperties = deviceproperties;
-            std::cout << "physical device: " << deviceProperties.deviceName << std::endl;
-            break;
+            deviceProperties = properties;
         }
     }
 
@@ -207,6 +222,12 @@ void Device::createSurface() {
 }
 
 bool Device::isDeviceSuitable(VkPhysicalDevice device) {
+    VkPhysicalDeviceProperties properties{};
+    vkGetPhysicalDeviceProperties(device, &properties);
+    if (properties.apiVersion < VK_API_VERSION_1_3) {
+        return false;
+    }
+
     QueueFamilyIndices indices = findQueueFamilies(device);
 
     bool extensionsSupported = checkDeviceExtensionSupport(device);
@@ -220,7 +241,9 @@ bool Device::isDeviceSuitable(VkPhysicalDevice device) {
     VkPhysicalDeviceFeatures supportedFeatures;
     vkGetPhysicalDeviceFeatures(device, &supportedFeatures);
 
-    return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy;
+    // Must match the features createLogicalDevice() enables.
+    return indices.isComplete() && extensionsSupported && swapChainAdequate && supportedFeatures.samplerAnisotropy &&
+           supportedFeatures.independentBlend && supportedFeatures.geometryShader;
 }
 
 void Device::setupDebugMessenger() {
