@@ -15,6 +15,10 @@
 
 namespace descriptor_log {
 
+// stderr is block-buffered when it is redirected to a file, so a process that is killed after startup would leave a
+// half-written last line in the log. Make it unbuffered once, at static-initialization time.
+inline const int stderrUnbuffered = (std::setvbuf(stderr, nullptr, _IONBF, 0), 0);
+
 inline std::string ordinal(const char* kind, uint64_t handle) {
     static std::map<std::string, std::map<uint64_t, int>> ids;
     if (handle == 0) {
