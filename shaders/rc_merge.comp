@@ -1,10 +1,13 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
 
 // Recap:
 // - Merges far cascade intervals into the next-near cascade with bilateral guards.
 // - Uses GBuffer position/normal to prevent leaking across depth/normal breaks.
 // - Spatial + angular bilinear mapping matches build/resolve alignment.
 // - Writes merged radiance.rgb and beta back into the near cascade atlas.
+
+#include "rc_common.glsl"
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
@@ -30,14 +33,6 @@ const float PLANE_DISTANCE_SCALE = 0.8;     // scales with probe spacing
 
 bool cascadeIndicesValid() {
     return pc.cascadeIndex >= 0 && pc.cascadeIndex < RC_CASCADE_COUNT - 1;
-}
-
-vec3 decodeNormal(vec3 encoded) {
-    return normalize(encoded * 2.0 - 1.0);
-}
-
-ivec2 getProbePixel(ivec2 probeIndex, int stride) {
-    return probeIndex * stride + stride / 2;
 }
 
 struct ProbeSurface {

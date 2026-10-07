@@ -1,10 +1,13 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
 
 // Recap:
 // - Resolves merged radiance cascades into screen-space diffuse GI.
 // - Bilinear probe sampling + horizon check fetch the correct interval per pixel.
 // - Skybox fills remaining transmittance; temporal reprojection smooths noise.
 // - Outputs GI to uGIOut; history buffers feed temporal accumulation.
+
+#include "rc_common.glsl"
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
@@ -49,23 +52,6 @@ const float TEMPORAL_NORMAL_THRESHOLD = 0.75;
 const float TEMPORAL_BLEND_ALPHA = 0.05;
 const float HISTORY_SPATIAL_BLUR_RADIUS = 1.5;
 
-float computeHemisphereShrink(int tileSize) {
-    float t = clamp((float(tileSize) - 2.0) / 6.0, 0.0, 1.0);
-    return mix(0.90, 0.98, t);
-}
-
-vec3 hemisphereDirFromUV(vec2 uv, float hemiShrink) {
-    uv = mix(vec2(0.5), uv, hemiShrink);
-    vec2 p = uv * 2.0 - 1.0; 
-    vec3 v = vec3(p.x, p.y, 1.0 - abs(p.x) - abs(p.y));
-    if (v.z < 0.0) {                    
-        v.xy = (1.0 - abs(v.yx)) * sign(v.xy);
-        v.z = 0.0;
-    }
-    v = normalize(v);
-    return v;
-}
-
 vec2 uvFromHemisphereDir(vec3 dir, float hemiShrink) {
     vec3 d = normalize(dir);
     if (d.z <= 0.0) return vec2(-1.0);
@@ -75,18 +61,6 @@ vec2 uvFromHemisphereDir(vec3 dir, float hemiShrink) {
     vec2 uv = 0.5 * (p + 1.0);
     uv = 0.5 + (uv - 0.5) / hemiShrink;
     return clamp(uv, vec2(0.001), vec2(0.999));
-}
-
-mat3 buildProbeBasis(vec3 n) {
-    vec3 normal = normalize(n);
-    vec3 up = (abs(normal.z) < 0.999) ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
-    vec3 tangent = normalize(cross(up, normal));
-    vec3 bitangent = cross(normal, tangent);
-    return mat3(tangent, bitangent, normal);
-}
-
-vec3 decodeNormal(vec3 encoded) {
-    return normalize(encoded * 2.0 - 1.0);
 }
 
 vec3 FresnelSchlick(float cosTheta, vec3 F0) {
@@ -212,10 +186,6 @@ BilinearSamplingInfo buildBilinearLookup(ivec2 pixel, const CascadeSamplingParam
         info.lookups[i] = lookup;
     }
     return info;
-}
-
-ivec2 getProbePixel(ivec2 probeIndex, int probeStridePx) {
-    return probeIndex * probeStridePx + probeStridePx / 2;
 }
 
 RadianceIntervalSample sampleRadianceInterval(
