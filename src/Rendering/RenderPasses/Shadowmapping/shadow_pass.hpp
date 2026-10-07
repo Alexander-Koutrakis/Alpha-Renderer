@@ -90,8 +90,6 @@ private:
 
     void endShadowRenderPass(VkCommandBuffer commandBuffer);
 
-    void updateMatrixBufferDescriptorSets(FrameContext& frameContext);
-
     Device& device;
     VkRenderPass shadowRenderPass{VK_NULL_HANDLE};
     VkFormat depthFormat{VK_FORMAT_UNDEFINED};

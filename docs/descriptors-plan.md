@@ -193,3 +193,19 @@ called verified. The structural log supplements but does not replace visual evid
   be justified because it adds lifetime and aggregation semantics rather than copying Vulkan fields for style.
 - This phase centralizes how layouts and sets are created and written. It does not centralize which descriptors a
   render pass owns or receives, prevent wrong descriptor types/stage flags, or fix shader/layout mismatches.
+
+## 8. Outcome of Slice B (writer + sets)
+
+Implemented as planned, with one deliberate deviation from section 4.2: allocation and writing are two separate
+primitives instead of `allocateAndWrite()` on the writer.
+
+- `allocateDescriptorSet(pool, layout)` allocates one set and throws on failure.
+- `DescriptorWriter` (default-constructed) collects `buffer` / `image` / `images` writes, owns copies of the infos,
+  and applies them in call order with `update(device, set)`.
+
+Why: many sets are allocated first and written later or repeatedly (skybox, shadow samplers, per-mip pyramid sets,
+material sets rewritten on every texture change). Folding allocation into the writer would have needed an optional
+pool and layout, i.e. a two-mode class. Two orthogonal functions needed no extra state.
+
+Verification: the structural call log of the migrated code is byte-identical to the unmigrated baseline (341 calls:
+22 layouts, 91 allocations, 228 writes); `just check` is green; validation output is unchanged.

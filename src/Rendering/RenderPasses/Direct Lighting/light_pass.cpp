@@ -123,19 +123,6 @@ void LightPass::createRenderPass(const CreateInfo& createInfo) {
     }
 }
 
-VkWriteDescriptorSet LightPass::createWrite(VkDescriptorSet dstSet, uint32_t binding,
-                                            VkDescriptorImageInfo* imageInfo) {
-    VkWriteDescriptorSet write{};
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.dstSet = dstSet;
-    write.dstBinding = binding;
-    write.dstArrayElement = 0;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    write.descriptorCount = 1;
-    write.pImageInfo = imageInfo;
-    return write;
-}
-
 void LightPass::createFramebuffers(const CreateInfo& createInfo) {
     std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> imageViews = *createInfo.lightPassResultViewsPtr;
     std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> incidentViews = *createInfo.lightIncidentViewsPtr;

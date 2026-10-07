@@ -70,64 +70,66 @@ DescriptorPool::~DescriptorPool() {
     vkDestroyDescriptorPool(device_.getDevice(), descriptorPool, nullptr);
 }
 
-// *************** Descriptor Writer *********************
+// *************** Descriptor Set Allocation and Writer *********************
 
-DescriptorWriter::DescriptorWriter(VkDescriptorSetLayout layout, DescriptorPool& pool)
-    : setLayout{layout}, pool{pool} {}
-
-DescriptorWriter& DescriptorWriter::writeBuffer(uint32_t binding, VkDescriptorBufferInfo* bufferInfo,
-                                                VkDescriptorType descriptorType) {
-    VkWriteDescriptorSet write{};
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.descriptorType = descriptorType;
-    write.dstBinding = binding;
-    write.pBufferInfo = bufferInfo;
-    write.descriptorCount = 1;
-    writes.push_back(write);
-    return *this;
-}
-
-DescriptorWriter& DescriptorWriter::writeImage(uint32_t binding, VkDescriptorImageInfo* imageInfo) {
-    VkWriteDescriptorSet write{};
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    write.dstBinding = binding;
-    write.pImageInfo = imageInfo;
-    write.descriptorCount = 1;
-    writes.push_back(write);
-    return *this;
-}
-
-DescriptorWriter& DescriptorWriter::writeInputAttachment(uint32_t binding, VkDescriptorImageInfo* imageInfo) {
-    VkWriteDescriptorSet write{};
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT;
-    write.dstBinding = binding;
-    write.pImageInfo = imageInfo;
-    write.descriptorCount = 1;
-    writes.push_back(write);
-    return *this;
-}
-
-bool DescriptorWriter::build(VkDescriptorSet& set) {
-    VkDescriptorSetAllocateInfo allocInfo{};
-    allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+VkDescriptorSet allocateDescriptorSet(DescriptorPool& pool, VkDescriptorSetLayout layout) {
+    VkDescriptorSetAllocateInfo allocInfo{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
     allocInfo.descriptorPool = pool.getDescriptorPool();
     allocInfo.descriptorSetCount = 1;
-    allocInfo.pSetLayouts = &setLayout;
+    allocInfo.pSetLayouts = &layout;
 
-    if (vkAllocateDescriptorSets(pool.device().getDevice(), &allocInfo, &set) != VK_SUCCESS) {
-        return false;
+    VkDescriptorSet set = VK_NULL_HANDLE;
+    const VkResult result = vkAllocateDescriptorSets(pool.device().getDevice(), &allocInfo, &set);
+    if (result != VK_SUCCESS) {
+        throw std::runtime_error("failed to allocate descriptor set (VkResult " + std::to_string(result) +
+                                 "); the descriptor pool may be exhausted");
     }
-    overwrite(set);
-    return true;
+    return set;
 }
 
-void DescriptorWriter::overwrite(VkDescriptorSet& set) {
-    for (auto& write : writes) {
+DescriptorWriter& DescriptorWriter::buffer(uint32_t binding, VkDescriptorType type,
+                                           const VkDescriptorBufferInfo& info) {
+    Entry entry;
+    entry.binding = binding;
+    entry.type = type;
+    entry.buffers.push_back(info);
+    entries.push_back(std::move(entry));
+    return *this;
+}
+
+DescriptorWriter& DescriptorWriter::image(uint32_t binding, VkDescriptorType type, const VkDescriptorImageInfo& info) {
+    return images(binding, type, &info, 1);
+}
+
+DescriptorWriter& DescriptorWriter::images(uint32_t binding, VkDescriptorType type, const VkDescriptorImageInfo* infos,
+                                           uint32_t count) {
+    Entry entry;
+    entry.binding = binding;
+    entry.type = type;
+    entry.images.assign(infos, infos + count);
+    entries.push_back(std::move(entry));
+    return *this;
+}
+
+void DescriptorWriter::update(Device& device, VkDescriptorSet set) const {
+    // The write structs point into the entries' own storage, which no longer changes at this point.
+    std::vector<VkWriteDescriptorSet> writes;
+    writes.reserve(entries.size());
+    for (const Entry& entry : entries) {
+        VkWriteDescriptorSet write{VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
         write.dstSet = set;
+        write.dstBinding = entry.binding;
+        write.descriptorType = entry.type;
+        if (!entry.buffers.empty()) {
+            write.descriptorCount = static_cast<uint32_t>(entry.buffers.size());
+            write.pBufferInfo = entry.buffers.data();
+        } else {
+            write.descriptorCount = static_cast<uint32_t>(entry.images.size());
+            write.pImageInfo = entry.images.data();
+        }
+        writes.push_back(write);
     }
-    vkUpdateDescriptorSets(pool.device().getDevice(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
+    vkUpdateDescriptorSets(device.getDevice(), static_cast<uint32_t>(writes.size()), writes.data(), 0, nullptr);
 }
 
 } // namespace Rendering

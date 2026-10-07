@@ -491,22 +491,6 @@ void ShadowPass::setBarriers(FrameContext& frameContext) {
                        BufferBarrierDesc::hostWriteToShaderRead(frameContext.shadowModelMatrixBuffer->getBuffer())});
 }
 
-void ShadowPass::updateMatrixBufferDescriptorSets(FrameContext& frameContext) {
-    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VkDescriptorBufferInfo modelBufferInfo = frameContext.shadowModelMatrixBuffer->descriptorInfo();
-
-        VkWriteDescriptorSet write{};
-        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.dstSet = frameContext.shadowModelMatrixDescriptorSet;
-        write.dstBinding = 0;
-        write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        write.descriptorCount = 1;
-        write.pBufferInfo = &modelBufferInfo;
-
-        vkUpdateDescriptorSets(device.getDevice(), 1, &write, 0, nullptr);
-    }
-}
-
 void ShadowPass::createFramebuffers(const CreateInfo& createInfo) {
     // Create framebuffers for directional lights (one per cascade)
     for (size_t lightIndex = 0; lightIndex < MAX_DIRECTIONAL_LIGHTS; lightIndex++) {

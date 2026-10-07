@@ -50,10 +50,11 @@ Material::Material(Device& device, const MaterialInfo& materialInfo, DescriptorP
 Material::~Material() = default;
 
 void Material::createMaterialDescriptorSet() {
-    if (!DescriptorWriter(materialSetLayout, descriptorPool).build(materialDescriptorSet)) {
-        std::cerr << "Failed to allocate descriptor set for material: " << info.name << std::endl;
-        std::cerr << "This might indicate that the descriptor pool is exhausted." << std::endl;
-        throw std::runtime_error("failed to allocate material descriptor set for material '" + info.name + "'");
+    try {
+        materialDescriptorSet = allocateDescriptorSet(descriptorPool, materialSetLayout);
+    } catch (const std::exception& e) {
+        throw std::runtime_error("failed to allocate material descriptor set for material '" + info.name +
+                                 "': " + e.what());
     }
 
     // Set debug name for the material descriptor set
@@ -61,9 +62,6 @@ void Material::createMaterialDescriptorSet() {
 }
 
 void Material::updateDescriptorSet() {
-    // Get buffer info for material UBO
-    auto bufferInfo = propertiesBuffer->descriptorInfo();
-
     // Create a default white texture if we haven't yet (using static class member)
     std::call_once(s_defaultTextureInitFlag, [this]() {
         // Create a 1x1 white texture
@@ -88,13 +86,13 @@ void Material::updateDescriptorSet() {
         occlusionTexture ? occlusionTexture->getDescriptorInfo() : s_defaultTexture->getDescriptorInfo();
 
     // Write all descriptors
-    DescriptorWriter(materialSetLayout, descriptorPool)
-        .writeBuffer(0, &bufferInfo)
-        .writeImage(1, &albedoInfo)
-        .writeImage(2, &normalInfo)
-        .writeImage(3, &metallicSmoothnessInfo)
-        .writeImage(4, &occlusionInfo)
-        .overwrite(materialDescriptorSet);
+    DescriptorWriter()
+        .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, propertiesBuffer->descriptorInfo())
+        .image(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, albedoInfo)
+        .image(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, normalInfo)
+        .image(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, metallicSmoothnessInfo)
+        .image(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, occlusionInfo)
+        .update(device, materialDescriptorSet);
 }
 
 void Material::setAlbedoTexture(Texture* texture) {
