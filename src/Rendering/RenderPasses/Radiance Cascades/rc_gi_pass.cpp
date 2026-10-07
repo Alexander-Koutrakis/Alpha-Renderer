@@ -1,5 +1,6 @@
 #include "rc_gi_pass.hpp"
 #include "Rendering/Core/barriers.hpp"
+#include "Rendering/Core/samplers.hpp"
 
 #include <algorithm>
 #include <stdexcept>
@@ -9,25 +10,10 @@ constexpr uint32_t RC_BUILD_GROUP_SIZE_X = 8u;
 constexpr uint32_t RC_BUILD_GROUP_SIZE_Y = 8u;
 RCGIPass::RCGIPass(Device& device, const CreateInfo& createInfo) : device(device), info(createInfo) {
     // Create a dedicated sampler for compute sampling
-    VkSamplerCreateInfo samplerInfo{};
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = VK_FILTER_NEAREST; // texelFetch ignores filter, but NEAREST is explicit
-    samplerInfo.minFilter = VK_FILTER_NEAREST;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.anisotropyEnable = VK_FALSE;
-    samplerInfo.maxAnisotropy = 1.0f;
-    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-    samplerInfo.compareEnable = VK_FALSE;
-    samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = VK_LOD_CLAMP_NONE;
-
-    if (vkCreateSampler(device.getDevice(), &samplerInfo, nullptr, &rcSampler) != VK_SUCCESS) {
-        throw std::runtime_error("Failed to create RC compute sampler");
-    }
+    // texelFetch ignores filter, but NEAREST is explicit
+    rcSampler =
+        createSampler(device.getDevice(), VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_NEAREST,
+                      VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK, VK_LOD_CLAMP_NONE);
 
     createDepthPyramidPipeline();
     createRCBuildPipeline();

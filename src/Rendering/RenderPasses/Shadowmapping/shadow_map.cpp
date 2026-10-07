@@ -1,6 +1,7 @@
 #include "shadow_map.hpp"
 #include "Rendering/Core/barriers.hpp"
 #include "Rendering/Core/images.hpp"
+#include "Rendering/Core/samplers.hpp"
 #include <stdexcept>
 
 namespace Rendering {
@@ -72,25 +73,9 @@ void ShadowMap::createResources() {
 }
 
 void ShadowMap::createSampler() {
-    VkSamplerCreateInfo samplerInfo{};
-    samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-    samplerInfo.magFilter = VK_FILTER_LINEAR;
-    samplerInfo.minFilter = VK_FILTER_LINEAR;
-    samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    samplerInfo.anisotropyEnable = VK_FALSE;
-    samplerInfo.maxAnisotropy = 1.0f;
-    samplerInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE;
-    samplerInfo.unnormalizedCoordinates = VK_FALSE;
-    samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    samplerInfo.mipLodBias = 0.0f;
-    samplerInfo.minLod = 0.0f;
-    samplerInfo.maxLod = 1.0f;
-
-    if (vkCreateSampler(device.getDevice(), &samplerInfo, nullptr, &shadowSampler) != VK_SUCCESS) {
-        throw std::runtime_error("failed to create shadow map sampler!");
-    }
+    shadowSampler =
+        Rendering::createSampler(device.getDevice(), VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR,
+                                 VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE, 1.0f);
 }
 
 void ShadowMap::createImageView() {
