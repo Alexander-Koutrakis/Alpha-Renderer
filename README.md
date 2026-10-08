@@ -118,7 +118,7 @@ src/
 
 Scenes are authored in Unity Editor, which provides a familiar interface for placing objects, configuring materials, and setting up lights. A custom serialization tool exports the scene into a JSON format that the renderer can load at runtime.
 
-The exported scene file (`assets/Scene/Scene.json`) contains:
+The exported scene file (`Assets/Scene/Scene.json`) contains:
 - **Texture paths**: References to color and normal map textures
 - **Mesh paths**: Serialized mesh data including vertices, indices, and submeshes
 - **Material paths**: PBR material definitions with albedo, metallic, smoothness, and texture references
@@ -208,29 +208,66 @@ Each major system has its own documentation with implementation details:
 
 | Module | Description |
 |--------|-------------|
-| [ECS](ECS/README.md) | Entity Component System architecture |
-| [Rendering](Rendering/README.md) | Vulkan rendering pipeline overview |
-| [Geometry Pass](Rendering/RenderPasses/Geometry/README.md) | G-Buffer generation |
-| [Direct Lighting](Rendering/RenderPasses/direct_lighting/README.md) | PBR shading with shadows |
-| [Shadow Mapping](Rendering/RenderPasses/Shadowmapping/README.md) | Cascaded and cubemap shadows |
-| [Radiance Cascades](Rendering/RenderPasses/radiance_cascades/README.md) | Screen-space global illumination |
-| [Transparency](Rendering/RenderPasses/Transparency/README.md) | Order-independent transparency |
+| [ECS](src/ECS/README.md) | Entity Component System architecture |
+| [Rendering](src/Rendering/README.md) | Vulkan rendering pipeline overview |
+| [Geometry Pass](src/Rendering/RenderPasses/Geometry/README.md) | G-Buffer generation |
+| [Direct Lighting](src/Rendering/RenderPasses/direct_lighting/README.md) | PBR shading with shadows |
+| [Shadow Mapping](src/Rendering/RenderPasses/Shadowmapping/README.md) | Cascaded and cubemap shadows |
+| [Radiance Cascades](src/Rendering/RenderPasses/radiance_cascades/README.md) | Screen-space global illumination |
+| [Transparency](src/Rendering/RenderPasses/Transparency/README.md) | Order-independent transparency |
 
 ## Building
 
-Build with CMake :
-```
-mkdir build
-cd build
-cmake .. -G "MinGW Makefiles"
-cmake --build .
+Windows 11 with MinGW is the supported and tested setup. Other platforms are not tested.
+
+**Prerequisites**
+
+| Tool / library | Version | Notes |
+|---|---|---|
+| MinGW-w64 GCC | 15 (C++17) | from [MSYS2](https://www.msys2.org/) `mingw64` |
+| CMake, Ninja | CMake 3.21+ | |
+| Vulkan SDK | 1.3.x | `VULKAN_SDK` must be set; provides headers, `glslc` and the validation layers |
+| GLFW | 3.3+ | MSYS2: `mingw-w64-x86_64-glfw` |
+| GLM | 1.0 | MSYS2: `mingw-w64-x86_64-glm` |
+| KTX-Software | 4.x | [installer](https://github.com/KhronosGroup/KTX-Software/releases); its `bin` directory must be on `PATH` for `ktx.dll` |
+
+`CMakePresets.json` expects MSYS2 at `C:/msys64/mingw64` and KTX-Software at `C:/Program Files/KTX-Software`. For other
+locations, pass `-DCMAKE_PREFIX_PATH=...` or edit the `mingw` preset.
+
+**Build and run**
 
 ```
+cmake --preset debug
+cmake --build --preset debug
+build/AlphaRenderer.exe
+```
+
+Use the `release` preset for an optimized build (`build/release/`). Shaders are compiled with `glslc` and the `Assets`
+directory is copied next to the executable, which finds both relative to its own location, so it can be started from any
+working directory. At run time the MSYS2 `mingw64/bin` directory must come before Git's on `PATH`, or the executable
+exits with `0xC0000139`.
+
+The Debug build enables the Vulkan validation layers (`-DALPHA_ENABLE_VALIDATION=ON/OFF` overrides this).
+
+**Controls**
+
+| Key | Action |
+|---|---|
+| W / A / S / D | Move |
+| E / Q | Up / down |
+| Arrow keys | Look |
+| Left Shift | Sprint |
+
+**GPU requirements**
+
+A GPU and driver with Vulkan 1.3 support, plus the `samplerAnisotropy`, `independentBlend` and `geometryShader`
+features. Developed and tested on an NVIDIA RTX 3070 Laptop GPU at 1920x1080.
 
 ## Dependencies
 
-- **Vulkan 1.3** — Graphics API with explicit GPU control
-- **GLFW** — Cross-platform window and input handling
-- **GLM** — Mathematics library for graphics
-- **stb_image** — Texture loading
-- **Dear ImGui** — Immediate-mode debug UI
+- **Vulkan 1.3**: graphics API
+- **GLFW**: window and input
+- **GLM**: mathematics
+- **KTX-Software**: KTX2 texture loading and upload
+- **Dear ImGui**: debug UI (vendored)
+- **stb_image**, **tinygltf**, **nlohmann/json**: image and scene parsing (vendored in `external/`)
