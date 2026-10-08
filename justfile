@@ -5,14 +5,17 @@ set windows-shell := ["powershell.exe", "-NoLogo", "-NoProfile", "-Command"]
 default:
     @just --list
 
-# Everything that must be green. Unit tests are added in Phase 6 (see PLAN.md);
-# until then there is no `test` recipe rather than a fake green one.
-check: build shaders format-check tidy
+# Everything that must be green.
+check: build shaders format-check tidy test
 
 # Configure and build with warnings visible (Ninja + MinGW, Debug).
 build:
     cmake --preset debug
     cmake --build --preset debug
+
+# Unit tests (doctest via CTest): math, octree, ECS. No GPU needed.
+test: build
+    ctest --test-dir build --output-on-failure
 
 # Compile every shader with glslc and validate with spirv-val.
 shaders:
@@ -33,7 +36,7 @@ screenshot-baseline:
 # clang-format conformance.
 format-check:
     if (-not (Test-Path .clang-format)) { Write-Error "format-check: .clang-format missing"; exit 1 }
-    $files = Get-ChildItem src -Recurse -Include *.cpp,*.hpp,*.inl | ForEach-Object FullName; clang-format --dry-run -Werror $files
+    $files = Get-ChildItem src,tests -Recurse -Include *.cpp,*.hpp,*.inl | ForEach-Object FullName; clang-format --dry-run -Werror $files
 
 # clang-tidy initialization checks over src/ (needs build/compile_commands.json from `just build`).
 tidy: build
