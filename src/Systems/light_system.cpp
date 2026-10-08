@@ -6,6 +6,7 @@
 #include <vector>
 #include <limits>
 #include <algorithm>
+#include <glm/gtx/norm.hpp>
 #include <iomanip>
 #include <stdexcept>
 #include <string>
@@ -233,10 +234,8 @@ void LightSystem::updateSceneLightBuffer(FrameContext& frameContext) {
 void LightSystem::updateLightArrayBuffer(FrameContext& frameContext, LightData& lightData) {
     UnifiedLightBuffer unifiedBuffer{};
     uint32_t lightIndex = 0;
-    uint32_t lightMatrixOffset = 0;
 
     // Convert directional lights to unified format
-    uint32_t directionalShadowmapIndex = 0;
     for (auto* dirLightPtr : lightData.directionalLights) {
         if (lightIndex >= MAX_LIGHTS)
             break;
@@ -256,18 +255,17 @@ void LightSystem::updateLightArrayBuffer(FrameContext& frameContext, LightData& 
         light.attenuationParams = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
 
         light.lightType = 0; // Directional
-        light.isCastingShadow = dirLight.isCastingShadows ? 1 : 0;
-        light.lightMatrixOffset = lightMatrixOffset;
-        light.shadowmapIndex = directionalShadowmapIndex;
+        const auto slot = frameContext.directionalShadowSlots.find(dirLightPtr);
+        const bool hasShadow = dirLight.isCastingShadows && slot != frameContext.directionalShadowSlots.end();
+        light.isCastingShadow = hasShadow ? 1 : 0;
+        light.lightMatrixOffset = hasShadow ? slot->second.matrixBase : 0; // first of its cascade matrices
+        light.shadowmapIndex = hasShadow ? slot->second.slot : 0; // one sampler2DArray per light, cascades are layers
         light.shadowStrength = dirLight.shadowStrength;
 
-        lightMatrixOffset += MAX_SHADOW_CASCADE_COUNT;
-        directionalShadowmapIndex++; // Each directional light has ONE sampler2DArray (cascades are layers)
         lightIndex++;
     }
 
     // Convert spot lights to unified format
-    uint32_t spotShadowmapIndex = 0;
     for (auto* spotLightPtr : lightData.spotLights) {
         if (lightIndex >= MAX_LIGHTS)
             break;
@@ -297,17 +295,16 @@ void LightSystem::updateLightArrayBuffer(FrameContext& frameContext, LightData& 
         );
 
         light.lightType = 1; // Spot
-        light.isCastingShadow = spotLight.isCastingShadows ? 1 : 0;
-        light.lightMatrixOffset = lightMatrixOffset;
-        light.shadowmapIndex = spotShadowmapIndex;
+        const auto slot = frameContext.spotShadowSlots.find(spotLightPtr);
+        const bool hasShadow = spotLight.isCastingShadows && slot != frameContext.spotShadowSlots.end();
+        light.isCastingShadow = hasShadow ? 1 : 0;
+        light.lightMatrixOffset = hasShadow ? slot->second.matrixBase : 0;
+        light.shadowmapIndex = hasShadow ? slot->second.slot : 0;
         light.shadowStrength = spotLight.shadowStrength;
-        lightMatrixOffset++;
-        spotShadowmapIndex++;
         lightIndex++;
     }
 
     // Convert point lights to unified format
-    uint32_t pointShadowmapIndex = 0;
     for (auto* pointLightPtr : lightData.pointLights) {
         if (lightIndex >= MAX_LIGHTS)
             break;
@@ -330,12 +327,12 @@ void LightSystem::updateLightArrayBuffer(FrameContext& frameContext, LightData& 
         );
 
         light.lightType = 2; // Point
-        light.isCastingShadow = pointLight.isCastingShadows ? 1 : 0;
-        light.lightMatrixOffset = lightMatrixOffset;
-        light.shadowmapIndex = pointShadowmapIndex;
+        const auto slot = frameContext.pointShadowSlots.find(pointLightPtr);
+        const bool hasShadow = pointLight.isCastingShadows && slot != frameContext.pointShadowSlots.end();
+        light.isCastingShadow = hasShadow ? 1 : 0;
+        light.lightMatrixOffset = hasShadow ? slot->second.matrixBase : 0; // first of its 6 face matrices
+        light.shadowmapIndex = hasShadow ? slot->second.slot : 0;
         light.shadowStrength = pointLight.shadowStrength;
-        lightMatrixOffset += 6; // 6 faces for cubemap
-        pointShadowmapIndex++;
         lightIndex++;
     }
 
@@ -375,30 +372,95 @@ void LightSystem::frustumCullLights(CameraData& cameraData, LightData& lightData
     }
 }
 
+namespace {
+
+// Processes the shadow-casting lights nearest to the camera first and stops at `budget` lights that ended up with
+// shadow data. Lights beyond the budget keep their lighting but get no shadow; that is logged when the count changes.
+template <typename LightT, typename ProcessFn>
+void processNearestCasters(const std::vector<LightT*>& lights, const glm::vec3& cameraPosition, size_t budget,
+                           const char* kind, std::vector<LightT*>& casters, ProcessFn process) {
+    std::vector<LightT*> candidates;
+    for (LightT* light : lights) {
+        if (light->isCastingShadows) {
+            candidates.push_back(light);
+        }
+    }
+    std::stable_sort(candidates.begin(), candidates.end(), [&cameraPosition](const LightT* a, const LightT* b) {
+        return glm::distance2(a->transform.position, cameraPosition) <
+               glm::distance2(b->transform.position, cameraPosition);
+    });
+
+    size_t dropped = 0;
+    for (LightT* light : candidates) {
+        if (casters.size() >= budget) {
+            ++dropped;
+            continue;
+        }
+        if (process(*light)) {
+            casters.push_back(light);
+        }
+    }
+
+    static size_t lastReported = 0;
+    if (dropped != lastReported) {
+        if (dropped > 0) {
+            Log::warn(dropped, " ", kind, " light(s) cast shadows beyond the budget of ", budget, "; the nearest ",
+                      budget, " keep their shadows, the others are lit without one");
+        }
+        lastReported = dropped;
+    }
+}
+
+} // namespace
+
 void LightSystem::lightFrustumCullShadowCasters(LightData& lightData, ShadowcastingData& shadowcastingData,
                                                 const CameraData& cameraData) {
     auto& scene = Scene::Scene::getInstance();
 
-    // Directional lights always cast shadows (they affect the entire scene)
+    // Directional lights always cast shadows (they affect the entire scene); a light is a caster once it has shadow data.
     for (auto lightPtr : lightData.directionalLights) {
         DirectionalLight& directionalLight = *lightPtr;
         if (directionalLight.isCastingShadows) {
             processDirectionalLightShadowCasters(directionalLight, shadowcastingData, scene, cameraData);
+            if (shadowcastingData.directionalShadowcastingKeyMapByCascade.count(lightPtr) > 0) {
+                shadowcastingData.directionalCasters.push_back(lightPtr);
+            }
         }
     }
 
-    for (auto lightPtr : lightData.spotLights) {
-        SpotLight& spotLight = *lightPtr;
-        if (spotLight.isCastingShadows) {
-            processSpotLightShadowCasters(spotLight, shadowcastingData, scene, cameraData.position);
-        }
-    }
+    processNearestCasters(lightData.spotLights, cameraData.position, MAX_SPOT_LIGHTS, "spot",
+                          shadowcastingData.spotCasters, [&](SpotLight& light) {
+                              processSpotLightShadowCasters(light, shadowcastingData, scene, cameraData.position);
+                              return shadowcastingData.spotShadowcastingKeyMap.count(&light) > 0;
+                          });
 
-    for (auto lightPtr : lightData.pointLights) {
-        PointLight& pointLight = *lightPtr;
-        if (pointLight.isCastingShadows) {
-            processPointLightShadowCasters(pointLight, shadowcastingData, scene, cameraData.position);
-        }
+    processNearestCasters(lightData.pointLights, cameraData.position, MAX_POINT_LIGHTS, "point",
+                          shadowcastingData.pointCasters, [&](PointLight& light) {
+                              processPointLightShadowCasters(light, shadowcastingData, scene, cameraData.position);
+                              return shadowcastingData.pointShadowcastingKeyMapByFace.count(&light) > 0;
+                          });
+}
+
+void LightSystem::assignShadowSlots(FrameContext& frameContext, const ShadowcastingData& shadowcastingData) {
+    frameContext.directionalShadowSlots.clear();
+    frameContext.spotShadowSlots.clear();
+    frameContext.pointShadowSlots.clear();
+
+    uint32_t matrixBase = 0;
+    uint32_t slot = 0;
+    for (auto* light : shadowcastingData.directionalCasters) {
+        frameContext.directionalShadowSlots[light] = {slot++, matrixBase};
+        matrixBase += MAX_SHADOW_CASCADE_COUNT;
+    }
+    slot = 0;
+    for (auto* light : shadowcastingData.spotCasters) {
+        frameContext.spotShadowSlots[light] = {slot++, matrixBase};
+        matrixBase += 1;
+    }
+    slot = 0;
+    for (auto* light : shadowcastingData.pointCasters) {
+        frameContext.pointShadowSlots[light] = {slot++, matrixBase};
+        matrixBase += 6;
     }
 }
 
@@ -468,8 +530,6 @@ void LightSystem::processDirectionalLightShadowCasters(DirectionalLight& directi
             }
         }
     }
-
-    shadowcastingData.directionalShadowCastingCount++;
 }
 
 void LightSystem::processSpotLightShadowCasters(SpotLight& spotLight, ShadowcastingData& shadowcastingData,
@@ -522,7 +582,6 @@ void LightSystem::processSpotLightShadowCasters(SpotLight& spotLight, Shadowcast
             }
         }
     }
-    shadowcastingData.spotShadowCastingCount++;
 }
 
 void LightSystem::processPointLightShadowCasters(PointLight& pointLight, ShadowcastingData& shadowcastingData,
@@ -573,53 +632,35 @@ void LightSystem::processPointLightShadowCasters(PointLight& pointLight, Shadowc
             }
         }
     }
-
-    shadowcastingData.pointShadowCastingCount++;
 }
 
-void LightSystem::updateCascadeSplitsBuffer(FrameContext& frameContext, LightData& lightData) {
+void LightSystem::updateCascadeSplitsBuffer(FrameContext& frameContext) {
     DirectionalLightCascadesBuffer cascadeBuffer{};
-    uint32_t cascadeIndex = 0;
 
-    // Fill cascade splits for each directional light
-    for (auto* dirLightPtr : lightData.directionalLights) {
-        DirectionalLight& dirLight = *dirLightPtr;
-
-        // Store cascade splits as vec4 (even though we only use 4 floats, we store as vec4 for alignment)
-        cascadeBuffer.cascadeSplits[cascadeIndex] = glm::vec4(dirLight.cascadeSplits[0], dirLight.cascadeSplits[1],
-                                                              dirLight.cascadeSplits[2], dirLight.cascadeSplits[3]);
-
-        cascadeIndex++;
+    // Indexed by shadow slot, which is what the shaders read from the light's shadowmapIndex. Splits are stored as a
+    // vec4 (one float per cascade).
+    for (const auto& [dirLight, shadowSlot] : frameContext.directionalShadowSlots) {
+        cascadeBuffer.cascadeSplits[shadowSlot.slot] =
+            glm::vec4(dirLight->cascadeSplits[0], dirLight->cascadeSplits[1], dirLight->cascadeSplits[2],
+                      dirLight->cascadeSplits[3]);
     }
 
     frameContext.cascadeSplitsBuffer->writeToBuffer(&cascadeBuffer);
 }
 
-void LightSystem::updateShadowLightMatrixBuffer(FrameContext& frameContext, ShadowcastingData& shadowcastingData) {
-    size_t currentOffset = 0;
-    void* data = frameContext.lightMatrixBuffer->getMappedMemory();
-    size_t mat4Size = sizeof(glm::mat4);
+void LightSystem::updateShadowLightMatrixBuffer(FrameContext& frameContext) {
+    auto* data = static_cast<char*>(frameContext.lightMatrixBuffer->getMappedMemory());
+    constexpr size_t mat4Size = sizeof(glm::mat4);
 
-    // Update directional light shadow matrices
-    for (const auto& [lightPtr, cascadeKeys] : shadowcastingData.directionalShadowcastingKeyMapByCascade) {
-        frameContext.directionalLightMatrixBase[lightPtr] = static_cast<uint32_t>(currentOffset / mat4Size);
-        memcpy(static_cast<char*>(data) + currentOffset, lightPtr->viewProjectionMatrix.data(),
-               sizeof(glm::mat4) * MAX_SHADOW_CASCADE_COUNT);
-        currentOffset += mat4Size * MAX_SHADOW_CASCADE_COUNT;
+    for (const auto& [light, shadowSlot] : frameContext.directionalShadowSlots) {
+        memcpy(data + shadowSlot.matrixBase * mat4Size, light->viewProjectionMatrix.data(),
+               mat4Size * MAX_SHADOW_CASCADE_COUNT);
     }
-
-    // Update spot light shadow matrices
-    for (auto& [lightPtr, meshKeys] : shadowcastingData.spotShadowcastingKeyMap) {
-        frameContext.spotLightMatrixBase[lightPtr] = static_cast<uint32_t>(currentOffset / mat4Size);
-        memcpy(static_cast<char*>(data) + currentOffset, &lightPtr->viewProjectionMatrix, sizeof(glm::mat4));
-        currentOffset += mat4Size;
+    for (const auto& [light, shadowSlot] : frameContext.spotShadowSlots) {
+        memcpy(data + shadowSlot.matrixBase * mat4Size, &light->viewProjectionMatrix, mat4Size);
     }
-
-    // Update point light shadow matrices
-    for (auto& [lightPtr, meshKeys] : shadowcastingData.pointShadowcastingKeyMapByFace) {
-        frameContext.pointLightMatrixBase[lightPtr] = static_cast<uint32_t>(currentOffset / mat4Size);
-        memcpy(static_cast<char*>(data) + currentOffset, lightPtr->viewProjectionMatrix.data(), sizeof(glm::mat4) * 6);
-        currentOffset += mat4Size * 6;
+    for (const auto& [light, shadowSlot] : frameContext.pointShadowSlots) {
+        memcpy(data + shadowSlot.matrixBase * mat4Size, light->viewProjectionMatrix.data(), mat4Size * 6);
     }
 }
 
@@ -758,10 +799,11 @@ void LightSystem::updateFrameContext(FrameContext& frameContext) {
     CameraData& cameraData = frameContext.cameraData;
     frustumCullLights(cameraData, lightData);
     lightFrustumCullShadowCasters(lightData, shadowcastingData, cameraData);
+    assignShadowSlots(frameContext, shadowcastingData);
     updateLightArrayBuffer(frameContext, lightData);
     updateSceneLightBuffer(frameContext);
-    updateCascadeSplitsBuffer(frameContext, lightData);
-    updateShadowLightMatrixBuffer(frameContext, shadowcastingData);
+    updateCascadeSplitsBuffer(frameContext);
+    updateShadowLightMatrixBuffer(frameContext);
     updateShadowModelMatrixBuffer(frameContext, shadowcastingData);
 }
 

@@ -17,8 +17,9 @@ constexpr float MAX_SHADOW_DISTANCE_SQR = MAX_SHADOW_DISTANCE * MAX_SHADOW_DISTA
 // Shadow casters beyond this distance from camera are culled (1.5x margin for shadows cast into view)
 constexpr float MAX_SHADOW_CASTER_DISTANCE = MAX_SHADOW_DISTANCE * 1.5f;
 constexpr float MAX_SHADOW_CASTER_DISTANCE_SQR = MAX_SHADOW_CASTER_DISTANCE * MAX_SHADOW_CASTER_DISTANCE;
+// One matrix per cascade for every directional light, one per spot light, six faces per point light.
 constexpr uint32_t MAX_SHADOWCASTING_LIGHT_MATRICES =
-    64; //1 directional(4 Cascades) +8 spot + 48 point (8 pointlights with 6 for each side)
+    MAX_DIRECTIONAL_LIGHTS * MAX_SHADOW_CASCADE_COUNT + MAX_SPOT_LIGHTS + MAX_POINT_LIGHTS * 6;
 constexpr uint32_t DIRECTIONAL_SHADOW_MAP_RES = 2048;
 constexpr uint32_t SPOT_SHADOW_MAP_RES = 1028;
 constexpr uint32_t POINT_SHADOW_MAP_RES = 512;
