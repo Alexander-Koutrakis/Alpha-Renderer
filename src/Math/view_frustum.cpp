@@ -159,56 +159,6 @@ ViewFrustum ViewFrustum::createFromViewProjection(const glm::mat4& viewProjectio
     return frustum;
 }
 
-ViewFrustum ViewFrustum::createOrthographic(float left, float right, float bottom, float top, float nearZ, float farZ,
-                                            const glm::mat4& viewMatrix) {
-    ViewFrustum frustum;
-    glm::mat4 invView = glm::inverse(viewMatrix);
-
-    // Calculate the eight corners of the frustum in world space
-    std::array<glm::vec3, 8> corners{};
-    corners[0] = glm::vec3(left, bottom, -nearZ);  // near bottom left
-    corners[1] = glm::vec3(right, bottom, -nearZ); // near bottom right
-    corners[2] = glm::vec3(right, top, -nearZ);    // near top right
-    corners[3] = glm::vec3(left, top, -nearZ);     // near top left
-    corners[4] = glm::vec3(left, bottom, -farZ);   // far bottom left
-    corners[5] = glm::vec3(right, bottom, -farZ);  // far bottom right
-    corners[6] = glm::vec3(right, top, -farZ);     // far top right
-    corners[7] = glm::vec3(left, top, -farZ);      // far top left
-
-    // Transform corners to world space
-    for (auto& corner : corners) {
-        glm::vec4 worldCorner = invView * glm::vec4(corner, 1.0f);
-        corner = glm::vec3(worldCorner) / worldCorner.w;
-    }
-
-    // Calculate planes
-    frustum.planes[LEFT] =
-        Plane(glm::normalize(glm::cross(corners[7] - corners[4], corners[0] - corners[4])),
-              -glm::dot(corners[4], glm::normalize(glm::cross(corners[7] - corners[4], corners[0] - corners[4]))));
-
-    frustum.planes[RIGHT] =
-        Plane(glm::normalize(glm::cross(corners[2] - corners[1], corners[6] - corners[1])),
-              -glm::dot(corners[1], glm::normalize(glm::cross(corners[2] - corners[1], corners[6] - corners[1]))));
-
-    frustum.planes[BOTTOM] =
-        Plane(glm::normalize(glm::cross(corners[1] - corners[0], corners[4] - corners[0])),
-              -glm::dot(corners[0], glm::normalize(glm::cross(corners[1] - corners[0], corners[4] - corners[0]))));
-
-    frustum.planes[TOP] =
-        Plane(glm::normalize(glm::cross(corners[7] - corners[3], corners[2] - corners[3])),
-              -glm::dot(corners[3], glm::normalize(glm::cross(corners[7] - corners[3], corners[2] - corners[3]))));
-
-    frustum.planes[NEAR] =
-        Plane(glm::normalize(glm::cross(corners[2] - corners[0], corners[3] - corners[0])),
-              -glm::dot(corners[0], glm::normalize(glm::cross(corners[2] - corners[0], corners[3] - corners[0]))));
-
-    frustum.planes[FAR] =
-        Plane(glm::normalize(glm::cross(corners[7] - corners[4], corners[6] - corners[4])),
-              -glm::dot(corners[4], glm::normalize(glm::cross(corners[7] - corners[4], corners[6] - corners[4]))));
-
-    return frustum;
-}
-
 void ViewFrustum::update(const glm::mat4& projView) {
     // Extract planes from projection-view matrix
     // Left plane

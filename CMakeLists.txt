@@ -199,3 +199,12 @@ add_custom_target(copy_assets ALL
   COMMENT "Copying Assets directory to executable directory"
   DEPENDS shaders
 )
+
+# ---------------------------------------
+# Tests
+# ---------------------------------------
+option(ALPHA_BUILD_TESTS "Build the unit tests (CTest)" ON)
+if(ALPHA_BUILD_TESTS)
+  enable_testing()
+  add_subdirectory(tests)
+endif()

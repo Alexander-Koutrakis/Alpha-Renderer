@@ -41,6 +41,7 @@ private:
     std::optional<ComponentIndex> m_lastComponentLocation;
 
     void moveLastComponentToLocation(const ComponentIndex& location);
+    void popLastComponent();
     void mapEntity(EntityID entityId, const ComponentIndex& location);
     void unmapEntity(EntityID entityId);
 };

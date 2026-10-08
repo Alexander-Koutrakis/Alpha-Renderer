@@ -43,13 +43,13 @@ template <typename T> bool Octree<T>::Node::remove(typename Octree<T>::OctreeObj
 
 template <typename T> void Octree<T>::Node::subdivide() {
     // Create 8 child nodes
+    // A child has half the parent's extents and sits one child-extent away from the parent's center, so the eight
+    // children tile the parent exactly.
     glm::vec3 halfExtents = bounds.extents * 0.5f;
-    glm::vec3 quarterExtents = halfExtents * 0.5f;
 
     for (int i = 0; i < 8; ++i) {
-        glm::vec3 centerOffset(((i & 1) ? quarterExtents.x : -quarterExtents.x),
-                               ((i & 2) ? quarterExtents.y : -quarterExtents.y),
-                               ((i & 4) ? quarterExtents.z : -quarterExtents.z));
+        glm::vec3 centerOffset(((i & 1) ? halfExtents.x : -halfExtents.x), ((i & 2) ? halfExtents.y : -halfExtents.y),
+                               ((i & 4) ? halfExtents.z : -halfExtents.z));
 
         AABB childBounds;
         childBounds.center = bounds.center + centerOffset;
@@ -227,7 +227,8 @@ template <typename T> void Octree<T>::clear() {
 }
 
 template <typename T> bool Octree<T>::shouldSubdivide(const Node* node) const {
-    return node->objects.size() > settings.maxObjectsPerNode && node->depth < settings.maxDepth &&
+    // Only a leaf splits: subdividing a node that already has children would replace them and lose their objects.
+    return node->isLeaf() && node->objects.size() > settings.maxObjectsPerNode && node->depth < settings.maxDepth &&
            node->bounds.extents.x > settings.minNodeSize && node->bounds.extents.y > settings.minNodeSize &&
            node->bounds.extents.z > settings.minNodeSize;
 }
