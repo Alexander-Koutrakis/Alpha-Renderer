@@ -2,10 +2,13 @@
 #
 #   ./scripts/screenshot_diff.ps1                        compare build/AlphaRenderer.exe against tests/golden/scene.png
 #   ./scripts/screenshot_diff.ps1 -Update                write the golden image from this build
+#   ./scripts/screenshot_diff.ps1 -Scene glass           run tests/scenes/glass instead, compare with tests/golden/glass.png
 #   ./scripts/screenshot_diff.ps1 -BuildDir C:\path\to\other\build
 #
 # The scene has a fixed start camera, so a run is comparable with the golden image. The golden image is specific to
 # the GPU, driver and resolution it was made on; regenerate it with -Update on a build you trust (for example main).
+# -Scene <name> overlays the files of tests/scenes/<name>/ (Scene.json and extra materials, same layout as Assets/Scene)
+# onto the build's Assets/Scene for the run and restores Scene.json afterwards, so one build can render several scenes.
 # Needs a GPU and a display; it is not part of `just check`.
 #
 # Writes <BuildDir>/screenshot-diff/actual.png and diff.png (absolute difference, x4 for visibility). A pixel counts as
@@ -16,7 +19,8 @@
 # roughly 10x above the noise.
 param(
     [string]$BuildDir = "build",
-    [string]$Baseline = "tests/golden/scene.png",
+    [string]$Baseline = "",
+    [string]$Scene = "",
     [switch]$Update,
     [int]$SettleSeconds = 14,
     [int]$TimeoutSeconds = 120,
@@ -94,6 +98,7 @@ public static class ShotTool {
 }
 "@
 
+if ($Baseline -eq "") { $Baseline = if ($Scene -eq "") { "tests/golden/scene.png" } else { "tests/golden/$Scene.png" } }
 $buildPath = Resolve-Path $BuildDir
 $exe = Join-Path $buildPath "AlphaRenderer.exe"
 if (-not (Test-Path $exe)) { throw "no AlphaRenderer.exe in $buildPath (run 'just build' first)" }
@@ -104,6 +109,12 @@ New-Item -ItemType Directory -Force $outDir | Out-Null
 $env:PATH = "C:\msys64\mingw64\bin;" + $env:PATH
 $stdout = Join-Path $outDir "run.stdout.txt"
 $stderr = Join-Path $outDir "run.stderr.txt"
+$buildScene = Join-Path $buildPath "Assets/Scene"
+if ($Scene -ne "") {
+    $sceneSource = Join-Path $root "tests/scenes/$Scene"
+    if (-not (Test-Path (Join-Path $sceneSource "Scene.json"))) { throw "no Scene.json in $sceneSource" }
+    Copy-Item (Join-Path $sceneSource "*") $buildScene -Recurse -Force
+}
 $proc = Start-Process -FilePath $exe -WorkingDirectory $outDir -RedirectStandardOutput $stdout `
     -RedirectStandardError $stderr -PassThru
 try {
@@ -129,6 +140,7 @@ try {
 }
 finally {
     if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
+    if ($Scene -ne "") { Copy-Item (Join-Path $root "Assets/Scene/Scene.json") $buildScene -Force }
 }
 
 $actualPath = Join-Path $outDir "actual.png"
