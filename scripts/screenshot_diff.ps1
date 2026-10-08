@@ -104,7 +104,7 @@ New-Item -ItemType Directory -Force $outDir | Out-Null
 $env:PATH = "C:\msys64\mingw64\bin;" + $env:PATH
 $stdout = Join-Path $outDir "run.stdout.txt"
 $stderr = Join-Path $outDir "run.stderr.txt"
-$proc = Start-Process -FilePath $exe -WorkingDirectory $buildPath -RedirectStandardOutput $stdout `
+$proc = Start-Process -FilePath $exe -WorkingDirectory $outDir -RedirectStandardOutput $stdout `
     -RedirectStandardError $stderr -PassThru
 try {
     $marker = "RenderingResources created with"
