@@ -60,8 +60,6 @@ public:
     static void defaultPipelineConfigInfo(PipelineConfigInfo& configInfo);
 
 private:
-    static std::vector<char> readFile(const std::string& filepath);
-
     void createGraphicsPipeline(const std::optional<std::string>& vertFilepath,
                                 const std::optional<std::string>& geometryFilepath,
                                 const std::optional<std::string>& fragFilepath, const PipelineConfigInfo& configInfo);

@@ -11,8 +11,8 @@ check: build shaders format-check tidy
 
 # Configure and build with warnings visible (Ninja + MinGW, Debug).
 build:
-    cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DALPHA_WARNINGS_AS_ERRORS=ON
-    cmake --build build
+    cmake --preset debug
+    cmake --build --preset debug
 
 # Compile every shader with glslc and validate with spirv-val.
 shaders:

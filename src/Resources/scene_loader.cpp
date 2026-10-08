@@ -9,6 +9,7 @@
 
 #include "scene_loader.hpp"
 #include "Engine/log.hpp"
+#include "Engine/resource_path.hpp"
 #include "Rendering/Core/images.hpp"
 #if defined(_MSC_VER)
 #pragma warning(pop)
@@ -59,7 +60,8 @@ bool SceneLoader::loadSkyboxCubemap(const std::array<std::string, 6> texturesDir
             // Load the texture from the Unity-ordered path
             const auto& path = texturesDirs[unityFaceIdx];
             int width, height, channels;
-            float* data = stbi_loadf(path.c_str(), &width, &height, &channels, 4); // Force RGBA
+            float* data =
+                stbi_loadf(Engine::resourcePath(path).string().c_str(), &width, &height, &channels, 4); // Force RGBA
 
             if (!data) {
                 Log::warn("Failed to load face ", vulkanFaceIdx, " (Unity face ", unityFaceIdx, "): ", path, " - ",
@@ -131,7 +133,7 @@ bool SceneLoader::loadUnityScene(const std::string& jsonPath) {
     Log::info("=== Starting Unity Scene Loading: ", jsonPath, " ===");
 
     // Read and parse JSON file
-    std::ifstream file(jsonPath);
+    std::ifstream file(Engine::resourcePath(jsonPath));
     if (!file.is_open()) {
         throw std::runtime_error("Failed to open Unity scene file: " + jsonPath);
     }
@@ -170,7 +172,7 @@ bool SceneLoader::loadUnityScene(const std::string& jsonPath) {
 void SceneLoader::cacheMeshes(const std::vector<std::string>& meshPaths) {
     for (const auto& meshPath : meshPaths) {
         // Read JSON file first
-        std::ifstream file(meshPath);
+        std::ifstream file(Engine::resourcePath(meshPath));
         if (!file.is_open()) {
             Log::error("Failed to open mesh file: ", meshPath);
             continue;
@@ -226,7 +228,8 @@ void SceneLoader::cacheTextures(const std::vector<std::string>& texturePaths, Vk
         }
 
         int width, height, channels;
-        stbi_uc* pixels = stbi_load(path.c_str(), &width, &height, &channels, STBI_rgb_alpha);
+        stbi_uc* pixels =
+            stbi_load(Engine::resourcePath(path).string().c_str(), &width, &height, &channels, STBI_rgb_alpha);
 
         // Extract filename for debug name
         std::filesystem::path fsPath(path);
@@ -253,8 +256,8 @@ void SceneLoader::cacheCompressedTextures(const std::vector<std::string>& origin
         std::string ktxPath = fsPath.string();
 
         ktxTexture2* kTexture2;
-        KTX_error_code result =
-            ktxTexture2_CreateFromNamedFile(ktxPath.c_str(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &kTexture2);
+        KTX_error_code result = ktxTexture2_CreateFromNamedFile(Engine::resourcePath(ktxPath).string().c_str(),
+                                                                KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &kTexture2);
 
         if (result != KTX_SUCCESS) {
             Log::error("Failed to load KTX2 texture: ", ktxPath);
@@ -335,7 +338,7 @@ void SceneLoader::cacheCompressedTextures(const std::vector<std::string>& origin
 
 void SceneLoader::cacheMaterials(const std::vector<std::string>& materialPaths) {
     for (const auto& materialPath : materialPaths) {
-        std::ifstream file(materialPath);
+        std::ifstream file(Engine::resourcePath(materialPath));
         if (!file.is_open()) {
             Log::error("Failed to open material file: ", materialPath);
             continue;
@@ -562,16 +565,18 @@ std::string SceneLoader::getCompressedTexturePath(const std::string& texturePath
 
 std::vector<std::string> SceneLoader::getCompressedTexturePaths() {
     const std::string directory = "Assets/Scene/textures";
+    const std::filesystem::path absoluteDirectory = Engine::resourcePath(directory);
     std::vector<std::string> compressedTexturePaths{};
-    if (!std::filesystem::exists(directory)) {
-        Log::error("Directory does not exist: ", directory);
+    if (!std::filesystem::exists(absoluteDirectory)) {
+        Log::error("Directory does not exist: ", absoluteDirectory.string());
         return compressedTexturePaths;
     }
 
     // Iterate through directory
-    for (const auto& entry : std::filesystem::recursive_directory_iterator(directory)) {
+    for (const auto& entry : std::filesystem::recursive_directory_iterator(absoluteDirectory)) {
         if (entry.is_regular_file()) {
-            std::string path = entry.path().string();
+            // Keep the logical (executable-relative) path: it is the key the scene data uses.
+            std::string path = std::filesystem::relative(entry.path(), Engine::executableDirectory()).string();
             // Check if file has .ktx2 extension
             if (path.find(".ktx2") != std::string::npos) {
                 compressedTexturePaths.push_back(path);

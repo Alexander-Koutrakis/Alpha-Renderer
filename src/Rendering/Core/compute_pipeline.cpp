@@ -1,6 +1,6 @@
 #include "compute_pipeline.hpp"
 #include <cassert>
-#include <fstream>
+#include "Engine/resource_path.hpp"
 #include <stdexcept>
 
 namespace Rendering {
@@ -20,23 +20,6 @@ ComputePipeline::~ComputePipeline() {
     }
 }
 
-std::vector<char> ComputePipeline::readFile(const std::string& filepath) {
-    std::ifstream file{filepath, std::ios::ate | std::ios::binary};
-
-    if (!file.is_open()) {
-        throw std::runtime_error("Failed to open compute shader file: " + filepath);
-    }
-
-    size_t fileSize = static_cast<size_t>(file.tellg());
-    std::vector<char> buffer(fileSize);
-
-    file.seekg(0);
-    file.read(buffer.data(), fileSize);
-    file.close();
-
-    return buffer;
-}
-
 void ComputePipeline::createShaderModule(const std::vector<char>& code, VkShaderModule* shaderModule) {
     VkShaderModuleCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
@@ -54,7 +37,7 @@ void ComputePipeline::createComputePipeline(const std::string& computeFilepath,
            "Cannot create compute pipeline: no pipelineLayout provided in configInfo");
 
     // Load and create compute shader module
-    auto computeCode = readFile(computeFilepath);
+    auto computeCode = Engine::readBinaryResource(computeFilepath);
     createShaderModule(computeCode, &computeShaderModule);
 
     // Create compute shader stage

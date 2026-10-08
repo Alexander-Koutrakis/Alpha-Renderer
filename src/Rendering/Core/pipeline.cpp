@@ -1,6 +1,6 @@
 #include "pipeline.hpp"
 #include <cassert>
-#include <fstream>
+#include "Engine/resource_path.hpp"
 #include <stdexcept>
 
 namespace Rendering {
@@ -20,23 +20,6 @@ Pipeline::Pipeline(Device& device, const std::vector<ShaderStageInfo>& shaderSta
 
 Pipeline::~Pipeline() {
     vkDestroyPipeline(device.getDevice(), graphicsPipeline, nullptr);
-}
-
-std::vector<char> Pipeline::readFile(const std::string& filepath) {
-    std::ifstream file{filepath, std::ios::ate | std::ios::binary};
-
-    if (!file.is_open()) {
-        throw std::runtime_error("failed to open file: " + filepath);
-    }
-
-    size_t fileSize = static_cast<size_t>(file.tellg());
-    std::vector<char> buffer(fileSize);
-
-    file.seekg(0);
-    file.read(buffer.data(), fileSize);
-    file.close();
-
-    return buffer;
 }
 
 void Pipeline::createShaderModule(const std::vector<char>& code, VkShaderModule* shaderModule) {
@@ -153,7 +136,7 @@ void Pipeline::createGraphicsPipeline(const std::vector<ShaderStageInfo>& shader
     shaderStages.reserve(shaderStageInfos.size());
 
     for (const auto& stageInfo : shaderStageInfos) {
-        auto code = readFile(stageInfo.spirvFilepath);
+        auto code = Engine::readBinaryResource(stageInfo.spirvFilepath);
         VkShaderModule module{VK_NULL_HANDLE};
         createShaderModule(code, &module);
         shaderModules.push_back(module);
