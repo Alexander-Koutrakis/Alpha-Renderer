@@ -212,3 +212,28 @@ TEST_CASE("getOctant picks the octant by center and rejects boxes that do not fi
     CHECK(tree.getOctant(box(5, 5, 5, 1), node) == 7);
     CHECK(tree.getOctant(box(0, 0, 0, 6), node) == -1); // wider than half the node
 }
+
+TEST_CASE("objects too large for any octant do not make the tree lose small objects") {
+    IntOctree tree{kWorld, smallNodes()};
+    std::vector<int> ids(60);
+    int next = 0;
+    // Wider than half the world, so they always stay in the root node and exceed maxObjectsPerNode there.
+    for (int i = 0; i < 5; ++i) {
+        ids[next] = next;
+        tree.createObject(&ids[next], box(0, 0, 0, 60));
+        ++next;
+    }
+    for (int i = 0; i < 30; ++i) {
+        ids[next] = next;
+        tree.createObject(&ids[next], box(-80 + static_cast<float>(i) * 5, 40, 40, 0.5f));
+        ++next;
+    }
+    for (int i = 0; i < 3; ++i) { // more oversized objects arrive after the small ones are placed
+        ids[next] = next;
+        tree.createObject(&ids[next], box(0, 0, 0, 60));
+        ++next;
+    }
+
+    const std::multiset<int> found = asSet(tree.getIntersectingObjects(kWorld));
+    CHECK(found.size() == static_cast<size_t>(next));
+}

@@ -227,7 +227,8 @@ template <typename T> void Octree<T>::clear() {
 }
 
 template <typename T> bool Octree<T>::shouldSubdivide(const Node* node) const {
-    return node->objects.size() > settings.maxObjectsPerNode && node->depth < settings.maxDepth &&
+    // Only a leaf splits: subdividing a node that already has children would replace them and lose their objects.
+    return node->isLeaf() && node->objects.size() > settings.maxObjectsPerNode && node->depth < settings.maxDepth &&
            node->bounds.extents.x > settings.minNodeSize && node->bounds.extents.y > settings.minNodeSize &&
            node->bounds.extents.z > settings.minNodeSize;
 }
