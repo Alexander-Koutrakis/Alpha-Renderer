@@ -32,7 +32,7 @@ Set-Location (Join-Path $PSScriptRoot "..")
 
 $headerPath = (Resolve-Path $Header).Path -replace "\\", "/"
 
-cmake -S . -B $BuildDir -G Ninja -DCMAKE_BUILD_TYPE=Debug "-DCMAKE_CXX_FLAGS=-include $headerPath" | Out-Null
+cmake --preset mingw -B $BuildDir -DCMAKE_BUILD_TYPE=Debug "-DCMAKE_CXX_FLAGS=-include $headerPath" | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
 cmake --build $BuildDir | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "build failed" }
@@ -42,7 +42,7 @@ $env:PATH = "C:\msys64\mingw64\bin;" + $env:PATH
 
 $stderrFile = Join-Path $BuildDir "run.stderr.txt"
 $stdoutFile = Join-Path $BuildDir "run.stdout.txt"
-$proc = Start-Process -FilePath (Join-Path $BuildDir "main.exe") -WorkingDirectory $BuildDir `
+$proc = Start-Process -FilePath (Join-Path $BuildDir "AlphaRenderer.exe") -WorkingDirectory $BuildDir `
     -RedirectStandardError $stderrFile -RedirectStandardOutput $stdoutFile -PassThru
 
 # Startup time varies with machine load, so wait for the app's own "all descriptors created" message instead of a

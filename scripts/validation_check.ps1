@@ -14,7 +14,7 @@ $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
 
 $buildDir = "build/validation"
-cmake -S . -B $buildDir -G Ninja -DCMAKE_BUILD_TYPE=Debug -DALPHA_ENABLE_VALIDATION=ON | Out-Null
+cmake --preset mingw -B $buildDir -DCMAKE_BUILD_TYPE=Debug -DALPHA_ENABLE_VALIDATION=ON | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "cmake configure failed" }
 cmake --build $buildDir | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "build failed" }
@@ -24,7 +24,7 @@ $env:PATH = "C:\msys64\mingw64\bin;" + $env:PATH
 
 $stderrFile = Join-Path $buildDir "run.stderr.txt"
 $stdoutFile = Join-Path $buildDir "run.stdout.txt"
-$proc = Start-Process -FilePath (Join-Path $buildDir "main.exe") -WorkingDirectory $buildDir `
+$proc = Start-Process -FilePath (Join-Path $buildDir "AlphaRenderer.exe") -WorkingDirectory $buildDir `
     -RedirectStandardError $stderrFile -RedirectStandardOutput $stdoutFile -PassThru
 
 $marker = "RenderingResources created with"

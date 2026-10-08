@@ -1,6 +1,6 @@
 # Run the app, capture its window and compare it with a golden image.
 #
-#   ./scripts/screenshot_diff.ps1                        compare build/main.exe against tests/golden/scene.png
+#   ./scripts/screenshot_diff.ps1                        compare build/AlphaRenderer.exe against tests/golden/scene.png
 #   ./scripts/screenshot_diff.ps1 -Update                write the golden image from this build
 #   ./scripts/screenshot_diff.ps1 -BuildDir C:\path\to\other\build
 #
@@ -95,8 +95,8 @@ public static class ShotTool {
 "@
 
 $buildPath = Resolve-Path $BuildDir
-$exe = Join-Path $buildPath "main.exe"
-if (-not (Test-Path $exe)) { throw "no main.exe in $buildPath (run 'just build' first)" }
+$exe = Join-Path $buildPath "AlphaRenderer.exe"
+if (-not (Test-Path $exe)) { throw "no AlphaRenderer.exe in $buildPath (run 'just build' first)" }
 $outDir = Join-Path $buildPath "screenshot-diff"
 New-Item -ItemType Directory -Force $outDir | Out-Null
 

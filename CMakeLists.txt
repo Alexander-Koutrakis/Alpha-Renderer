@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.21)
 project(AlphaRenderer LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
@@ -15,32 +15,12 @@ else()
 endif()
 
 # ---------------------------------------
-# Vulkan
+# Dependencies (see README for prerequisites; CMakePresets.json sets the Windows install prefixes)
 # ---------------------------------------
-find_package(Vulkan REQUIRED)
-
-# ---------------------------------------
-# GLFW (MinGW / manual install)
-# ---------------------------------------
-find_library(GLFW_LIBRARY NAMES glfw3
-  PATHS
-    C:/msys64/mingw64/lib
-  REQUIRED
-)
-
-include_directories(C:/msys64/mingw64/include)
-
-# ---------------------------------------
-# KTX
-# ---------------------------------------
-set(KTX_ROOT "C:/Program Files/KTX-Software")
-set(KTX_INCLUDE_DIR "${KTX_ROOT}/include")
-set(KTX_LIBRARY "${KTX_ROOT}/lib/ktx.lib")
-
-# ---------------------------------------
-# GLM (header-only)
-# ---------------------------------------
-set(GLM_INCLUDE_DIR "C:/msys64/mingw64/include")
+find_package(Vulkan REQUIRED COMPONENTS glslc)
+find_package(glfw3 3.3 CONFIG REQUIRED)
+find_package(glm CONFIG REQUIRED)
+find_package(Ktx CONFIG REQUIRED)
 
 # ---------------------------------------
 # ImGui (vendor library)
@@ -61,13 +41,13 @@ target_include_directories(imgui PUBLIC
 
 target_link_libraries(imgui PUBLIC
   Vulkan::Vulkan
-  ${GLFW_LIBRARY}
+  glfw
 )
 
 # ---------------------------------------
 # Engine / Application
 # ---------------------------------------
-add_executable(main
+add_executable(AlphaRenderer
   "src/main.cpp"
 
   # Engine
@@ -138,20 +118,18 @@ add_executable(main
   "external/libraries/base64.cpp"
 )
 
-target_include_directories(main PRIVATE
+target_include_directories(AlphaRenderer PRIVATE
   src
   ${CMAKE_CURRENT_SOURCE_DIR}
-  ${GLM_INCLUDE_DIR}
-  ${KTX_INCLUDE_DIR}
 )
 
 # `VkFoo info{VK_STRUCTURE_TYPE_FOO};` deliberately zero-fills every other member, which
 # -Wmissing-field-initializers would flag on every Vulkan struct, so it is off for our code.
 option(ALPHA_WARNINGS_AS_ERRORS "Treat compiler warnings in our own code as errors" OFF)
 if(NOT MSVC)
-  target_compile_options(main PRIVATE -Wno-missing-field-initializers)
+  target_compile_options(AlphaRenderer PRIVATE -Wno-missing-field-initializers)
   if(ALPHA_WARNINGS_AS_ERRORS)
-    target_compile_options(main PRIVATE -Werror)
+    target_compile_options(AlphaRenderer PRIVATE -Werror)
   endif()
 endif()
 
@@ -163,28 +141,27 @@ else()
 endif()
 option(ALPHA_ENABLE_VALIDATION "Enable Vulkan validation layers" ${ALPHA_VALIDATION_DEFAULT})
 if(ALPHA_ENABLE_VALIDATION)
-  target_compile_definitions(main PRIVATE ALPHA_ENABLE_VALIDATION)
+  target_compile_definitions(AlphaRenderer PRIVATE ALPHA_ENABLE_VALIDATION)
 endif()
 
-target_link_libraries(main PRIVATE
+target_link_libraries(AlphaRenderer PRIVATE
   Vulkan::Vulkan
-  ${GLFW_LIBRARY}
-  ${KTX_LIBRARY}
+  glfw
+  glm::glm
+  KTX::ktx
   imgui
 )
 
 # ---------------------------------------
 # Shader compilation
 # ---------------------------------------
-set(GLSLC "$ENV{VULKAN_SDK}/Bin/glslc.exe")
-
-file(GLOB_RECURSE SHADERS
+file(GLOB_RECURSE SHADERS CONFIGURE_DEPENDS
   shaders/*.vert
   shaders/*.frag
   shaders/*.comp
 )
 # Shared GLSL included via GL_GOOGLE_include_directive; not compiled on its own.
-file(GLOB_RECURSE SHADER_INCLUDES shaders/common/*.glsl)
+file(GLOB_RECURSE SHADER_INCLUDES CONFIGURE_DEPENDS shaders/common/*.glsl)
 
 set(SPV_OUTPUTS "")
 foreach(SHADER ${SHADERS})
@@ -194,7 +171,7 @@ foreach(SHADER ${SHADERS})
   add_custom_command(
     OUTPUT ${SPV}
     COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/shaders
-    COMMAND ${GLSLC} -I ${CMAKE_SOURCE_DIR}/shaders/common ${SHADER} -o ${SPV}
+    COMMAND Vulkan::glslc -I ${CMAKE_SOURCE_DIR}/shaders/common ${SHADER} -o ${SPV}
     DEPENDS ${SHADER} ${SHADER_INCLUDES}
   )
 
@@ -202,29 +179,23 @@ foreach(SHADER ${SHADERS})
 endforeach()
 
 add_custom_target(shaders ALL DEPENDS ${SPV_OUTPUTS})
-add_dependencies(main shaders)
+add_dependencies(AlphaRenderer shaders)
 
 # Copy shaders to executable directory (build/shaders/) - runs every build
 add_custom_target(copy_shaders ALL
   COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_BINARY_DIR}/shaders
-    $<TARGET_FILE_DIR:main>/shaders
+    $<TARGET_FILE_DIR:AlphaRenderer>/shaders
   COMMENT "Copying shaders to executable directory"
   DEPENDS shaders
 )
 
-# Copy Assets directory to build/Assets/ - runs every build
-# Using custom targets ensures they run even when main.exe doesn't need rebuilding
+# Copy the Assets directory next to the executable - runs every build
+# Using custom targets ensures they run even when the executable does not need rebuilding
 add_custom_target(copy_assets ALL
   COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_SOURCE_DIR}/Assets
-    ${CMAKE_BINARY_DIR}/Assets
-  COMMENT "Copying Assets directory to build folder"
+    $<TARGET_FILE_DIR:AlphaRenderer>/Assets
+  COMMENT "Copying Assets directory to executable directory"
   DEPENDS shaders
 )
-
-# Set working directory to build directory for running the executable
-# This ensures relative paths like "shaders/" and "Assets/" resolve correctly
-# when running from the build directory
-set_property(TARGET main PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_BINARY_DIR}")
-# (They're already there from compilation, but this ensures they stay)
