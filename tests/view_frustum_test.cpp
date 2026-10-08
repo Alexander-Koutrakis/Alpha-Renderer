@@ -102,16 +102,3 @@ TEST_CASE("all perspective construction paths agree") {
     CHECK(outside > 0);
     CHECK(inside > 0);
 }
-
-TEST_CASE("orthographic frustum classifies boxes") {
-    // Looks down -z from the origin: x, y in [-5, 5], depth 1..100.
-    const ViewFrustum frustum =
-        ViewFrustum::createOrthographic(-5.0f, 5.0f, -5.0f, 5.0f, 1.0f, 100.0f, glm::mat4(1.0f));
-    CHECK(frustum.testAABB(box(0, 0, -10)) == Intersection::INSIDE);
-    CHECK(frustum.testAABB(box(0, 0, 10)) == Intersection::OUTSIDE);
-    CHECK(frustum.testAABB(box(0, 0, -200)) == Intersection::OUTSIDE);
-    CHECK(frustum.testAABB(box(20, 0, -10)) == Intersection::OUTSIDE);
-    CHECK(frustum.testAABB(box(0, 20, -10)) == Intersection::OUTSIDE);
-    CHECK(frustum.testAABB(box(5, 0, -10)) == Intersection::INTERSECT);
-    CHECK(frustum.testAABB(box(0, -5, -10)) == Intersection::INTERSECT);
-}

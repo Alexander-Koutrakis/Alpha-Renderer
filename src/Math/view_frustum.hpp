@@ -32,10 +32,6 @@ public:
 
     static ViewFrustum createFromViewProjection(const glm::mat4& viewProjectionMatrix);
 
-    // Constructor for orthographic projection
-    static ViewFrustum createOrthographic(float left, float right, float bottom, float top, float nearZ, float farZ,
-                                          const glm::mat4& viewMatrix);
-
     // Test if AABB is inside, outside, or intersecting frustum
     enum class Intersection { INSIDE, OUTSIDE, INTERSECT };
     ViewFrustum() = default;
