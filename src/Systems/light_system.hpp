@@ -45,9 +45,10 @@ private:
     static void updateSpotLight(ECS::SpotLight& spotLight);
     static void updateSceneLightBuffer(Rendering::FrameContext& frameContext);
     static void updateLightArrayBuffer(Rendering::FrameContext& frameContext, Rendering::LightData& lightData);
-    static void updateCascadeSplitsBuffer(Rendering::FrameContext& frameContext, Rendering::LightData& lightData);
-    static void updateShadowLightMatrixBuffer(Rendering::FrameContext& frameContext,
-                                              Rendering::ShadowcastingData& shadowcastingData);
+    static void assignShadowSlots(Rendering::FrameContext& frameContext,
+                                  const Rendering::ShadowcastingData& shadowcastingData);
+    static void updateCascadeSplitsBuffer(Rendering::FrameContext& frameContext);
+    static void updateShadowLightMatrixBuffer(Rendering::FrameContext& frameContext);
     static void updateShadowModelMatrixBuffer(Rendering::FrameContext& frameContext,
                                               Rendering::ShadowcastingData& shadowcastingData);
     static void updateShadowcastingData(Rendering::FrameContext& frameContext, Rendering::LightData& lightData);

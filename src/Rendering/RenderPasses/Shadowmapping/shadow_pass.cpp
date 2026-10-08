@@ -275,14 +275,13 @@ void ShadowPass::renderDirectionalLights(FrameContext& frameContext) {
 
     const auto& directionalMap = frameContext.directionalShadowcastingMaterialMap;
 
-    uint32_t lightIndex = 0;
-
     for (auto& [directionalLight, cascadeBatches] : directionalMap) {
         VkDescriptorSet modelMatrixDescriptorSet = frameContext.shadowModelMatrixDescriptorSet;
         vkCmdBindDescriptorSets(frameContext.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, directionalPipelineLayout,
                                 1, 1, &modelMatrixDescriptorSet, 0, nullptr);
 
-        const uint32_t lightMatrixBase = frameContext.directionalLightMatrixBase.at(directionalLight);
+        const ShadowSlot shadowSlot = frameContext.directionalShadowSlots.at(directionalLight);
+        const uint32_t lightMatrixBase = shadowSlot.matrixBase;
         glm::vec4 lightPosRange = glm::vec4(0.0f, 0.0f, 0.0f, -1.0f);
 
         for (uint32_t cascadeIndex = 0; cascadeIndex < MAX_SHADOW_CASCADE_COUNT; ++cascadeIndex) {
@@ -290,7 +289,7 @@ void ShadowPass::renderDirectionalLights(FrameContext& frameContext) {
             if (materialBatches.empty()) {
                 continue;
             }
-            beginShadowRenderPass(frameContext.commandBuffer, frameContext.frameIndex, lightIndex,
+            beginShadowRenderPass(frameContext.commandBuffer, frameContext.frameIndex, shadowSlot.slot,
                                   LightType::DIRECTIONAL_LIGHT, cascadeIndex);
 
             // Draw all batches in the current buffer update
@@ -316,7 +315,6 @@ void ShadowPass::renderDirectionalLights(FrameContext& frameContext) {
             }
             endShadowRenderPass(frameContext.commandBuffer);
         }
-        lightIndex++;
     }
 }
 
@@ -328,14 +326,15 @@ void ShadowPass::renderSpotLights(FrameContext& frameContext) {
                             &lightMatrixDescriptorSet, 0, nullptr);
 
     const auto& spotMap = frameContext.spotShadowcastingMaterialMap;
-    uint32_t lightIndex = 0;
     for (auto& [spotLightPtr, materialBatches] : spotMap) {
+        const ShadowSlot shadowSlot = frameContext.spotShadowSlots.at(spotLightPtr);
         SpotLight& spotLight = *spotLightPtr;
         glm::vec3 lightPos = spotLight.transform.position;
         float range = spotLight.range;
         glm::vec4 lightPosRange = glm::vec4(lightPos, range);
 
-        beginShadowRenderPass(frameContext.commandBuffer, frameContext.frameIndex, lightIndex, LightType::SPOT_LIGHT);
+        beginShadowRenderPass(frameContext.commandBuffer, frameContext.frameIndex, shadowSlot.slot,
+                              LightType::SPOT_LIGHT);
 
         VkDescriptorSet modelMatrixDescriptorSet = frameContext.shadowModelMatrixDescriptorSet;
         vkCmdBindDescriptorSets(frameContext.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, spotPipelineLayout, 1, 1,
@@ -345,9 +344,8 @@ void ShadowPass::renderSpotLights(FrameContext& frameContext) {
         for (uint32_t i = 0; i < materialBatches.size(); i++) {
             const auto& materialBatch = materialBatches[i];
 
-            const uint32_t lightMatrixBase = frameContext.spotLightMatrixBase.at(spotLightPtr);
             InstancedPushConstants pushConstants{
-                lightPosRange, lightMatrixBase, materialBatch.matrixOffset,
+                lightPosRange, shadowSlot.matrixBase, materialBatch.matrixOffset,
                 1u // spot
             };
 
@@ -365,8 +363,6 @@ void ShadowPass::renderSpotLights(FrameContext& frameContext) {
         }
 
         endShadowRenderPass(frameContext.commandBuffer);
-
-        lightIndex++;
     }
 }
 
@@ -379,14 +375,13 @@ void ShadowPass::renderPointLights(FrameContext& frameContext) {
 
     const auto& pointMap = frameContext.pointShadowcastingMaterialMapByFace;
 
-    uint32_t lightIndex = 0;
-
     for (auto& [pointLightPtr, faceBatches] : pointMap) {
+        const ShadowSlot shadowSlot = frameContext.pointShadowSlots.at(pointLightPtr);
         PointLight& pointLight = *pointLightPtr;
         glm::vec3 lightPos = pointLight.transform.position;
         float range = pointLight.range;
         glm::vec4 lightPosRange = glm::vec4(lightPos, range);
-        const uint32_t lightMatrixBase = frameContext.pointLightMatrixBase.at(pointLightPtr);
+        const uint32_t lightMatrixBase = shadowSlot.matrixBase;
 
         VkDescriptorSet modelMatrixDescriptorSet = frameContext.shadowModelMatrixDescriptorSet;
         vkCmdBindDescriptorSets(frameContext.commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pointPipelineLayout, 1, 1,
@@ -397,7 +392,7 @@ void ShadowPass::renderPointLights(FrameContext& frameContext) {
             if (materialBatches.empty()) {
                 continue;
             }
-            beginShadowRenderPass(frameContext.commandBuffer, frameContext.frameIndex, lightIndex,
+            beginShadowRenderPass(frameContext.commandBuffer, frameContext.frameIndex, shadowSlot.slot,
                                   LightType::POINT_LIGHT, face);
 
             // Draw all batches in the current buffer update
@@ -424,8 +419,6 @@ void ShadowPass::renderPointLights(FrameContext& frameContext) {
 
             endShadowRenderPass(frameContext.commandBuffer);
         }
-
-        lightIndex++;
     }
 }
 // Helper method to update instance buffers from DrawingData

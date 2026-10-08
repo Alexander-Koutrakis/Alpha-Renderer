@@ -10,7 +10,7 @@ const int MAX_CASCADE_COUNT = 4;
 const int MAX_SHADOWCASTING_DIRECTIONAL = 4;
 const int MAX_SHADOWCASTING_SPOT = 8;
 const int MAX_SHADOWCASTING_POINT = 8;
-const int MAX_SHADOWCASTING_LIGHT_MATRICES = 64;
+const int MAX_SHADOWCASTING_LIGHT_MATRICES = 72;
 
 struct Light {
     vec4 positionAndData;       // xyz=position, w=0 for directional, 1 for punctual

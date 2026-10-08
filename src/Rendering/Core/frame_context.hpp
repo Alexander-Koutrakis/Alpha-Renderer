@@ -62,9 +62,18 @@ struct ShadowcastingData {
     std::unordered_map<ECS::SpotLight*, std::vector<MeshMaterialSubmeshKey>> spotShadowcastingKeyMap;
     std::unordered_map<ECS::PointLight*, std::array<std::vector<MeshMaterialSubmeshKey>, 6>>
         pointShadowcastingKeyMapByFace;
-    uint32_t directionalShadowCastingCount = 0;
-    uint32_t spotShadowCastingCount = 0;
-    uint32_t pointShadowCastingCount = 0;
+    // Lights that have shadow data this frame, in shadow slot order (a light is only listed once it has an entry in
+    // the maps above). Spot and point lists are capped at MAX_SPOT_LIGHTS / MAX_POINT_LIGHTS.
+    std::vector<ECS::DirectionalLight*> directionalCasters;
+    std::vector<ECS::SpotLight*> spotCasters;
+    std::vector<ECS::PointLight*> pointCasters;
+};
+
+// Where a shadow-casting light lives this frame: the shadow map it renders into (and the shaders sample) and the first
+// of its matrices in the light matrix buffer. Assigned once per frame by LightSystem; shaders and the shadow pass read it.
+struct ShadowSlot {
+    uint32_t slot = 0;
+    uint32_t matrixBase = 0;
 };
 
 struct MaterialBatch {
@@ -214,10 +223,10 @@ struct FrameContext {
     std::unordered_map<ECS::SpotLight*, std::vector<MaterialBatch>> spotShadowcastingMaterialMap;
     std::unordered_map<ECS::PointLight*, std::array<std::vector<MaterialBatch>, 6>> pointShadowcastingMaterialMapByFace;
 
-    // Matrix base indices in lightMatrixBuffer for each light type
-    std::unordered_map<ECS::DirectionalLight*, uint32_t> directionalLightMatrixBase;
-    std::unordered_map<ECS::SpotLight*, uint32_t> spotLightMatrixBase;
-    std::unordered_map<ECS::PointLight*, uint32_t> pointLightMatrixBase;
+    // Shadow map slot and light matrix base of every light that casts a shadow this frame
+    std::unordered_map<ECS::DirectionalLight*, ShadowSlot> directionalShadowSlots;
+    std::unordered_map<ECS::SpotLight*, ShadowSlot> spotShadowSlots;
+    std::unordered_map<ECS::PointLight*, ShadowSlot> pointShadowSlots;
 };
 
 } // namespace Rendering
