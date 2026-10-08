@@ -26,7 +26,6 @@ public:
                   uint32_t groupCountZ = 1) const;
 
 private:
-    static std::vector<char> readFile(const std::string& filepath);
     void createShaderModule(const std::vector<char>& code, VkShaderModule* shaderModule);
     void createComputePipeline(const std::string& computeFilepath, const ComputePipelineConfigInfo& configInfo);
 

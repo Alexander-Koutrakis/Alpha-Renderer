@@ -72,6 +72,7 @@ add_executable(main
 
   # Engine
   "src/Engine/alpha_engine.cpp"
+  "src/Engine/resource_path.cpp"
 
   # Rendering Core
   "src/Rendering/renderer.cpp"
