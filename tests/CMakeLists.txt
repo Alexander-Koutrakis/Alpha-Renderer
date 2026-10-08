@@ -5,6 +5,7 @@ add_executable(AlphaTests
   aabb_test.cpp
   view_frustum_test.cpp
   octree_test.cpp
+  shader_constants_test.cpp
   ecs_test.cpp
 
   ${CMAKE_SOURCE_DIR}/src/Math/AABB.cpp
@@ -30,5 +31,8 @@ if(NOT MSVC)
   # Link the MinGW runtime statically so the test executable starts without msys64 on PATH.
   target_link_options(AlphaTests PRIVATE -static)
 endif()
+
+# shader_constants_test.cpp reads the shared GLSL limits.
+target_compile_definitions(AlphaTests PRIVATE ALPHA_SHADER_DIR="${CMAKE_SOURCE_DIR}/shaders")
 
 add_test(NAME AlphaTests COMMAND AlphaTests)

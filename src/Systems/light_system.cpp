@@ -7,6 +7,8 @@
 #include <limits>
 #include <algorithm>
 #include <iomanip>
+#include <stdexcept>
+#include <string>
 #include <unordered_set>
 
 using namespace Rendering;
@@ -349,6 +351,11 @@ void LightSystem::frustumCullLights(CameraData& cameraData, LightData& lightData
     ecsManager.forEachComponent<DirectionalLight>([&](DirectionalLight& directionalLight) {
         auto* transform = ecsManager.getComponent<ECS::Transform>(directionalLight.owner);
         if (transform) {
+            // The shaders index fixed-size shadow map and cascade-split arrays by directional light.
+            if (lightData.directionalLights.size() >= MAX_DIRECTIONAL_LIGHTS) {
+                throw std::runtime_error("Scene has more than " + std::to_string(MAX_DIRECTIONAL_LIGHTS) +
+                                         " directional lights, which is the renderer's limit");
+            }
             updateDirectionalLight(directionalLight, *transform, cameraData);
             lightData.directionalLights.push_back(&directionalLight);
         }
@@ -576,9 +583,6 @@ void LightSystem::updateCascadeSplitsBuffer(FrameContext& frameContext, LightDat
 
     // Fill cascade splits for each directional light
     for (auto* dirLightPtr : lightData.directionalLights) {
-        if (cascadeIndex >= MAX_SHADOWCASTING_LIGHT_MATRICES)
-            break;
-
         DirectionalLight& dirLight = *dirLightPtr;
 
         // Store cascade splits as vec4 (even though we only use 4 floats, we store as vec4 for alignment)

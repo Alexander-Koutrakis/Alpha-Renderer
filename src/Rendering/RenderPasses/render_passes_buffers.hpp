@@ -26,7 +26,7 @@ struct UnifiedLightBuffer {
 };
 
 struct DirectionalLightCascadesBuffer {
-    alignas(16) glm::vec4 cascadeSplits[MAX_SHADOWCASTING_DIRECTIONAL];
+    alignas(16) glm::vec4 cascadeSplits[MAX_DIRECTIONAL_LIGHTS];
 };
 
 struct SceneLightingUbo {

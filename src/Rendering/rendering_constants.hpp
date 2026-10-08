@@ -19,7 +19,6 @@ constexpr float MAX_SHADOW_CASTER_DISTANCE = MAX_SHADOW_DISTANCE * 1.5f;
 constexpr float MAX_SHADOW_CASTER_DISTANCE_SQR = MAX_SHADOW_CASTER_DISTANCE * MAX_SHADOW_CASTER_DISTANCE;
 constexpr uint32_t MAX_SHADOWCASTING_LIGHT_MATRICES =
     64; //1 directional(4 Cascades) +8 spot + 48 point (8 pointlights with 6 for each side)
-constexpr uint32_t MAX_SHADOWCASTING_DIRECTIONAL = 128;
 constexpr uint32_t DIRECTIONAL_SHADOW_MAP_RES = 2048;
 constexpr uint32_t SPOT_SHADOW_MAP_RES = 1028;
 constexpr uint32_t POINT_SHADOW_MAP_RES = 512;
