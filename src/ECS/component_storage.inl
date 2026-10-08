@@ -24,44 +24,33 @@ template <typename T> void ComponentStorage<T>::removeEntity(EntityID entityId) 
     ComponentIndex locationToRemove = it->second;
     unmapEntity(entityId);
 
-    if (m_lastComponentLocation == locationToRemove) {
-        return;
+    // Fill the hole with the last component (unless the removed one is the last), then drop the last slot.
+    if (!(m_lastComponentLocation == locationToRemove)) {
+        moveLastComponentToLocation(locationToRemove);
     }
-
-    moveLastComponentToLocation(locationToRemove);
+    popLastComponent();
 }
 
 template <typename T> void ComponentStorage<T>::moveLastComponentToLocation(const ComponentIndex& location) {
-    if (!m_lastComponentLocation) {
-        return;
-    }
+    T* lastComponent =
+        m_chunks[m_lastComponentLocation->chunkIndex]->getComponent(m_lastComponentLocation->componentIndex);
+    EntityID lastEntity = m_componentEntityMap.at(*m_lastComponentLocation);
 
-    // Get the last component
-    auto& lastChunk = m_chunks[m_lastComponentLocation->chunkIndex];
-    T* lastComponent = lastChunk->getComponent(m_lastComponentLocation->componentIndex);
-    if (!lastComponent) {
-        return;
-    }
-
-    // Find which entity owns the last component
-
-    EntityID lastEntity = m_componentEntityMap[m_lastComponentLocation.value()];
-
-    // Move the component
     m_chunks[location.chunkIndex]->addComponentToPosition(location, *lastComponent);
+    m_componentEntityMap.erase(*m_lastComponentLocation);
+    mapEntity(lastEntity, location);
+}
+
+template <typename T> void ComponentStorage<T>::popLastComponent() {
+    auto& lastChunk = m_chunks[m_lastComponentLocation->chunkIndex];
     lastChunk->removeComponent(m_lastComponentLocation->componentIndex);
 
-    // Update the moved component's location in the map
-    mapEntity(lastEntity, location);
-
-    // Update last component location
     if (lastChunk->size() == 0) {
         m_chunks.pop_back();
         if (m_chunks.empty()) {
             m_lastComponentLocation = std::nullopt;
         } else {
-            auto& newLastChunk = m_chunks.back();
-            m_lastComponentLocation = ComponentIndex{m_chunks.size() - 1, newLastChunk->size() - 1};
+            m_lastComponentLocation = ComponentIndex{m_chunks.size() - 1, m_chunks.back()->size() - 1};
         }
     } else {
         m_lastComponentLocation = ComponentIndex{m_lastComponentLocation->chunkIndex, lastChunk->size() - 1};
