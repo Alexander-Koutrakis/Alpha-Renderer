@@ -25,13 +25,16 @@ shaders:
 shader-equiv base="main":
     ./scripts/shader_equiv.ps1 -BaseRef {{base}}
 
-# Run the app, capture its window and diff it against tests/golden/scene.png (needs a GPU and a display; not in `check`).
+# Run the app on each test scene (the sample scene and tests/scenes/glass), capture its window and diff it against
+# tests/golden/ (needs a GPU and a display; not in `check`).
 screenshot-diff:
     ./scripts/screenshot_diff.ps1
+    ./scripts/screenshot_diff.ps1 -Scene glass
 
-# Rewrite the golden image from the current build. Only do this on a build you have looked at and trust.
-screenshot-baseline:
-    ./scripts/screenshot_diff.ps1 -Update
+# Rewrite a golden image from the current build (scene = "" for the sample scene, or glass). Only do this on a build
+# you have looked at and trust.
+screenshot-baseline scene="":
+    ./scripts/screenshot_diff.ps1 -Update {{ if scene == "" { "" } else { "-Scene " + scene } }}
 
 # clang-format conformance.
 format-check:

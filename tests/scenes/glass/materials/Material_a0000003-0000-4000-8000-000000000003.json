@@ -1,0 +1,22 @@
+{
+  "ID": "a0000003-0000-4000-8000-000000000003",
+  "Type": 2,
+  "AlbedoPath": null,
+  "NormalPath": null,
+  "MetallicSmoothnessPath": null,
+  "OcclusionPath": null,
+  "EmissionPath": null,
+  "AlbedoColor": {
+    "x": 0.9,
+    "y": 1.0,
+    "z": 0.9,
+    "w": 0.25
+  },
+  "Mettalic": 0.0,
+  "Smoothness": 0.98,
+  "AO": 1.0,
+  "Alpha": 0.25,
+  "AlphaCutoff": 0.5,
+  "NormalStrength": 1.0,
+  "EnableGPUInstancing": false
+}
