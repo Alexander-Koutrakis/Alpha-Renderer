@@ -1,10 +1,13 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
 
 // Recap:
 // - Resolves merged radiance cascades into screen-space diffuse GI.
 // - Bilinear probe sampling + horizon check fetch the correct interval per pixel.
 // - Skybox fills remaining transmittance; temporal reprojection smooths noise.
 // - Outputs GI to uGIOut; history buffers feed temporal accumulation.
+
+#include "rc_common.glsl"
 
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
@@ -27,6 +30,7 @@ layout(rgba16f, set = 0, binding = 7) uniform writeonly image2D uGIOut;
 
 layout(set = 0, binding = 8) uniform sampler2D uGIHistory;
 layout(set = 0, binding = 9) uniform sampler2D uPrevGBufferPosition;
+layout(set = 0, binding = 10) uniform sampler2D uPrevGBufferNormal;
 
 layout(set = 1, binding = 0) uniform samplerCube uSkybox;
 
@@ -43,28 +47,15 @@ const float INV_WIDTH = 1.0 / float(RESOLVE_WIDTH);
 const float INV_HEIGHT = 1.0 / float(RESOLVE_HEIGHT);
 const float PI = 3.14159265359;
 const float GI_BOOST = 3.0;
+// How much skybox radiance rays with remaining transmittance bring into GI. Screen-space tracing reports any ray it
+// cannot resolve (off-screen, behind geometry) as a miss, so in an enclosed scene most rays "see the sky" and the
+// whole room floods with sky light. Kept at 0 until misses can be told apart from rays that truly escape.
+const float SKY_GI_INTENSITY = 0.0;
 const float RC_BASE_INTERVAL_LENGTH = 0.08; // Must match Rendering::RC_BASE_INTERVAL_LENGTH
 const float TEMPORAL_DEPTH_THRESHOLD = 0.6;      
 const float TEMPORAL_NORMAL_THRESHOLD = 0.75;    
 const float TEMPORAL_BLEND_ALPHA = 0.05;
 const float HISTORY_SPATIAL_BLUR_RADIUS = 1.5;
-
-float computeHemisphereShrink(int tileSize) {
-    float t = clamp((float(tileSize) - 2.0) / 6.0, 0.0, 1.0);
-    return mix(0.90, 0.98, t);
-}
-
-vec3 hemisphereDirFromUV(vec2 uv, float hemiShrink) {
-    uv = mix(vec2(0.5), uv, hemiShrink);
-    vec2 p = uv * 2.0 - 1.0; 
-    vec3 v = vec3(p.x, p.y, 1.0 - abs(p.x) - abs(p.y));
-    if (v.z < 0.0) {                    
-        v.xy = (1.0 - abs(v.yx)) * sign(v.xy);
-        v.z = 0.0;
-    }
-    v = normalize(v);
-    return v;
-}
 
 vec2 uvFromHemisphereDir(vec3 dir, float hemiShrink) {
     vec3 d = normalize(dir);
@@ -77,20 +68,8 @@ vec2 uvFromHemisphereDir(vec3 dir, float hemiShrink) {
     return clamp(uv, vec2(0.001), vec2(0.999));
 }
 
-mat3 buildProbeBasis(vec3 n) {
-    vec3 normal = normalize(n);
-    vec3 up = (abs(normal.z) < 0.999) ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
-    vec3 tangent = normalize(cross(up, normal));
-    vec3 bitangent = cross(normal, tangent);
-    return mat3(tangent, bitangent, normal);
-}
-
-vec3 decodeNormal(vec3 encoded) {
-    return normalize(encoded * 2.0 - 1.0);
-}
-
 vec3 FresnelSchlick(float cosTheta, vec3 F0) {
-    return F0 + (1.0 - F0) * pow(1.0 - cosTheta, 5.0);
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
 
 struct ScreenSample {
@@ -212,10 +191,6 @@ BilinearSamplingInfo buildBilinearLookup(ivec2 pixel, const CascadeSamplingParam
         info.lookups[i] = lookup;
     }
     return info;
-}
-
-ivec2 getProbePixel(ivec2 probeIndex, int probeStridePx) {
-    return probeIndex * probeStridePx + probeStridePx / 2;
 }
 
 RadianceIntervalSample sampleRadianceInterval(
@@ -362,7 +337,7 @@ TemporalResult applyTemporalAccumulation(
     float depthDiff = length(historyPos.xyz - worldPosition);
     float depthConf = 1.0 - smoothstep(TEMPORAL_DEPTH_THRESHOLD * 0.5, TEMPORAL_DEPTH_THRESHOLD, depthDiff);
 
-    vec3 historyNormal = decodeNormal(texelFetch(uGBufferNormal, historyPx, 0).xyz);
+    vec3 historyNormal = decodeNormal(texelFetch(uPrevGBufferNormal, historyPx, 0).xyz);
     float normalDot = dot(normal, historyNormal);
     float normalConf = smoothstep(TEMPORAL_NORMAL_THRESHOLD - 0.1, 0.99, normalDot);
 
@@ -411,7 +386,7 @@ IntegrationResult integrateDiffuseGI(ivec2 pixel, const ScreenSample screenSampl
 
             vec3 rayRadiance = interval.radiance;
             if (interval.beta > 0.0) {
-                rayRadiance += interval.beta * texture(uSkybox, worldDir).rgb;
+                rayRadiance += interval.beta * texture(uSkybox, worldDir).rgb * SKY_GI_INTENSITY;
             }
 
             totalIrradiance += rayRadiance * ndotl;

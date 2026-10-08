@@ -9,12 +9,13 @@ $val = Join-Path $sdk "Bin/spirv-val.exe"
 $out = Join-Path $PSScriptRoot "../build/shader-check"
 New-Item -ItemType Directory -Force $out | Out-Null
 
-$shaders = Get-ChildItem (Join-Path $PSScriptRoot "../shaders") -Recurse -Include *.vert, *.frag, *.comp
+$shaderDir = Join-Path $PSScriptRoot "../shaders"
+$shaders = Get-ChildItem $shaderDir -Recurse -Include *.vert, *.frag, *.comp
 if ($shaders.Count -eq 0) { throw "no shaders found" }
 
 foreach ($s in $shaders) {
     $spv = Join-Path $out ($s.Name + ".spv")
-    & $glslc --target-env=vulkan1.3 -Werror $s.FullName -o $spv
+    & $glslc --target-env=vulkan1.3 -Werror -I (Join-Path $shaderDir "common") $s.FullName -o $spv
     if ($LASTEXITCODE -ne 0) { throw "glslc failed: $($s.Name)" }
     & $val --target-env vulkan1.3 $spv
     if ($LASTEXITCODE -ne 0) { throw "spirv-val failed: $($s.Name)" }

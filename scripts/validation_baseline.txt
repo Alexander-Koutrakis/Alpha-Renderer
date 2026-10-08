@@ -1,4 +1,2 @@
-# VUIDs the app is known to report with validation on (see findings/descriptors.md). Anything else is a regression.
-# A shader uses a descriptor the pipeline layout does not declare for that stage.
-VUID-VkComputePipelineCreateInfo-layout-07988
-VUID-VkGraphicsPipelineCreateInfo-layout-07988
+# VUIDs the app is known to report with validation on. Anything else is a regression.
+# Empty: the app runs clean. Add a VUID here only with a note saying why it is accepted.

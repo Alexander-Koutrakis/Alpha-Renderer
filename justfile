@@ -18,6 +18,18 @@ build:
 shaders:
     ./scripts/check_shaders.ps1
 
+# Behavior-neutral check: compare every shader against a base ref (default main). Use scripts/shader_equiv.ps1 -Expect for intended changes.
+shader-equiv base="main":
+    ./scripts/shader_equiv.ps1 -BaseRef {{base}}
+
+# Run the app, capture its window and diff it against tests/golden/scene.png (needs a GPU and a display; not in `check`).
+screenshot-diff:
+    ./scripts/screenshot_diff.ps1
+
+# Rewrite the golden image from the current build. Only do this on a build you have looked at and trust.
+screenshot-baseline:
+    ./scripts/screenshot_diff.ps1 -Update
+
 # clang-format conformance.
 format-check:
     if (-not (Test-Path .clang-format)) { Write-Error "format-check: .clang-format missing"; exit 1 }

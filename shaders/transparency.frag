@@ -1,4 +1,5 @@
 #version 450
+#extension GL_GOOGLE_include_directive : require
 //=============================================================================
 // WEIGHTED BLENDED ORDER-INDEPENDENT TRANSPARENCY
 //=============================================================================
@@ -42,15 +43,9 @@
 //
 //=============================================================================
 
-// Constants matching direct_light.frag
-const int MAX_LIGHTS = 128;
-const int MAX_CASCADE_COUNT = 4;
-const int MAX_SHADOWCASTING_DIRECTIONAL = 4;
-const int MAX_SHADOWCASTING_SPOT = 8;
-const int MAX_SHADOWCASTING_POINT = 8;
-const int MAX_SHADOWCASTING_LIGHT_MATRICES = 64;
-const float PI = 3.14159265359;
-const float EPSILON = 0.0000001;
+#include "light.glsl"
+#include "brdf.glsl"
+
 const float BASE_AMBIENT_INTENSITY = 0.05;
 const float BASE_DEPTH_BIAS = 0.005;
 const float MAX_SHADOW_BIAS = 0.1;
@@ -61,19 +56,6 @@ layout(location = 1) in vec3 fragNormal;
 layout(location = 2) in vec2 fragUV;
 layout(location = 3) in vec3 fragTangent;
 layout(location = 4) in vec3 fragBitangent;
-
-// Unified Light structure (matches direct_light.frag and C++ Light struct)
-struct Light {
-    vec4 positionAndData;       // xyz=pos, w=unused
-    vec4 colorAndIntensity;     // rgb=color, a=intensity
-    vec4 directionAndRange;     // xyz=direction, w=range
-    vec4 attenuationParams;     // distance/angle attenuation params
-    int lightType;              // 0 = directional, 1 = spot, 2 = point
-    int lightMatrixOffset;      // offset into the shadowcastingLightMatrices array
-    int shadowmapIndex;         // index into the shadowmap array
-    int isCastingShadow;        // 0 = no, 1 = yes
-    float shadowStrength;
-};
 
 // Set 0: Camera UBO (shared with vertex shader)
 layout(set = 0, binding = 0) uniform CameraUBO {
@@ -117,12 +99,12 @@ layout(set = 4, binding = 2) uniform sampler2D normalTexture;
 layout(set = 4, binding = 3) uniform sampler2D metallicSmoothnessTexture;
 layout(set = 4, binding = 4) uniform sampler2D occlusionTexture;
 
-// Set 5: Scene lighting (ambient, etc.)
+// Set 5: Scene lighting (must match Rendering::SceneLightingUbo)
 layout(set = 5, binding = 0) uniform SceneLightingUbo {
     mat4 viewMatrix;
     mat4 projectionMatrix;
     vec4 cameraPosition;
-    vec4 ambientLight;
+    float ambientIntensity;
     float reflectionIntensity;
 } sceneLighting;
 
@@ -139,11 +121,6 @@ layout(set = 7, binding = 0) uniform DirectionalLightCascadeSplits {
 // OIT outputs (weighted blended algorithm)
 layout(location = 0) out vec4 accum;   // RGB = Color*weight, A = weight
 layout(location = 1) out float reveal; // Used to modulate the transparency weight
-
-// ----- MATH FUNCTIONS -----
-float saturate(float x) {
-    return clamp(x, 0.0, 1.0);
-}
 
 // ----- PBR FUNCTIONS -----
 vec3 calculateNormal() {
@@ -164,56 +141,6 @@ vec3 calculateNormal() {
     );
     
     return normalize(TBN * tangentSpaceNormal);
-}
-
-// Normal Distribution Function - GGX/Trowbridge-Reitz
-float NormalDistributionFunction(vec3 normal, vec3 halfVector, float roughness) {
-    float a = max(roughness * roughness, 0.045 * 0.045);
-    float a2 = a * a;
-    float NdotH = max(dot(normal, halfVector), 0.0);
-    float NdotH2 = NdotH * NdotH;
-    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
-    return a2 / (PI * denom * denom + EPSILON);
-}
-
-// Fresnel-Schlick with roughness
-vec3 FresnelSchlickRoughness(float VdotH, vec3 F0, float roughness) {
-    float Fc = pow(1.0 - VdotH, 5.0);
-    return F0 + (max(vec3(1.0 - roughness), F0) - F0) * Fc;
-}
-
-// Geometry function - Schlick-GGX
-float GeometrySchlickGGX(float NdotV, float roughness) {
-    float r = (roughness + 1.0);
-    float k = (r * r) / 8.0;
-    return NdotV / (NdotV * (1.0 - k) + k + EPSILON);
-}
-
-float GeometrySmith(vec3 normal, vec3 viewDir, vec3 lightDir, float roughness) {
-    float NdotV = max(dot(normal, viewDir), 0.0);
-    float NdotL = max(dot(normal, lightDir), 0.0);
-    float ggx1 = GeometrySchlickGGX(NdotV, roughness);
-    float ggx2 = GeometrySchlickGGX(NdotL, roughness);
-    return ggx1 * ggx2;
-}
-
-// Cook-Torrance BRDF
-vec3 cookTorranceBRDF(
-    vec3 normal, 
-    vec3 viewDir, 
-    vec3 lightDir, 
-    vec3 halfVector,
-    vec3 F0,
-    float roughness, 
-    float NdotL, 
-    float NdotV
-) {
-    float VdotH = max(dot(viewDir, halfVector), 0.0);
-    float D = NormalDistributionFunction(normal, halfVector, roughness);
-    vec3 F = FresnelSchlickRoughness(VdotH, F0, roughness);
-    float G = GeometrySmith(normal, viewDir, lightDir, roughness);
-    float denom = 4.0 * max(NdotL, 0.0) * max(NdotV, 0.0) + EPSILON;
-    return (D * G * F) / denom;
 }
 
 // ----- PSEUDO-RANDOM FUNCTIONS -----
@@ -242,8 +169,6 @@ vec2 poissonDisk[16] = vec2[](
 );
 
 // ----- SHADOW CALCULATIONS (matching direct_light.frag) -----
-#define BEYOND_SHADOW_FAR(shadowCoord) (shadowCoord.z <= 0.0 || shadowCoord.z >= 1.0)
-
 int findCascade(float viewDepth, vec4 cascadeSplits) {
     if (viewDepth < cascadeSplits.x) return 0;
     if (viewDepth < cascadeSplits.y) return 1;
@@ -258,7 +183,7 @@ int findCascadeForUnifiedLight(Light light, vec3 worldPos) {
     
     int cascadeSplitsIndex = light.lightMatrixOffset / MAX_CASCADE_COUNT;
     
-    if (cascadeSplitsIndex < 0 || cascadeSplitsIndex >= MAX_SHADOWCASTING_LIGHT_MATRICES) {
+    if (cascadeSplitsIndex < 0 || cascadeSplitsIndex >= MAX_SHADOWCASTING_DIRECTIONAL) {
         return -1;
     }
     
@@ -344,15 +269,20 @@ float findShadowForSpotLight(Light light, vec3 worldPos, vec3 normal) {
     }
     
     vec3 lightPos = light.positionAndData.xyz;
-    vec3 lightDir = normalize(lightPos - worldPos);
+    vec3 toLight = lightPos - worldPos;
+    vec3 lightDir = normalize(toLight);
     float NdotL = max(dot(normal, lightDir), 0.0);
     
     if (NdotL <= 0.0) {
         return 0.0;
     }
     
+    // The spot shadow map stores radial distance / range (see shadowmap.frag), not NDC depth.
+    float lightRange = max(light.directionAndRange.w, 0.001);
     float invNdotL = 1.0 - saturate(NdotL);
     float bias = BASE_DEPTH_BIAS + invNdotL * MAX_SHADOW_BIAS;
+    float normalizedBias = bias / lightRange;
+    float fragmentDepth = saturate(length(toLight) / lightRange);
     
     vec2 texelSize = 1.0 / vec2(textureSize(spotShadowMaps[light.shadowmapIndex], 0).xy);
     float radius = 1.5;
@@ -368,7 +298,7 @@ float findShadowForSpotLight(Light light, vec3 worldPos, vec3 normal) {
     for(int i = 0; i < 16; i++) {
         vec2 offset = rotationMatrix * poissonDisk[i] * radius * texelSize;
         float pcfDepth = texture(spotShadowMaps[light.shadowmapIndex], shadowCoord.xy + offset).r;
-        shadow += (shadowCoord.z - bias) > pcfDepth ? 0.0 : 1.0;
+        shadow += (fragmentDepth - normalizedBias) > pcfDepth ? 0.0 : 1.0;
     }
     
     shadow /= 16.0;
@@ -382,7 +312,7 @@ float findShadowForPointLight(Light light, vec3 worldPos, vec3 normal) {
     
     vec3 lightPos = light.positionAndData.xyz;
     vec3 lightToFragment = worldPos - lightPos;
-    float lightRange = light.directionAndRange.w;
+    float lightRange = max(light.directionAndRange.w, 0.001);
     
     float currentDistance = length(lightToFragment);
     float normalizedDistance = currentDistance / lightRange;
@@ -399,7 +329,7 @@ float findShadowForPointLight(Light light, vec3 worldPos, vec3 normal) {
     }
     
     float distanceBias = normalizedDistance * BASE_DEPTH_BIAS;
-    float slopeBias = sqrt(1.0 - NdotL * NdotL) / max(NdotL, 0.001);
+    float slopeBias = sqrt(max(1.0 - NdotL * NdotL, 0.0)) / max(NdotL, 0.001);
     float bias = BASE_DEPTH_BIAS + distanceBias + min(MAX_SHADOW_BIAS * slopeBias, MAX_SHADOW_BIAS);
     
     float shadow = 0.0;
@@ -455,12 +385,6 @@ float DistanceAttenuation(float distanceSqr, vec2 distanceAndRangeSqr) {
     return mix(1.0, lightAtten * smoothFactor, hasRange);
 }
 
-float AngleAttenuation(vec3 spotDirection, vec3 lightDirection, vec2 spotAttenuation) {
-    float SdotL = dot(spotDirection, lightDirection);
-    float atten = saturate(SdotL * spotAttenuation.x + spotAttenuation.y);
-    return atten * atten;
-}
-
 // ----- UNIFIED LIGHT CALCULATION -----
 vec3 calculateUnifiedLight(
     Light light,
@@ -497,8 +421,7 @@ vec3 calculateUnifiedLight(
     vec3 halfVector = normalize(lightDirection + viewDir);
     
     vec3 diffuse = kD * albedo / PI;
-    vec3 specularBRDF = cookTorranceBRDF(normal, viewDir, lightDirection, halfVector, F0, roughness, NdotL, NdotV);
-    vec3 specular = specularBRDF * specularBRDF;
+    vec3 specular = cookTorranceBRDF(normal, viewDir, lightDirection, halfVector, F0, roughness, NdotL, NdotV);
     
     vec3 lightColor = light.colorAndIntensity.rgb * light.colorAndIntensity.a;
     
@@ -506,20 +429,18 @@ vec3 calculateUnifiedLight(
 }
 
 // ----- OIT WEIGHT CALCULATION -----
-float calculateWeight(float depth, float alpha) {
-    float linearDepth = gl_FragCoord.z;
-    float cameraSpaceZ = -1.0 * (1.0 - linearDepth) * 500.0;
-    float z = abs(cameraSpaceZ);
+// Depth-only weight (McGuire & Bavoil). Alpha is applied by the caller, once, in the accumulation write.
+// maxWeight bounds the weight itself so the RGBA16F accumulation target cannot overflow for bright HDR colors.
+float calculateWeight(float viewDepth) {
+    float z = abs(viewDepth);
     
     float a = 10.0;
     float minWeight = 1e-2;
     float maxWeight = 3e3;
     float depthScale = 200.0;
     
-    float weight = 0.03 / (1e-5 + pow(z / depthScale, 4.0));
-    weight = a * max(minWeight, min(maxWeight, weight));
-    
-    return alpha * weight;
+    float weight = a * 0.03 / (1e-5 + pow(z / depthScale, 4.0));
+    return clamp(weight, minWeight, maxWeight);
 }
 
 // ----- MAIN -----
@@ -567,18 +488,19 @@ void main() {
         occlusion *= texture(occlusionTexture, fragUV).r;
     }
 
-    vec3 indirectDiffuse = sceneLighting.ambientLight.rgb * baseColor.rgb * BASE_AMBIENT_INTENSITY * occlusion;
+    vec3 indirectDiffuse = vec3(sceneLighting.ambientIntensity) * baseColor.rgb * BASE_AMBIENT_INTENSITY * occlusion;
     vec3 indirectLighting = kD * indirectDiffuse;
     
     // Final color
     vec3 finalColor = directLighting + indirectLighting;
     
     // Calculate OIT weight
-    float weight = calculateWeight(gl_FragCoord.z, baseColor.a);
+    float viewDepth = (camera.view * vec4(fragPosition, 1.0)).z;
+    float weight = calculateWeight(viewDepth);
     
-    // Weighted blend accumulation
-    accum = vec4(finalColor * baseColor.a * weight, weight);
+    // Weighted blend accumulation: rgb = color * alpha * w, a = alpha * w
+    accum = vec4(finalColor * baseColor.a, baseColor.a) * weight;
     
     // Revealage factor
-    reveal = pow( baseColor.a, 1.0);
+    reveal = baseColor.a;
 } 
