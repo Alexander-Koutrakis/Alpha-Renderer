@@ -1,0 +1,1118 @@
+{
+  "ColorTexturePaths": [],
+  "NormalTexturePaths": [],
+  "MeshPaths": [
+    "Assets/Scene/meshes/Cube_0fddae11-53cc-4449-9567-08431abf328b.json",
+    "Assets/Scene/meshes/Suzanne_1efc555b-3353-441b-a6bc-6df60a891e5e.json",
+    "Assets/Scene/meshes/Sphere_63fae732-5757-4e03-8194-3205dacef2f5.json"
+  ],
+  "MaterialPaths": [
+    "Assets/Scene/materials/Material_13e1d11d-293b-4ae9-90b0-a1ac3b0af3e8.json",
+    "Assets/Scene/materials/Material_d65c42c9-b7ab-405a-b4df-3256448a8f77.json",
+    "Assets/Scene/materials/Material_47df98d2-3111-4570-a3c9-faf8dbe98bd4.json",
+    "Assets/Scene/materials/Material_cec13c4c-61f0-4224-a411-5740583ae52a.json",
+    "Assets/Scene/materials/Material_91f0ccc9-0d87-497c-985a-d7f3876eec16.json"
+  ],
+  "Gameobjects": [
+    {
+      "EntityID": 0,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": -0.206,
+            "y": 0.786,
+            "z": -6.503
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+          },
+          "Scale": {
+            "x": 0.6,
+            "y": 0.6,
+            "z": 0.6
+          }
+        },
+        {
+          "$type": "SceneSerialization.sMeshRenderer, Assembly-CSharp",
+          "MeshID": "Cube_0fddae11-53cc-4449-9567-08431abf328b",
+          "MaterialID": "13e1d11d-293b-4ae9-90b0-a1ac3b0af3e8",
+          "MaterialIDs": [
+            "13e1d11d-293b-4ae9-90b0-a1ac3b0af3e8"
+          ],
+          "CastingShadows": true
+        }
+      ]
+    },
+    {
+      "EntityID": 1,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 1.454,
+            "y": 1.071,
+            "z": -6.594
+          },
+          "Rotation": {
+            "x": 0.29276827,
+            "y": 0.462756336,
+            "z": 0.8202833,
+            "w": -0.165162861
+          },
+          "Scale": {
+            "x": 100.000069,
+            "y": 100.000046,
+            "z": 100.000015
+          }
+        },
+        {
+          "$type": "SceneSerialization.sMeshRenderer, Assembly-CSharp",
+          "MeshID": "Suzanne_1efc555b-3353-441b-a6bc-6df60a891e5e",
+          "MaterialID": "d65c42c9-b7ab-405a-b4df-3256448a8f77",
+          "MaterialIDs": [
+            "d65c42c9-b7ab-405a-b4df-3256448a8f77"
+          ],
+          "CastingShadows": true
+        }
+      ]
+    },
+    {
+      "EntityID": 4,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 0.0,
+            "y": 1.6,
+            "z": -4.28
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+          },
+          "Scale": {
+            "x": 10.0,
+            "y": 5.0,
+            "z": 1.0
+          }
+        },
+        {
+          "$type": "SceneSerialization.sMeshRenderer, Assembly-CSharp",
+          "MeshID": "Cube_0fddae11-53cc-4449-9567-08431abf328b",
+          "MaterialID": "47df98d2-3111-4570-a3c9-faf8dbe98bd4",
+          "MaterialIDs": [
+            "47df98d2-3111-4570-a3c9-faf8dbe98bd4"
+          ],
+          "CastingShadows": true
+        }
+      ]
+    },
+    {
+      "EntityID": 5,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": -1.8,
+            "y": 1.44,
+            "z": -5.9
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+          },
+          "Scale": {
+            "x": 2.0,
+            "y": 2.0,
+            "z": 2.0
+          }
+        },
+        {
+          "$type": "SceneSerialization.sMeshRenderer, Assembly-CSharp",
+          "MeshID": "Sphere_63fae732-5757-4e03-8194-3205dacef2f5",
+          "MaterialID": "d65c42c9-b7ab-405a-b4df-3256448a8f77",
+          "MaterialIDs": [
+            "d65c42c9-b7ab-405a-b4df-3256448a8f77"
+          ],
+          "CastingShadows": true
+        }
+      ]
+    },
+    {
+      "EntityID": 6,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 3.5,
+            "y": 1.94,
+            "z": -3.86
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+          },
+          "Scale": {
+            "x": 1.0,
+            "y": 5.0,
+            "z": 10.0
+          }
+        },
+        {
+          "$type": "SceneSerialization.sMeshRenderer, Assembly-CSharp",
+          "MeshID": "Cube_0fddae11-53cc-4449-9567-08431abf328b",
+          "MaterialID": "cec13c4c-61f0-4224-a411-5740583ae52a",
+          "MaterialIDs": [
+            "cec13c4c-61f0-4224-a411-5740583ae52a"
+          ],
+          "CastingShadows": true
+        }
+      ]
+    },
+    {
+      "EntityID": 7,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": -3.5,
+            "y": 1.94,
+            "z": -3.86
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+          },
+          "Scale": {
+            "x": 1.0,
+            "y": 5.0,
+            "z": 10.0
+          }
+        },
+        {
+          "$type": "SceneSerialization.sMeshRenderer, Assembly-CSharp",
+          "MeshID": "Cube_0fddae11-53cc-4449-9567-08431abf328b",
+          "MaterialID": "91f0ccc9-0d87-497c-985a-d7f3876eec16",
+          "MaterialIDs": [
+            "91f0ccc9-0d87-497c-985a-d7f3876eec16"
+          ],
+          "CastingShadows": true
+        }
+      ]
+    },
+    {
+      "EntityID": 8,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 0.0,
+            "y": 0.04,
+            "z": -4.0
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+          },
+          "Scale": {
+            "x": 10.0,
+            "y": 1.0,
+            "z": 10.0
+          }
+        },
+        {
+          "$type": "SceneSerialization.sMeshRenderer, Assembly-CSharp",
+          "MeshID": "Cube_0fddae11-53cc-4449-9567-08431abf328b",
+          "MaterialID": "d65c42c9-b7ab-405a-b4df-3256448a8f77",
+          "MaterialIDs": [
+            "d65c42c9-b7ab-405a-b4df-3256448a8f77"
+          ],
+          "CastingShadows": true
+        }
+      ]
+    },
+    {
+      "EntityID": 9,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 0.0,
+            "y": 1.837,
+            "z": -10.0
+          },
+          "Rotation": {
+            "x": 0.0,
+            "y": 0.0,
+            "z": 0.0,
+            "w": 1.0
+          },
+          "Scale": {
+            "x": 1.0,
+            "y": 1.0,
+            "z": 1.0
+          }
+        },
+        {
+          "$type": "SceneSerialization.sCamera, Assembly-CSharp",
+          "FieldOfView": 60.0,
+          "NearPlane": 0.3,
+          "FarPlane": 1000.0
+        }
+      ]
+    },
+    {
+      "EntityID": 40,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": -3.6,
+            "y": 3.6,
+            "z": -5.0
+          },
+          "Rotation": {
+            "x": 0.7071068,
+            "y": 0,
+            "z": 0,
+            "w": 0.7071068
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sSpotLight, Assembly-CSharp",
+          "Intensity": 3.0,
+          "Color": {
+            "x": 0.5,
+            "y": 0.9,
+            "z": 0.4
+          },
+          "InnerCutoff": 60.0,
+          "OuterCutoff": 110.0,
+          "Range": 8.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 41,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": -2.8,
+            "y": 3.6,
+            "z": -5.3
+          },
+          "Rotation": {
+            "x": 0.7071068,
+            "y": 0,
+            "z": 0,
+            "w": 0.7071068
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sSpotLight, Assembly-CSharp",
+          "Intensity": 3.0,
+          "Color": {
+            "x": 0.55,
+            "y": 0.8400000000000001,
+            "z": 0.44
+          },
+          "InnerCutoff": 60.0,
+          "OuterCutoff": 110.0,
+          "Range": 8.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 42,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": -2.0,
+            "y": 3.6,
+            "z": -5.6
+          },
+          "Rotation": {
+            "x": 0.7071068,
+            "y": 0,
+            "z": 0,
+            "w": 0.7071068
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sSpotLight, Assembly-CSharp",
+          "Intensity": 3.0,
+          "Color": {
+            "x": 0.6,
+            "y": 0.78,
+            "z": 0.48000000000000004
+          },
+          "InnerCutoff": 60.0,
+          "OuterCutoff": 110.0,
+          "Range": 8.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 43,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": -1.1999999999999997,
+            "y": 3.6,
+            "z": -5.0
+          },
+          "Rotation": {
+            "x": 0.7071068,
+            "y": 0,
+            "z": 0,
+            "w": 0.7071068
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sSpotLight, Assembly-CSharp",
+          "Intensity": 3.0,
+          "Color": {
+            "x": 0.65,
+            "y": 0.72,
+            "z": 0.52
+          },
+          "InnerCutoff": 60.0,
+          "OuterCutoff": 110.0,
+          "Range": 8.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 44,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": -0.3999999999999999,
+            "y": 3.6,
+            "z": -5.3
+          },
+          "Rotation": {
+            "x": 0.7071068,
+            "y": 0,
+            "z": 0,
+            "w": 0.7071068
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sSpotLight, Assembly-CSharp",
+          "Intensity": 3.0,
+          "Color": {
+            "x": 0.7,
+            "y": 0.66,
+            "z": 0.56
+          },
+          "InnerCutoff": 60.0,
+          "OuterCutoff": 110.0,
+          "Range": 8.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 45,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 0.3999999999999999,
+            "y": 3.6,
+            "z": -5.6
+          },
+          "Rotation": {
+            "x": 0.7071068,
+            "y": 0,
+            "z": 0,
+            "w": 0.7071068
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sSpotLight, Assembly-CSharp",
+          "Intensity": 3.0,
+          "Color": {
+            "x": 0.75,
+            "y": 0.6000000000000001,
+            "z": 0.6000000000000001
+          },
+          "InnerCutoff": 60.0,
+          "OuterCutoff": 110.0,
+          "Range": 8.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 46,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 1.2000000000000006,
+            "y": 3.6,
+            "z": -5.0
+          },
+          "Rotation": {
+            "x": 0.7071068,
+            "y": 0,
+            "z": 0,
+            "w": 0.7071068
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sSpotLight, Assembly-CSharp",
+          "Intensity": 3.0,
+          "Color": {
+            "x": 0.8,
+            "y": 0.54,
+            "z": 0.64
+          },
+          "InnerCutoff": 60.0,
+          "OuterCutoff": 110.0,
+          "Range": 8.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 47,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 2.0000000000000004,
+            "y": 3.6,
+            "z": -5.3
+          },
+          "Rotation": {
+            "x": 0.7071068,
+            "y": 0,
+            "z": 0,
+            "w": 0.7071068
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sSpotLight, Assembly-CSharp",
+          "Intensity": 3.0,
+          "Color": {
+            "x": 0.8500000000000001,
+            "y": 0.48000000000000004,
+            "z": 0.68
+          },
+          "InnerCutoff": 60.0,
+          "OuterCutoff": 110.0,
+          "Range": 8.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 48,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 2.8000000000000003,
+            "y": 3.6,
+            "z": -5.6
+          },
+          "Rotation": {
+            "x": 0.7071068,
+            "y": 0,
+            "z": 0,
+            "w": 0.7071068
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sSpotLight, Assembly-CSharp",
+          "Intensity": 3.0,
+          "Color": {
+            "x": 0.9,
+            "y": 0.42000000000000004,
+            "z": 0.72
+          },
+          "InnerCutoff": 60.0,
+          "OuterCutoff": 110.0,
+          "Range": 8.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 49,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 3.6,
+            "y": 3.6,
+            "z": -5.0
+          },
+          "Rotation": {
+            "x": 0.7071068,
+            "y": 0,
+            "z": 0,
+            "w": 0.7071068
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sSpotLight, Assembly-CSharp",
+          "Intensity": 3.0,
+          "Color": {
+            "x": 0.95,
+            "y": 0.36,
+            "z": 0.76
+          },
+          "InnerCutoff": 60.0,
+          "OuterCutoff": 110.0,
+          "Range": 8.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 50,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": -3.2,
+            "y": 1.0,
+            "z": -6.5
+          },
+          "Rotation": {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "w": 1
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sPointLight, Assembly-CSharp",
+          "Intensity": 2.0,
+          "Color": {
+            "x": 1.0,
+            "y": 0.4,
+            "z": 0.5
+          },
+          "Range": 4.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 51,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": -2.5,
+            "y": 1.15,
+            "z": -6.1
+          },
+          "Rotation": {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "w": 1
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sPointLight, Assembly-CSharp",
+          "Intensity": 2.0,
+          "Color": {
+            "x": 0.92,
+            "y": 0.45,
+            "z": 0.5
+          },
+          "Range": 4.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 52,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": -1.8000000000000003,
+            "y": 1.3,
+            "z": -5.7
+          },
+          "Rotation": {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "w": 1
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sPointLight, Assembly-CSharp",
+          "Intensity": 2.0,
+          "Color": {
+            "x": 0.84,
+            "y": 0.5,
+            "z": 0.5
+          },
+          "Range": 4.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 53,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": -1.1000000000000005,
+            "y": 1.45,
+            "z": -6.5
+          },
+          "Rotation": {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "w": 1
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sPointLight, Assembly-CSharp",
+          "Intensity": 2.0,
+          "Color": {
+            "x": 0.76,
+            "y": 0.55,
+            "z": 0.5
+          },
+          "Range": 4.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 54,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": -0.40000000000000036,
+            "y": 1.0,
+            "z": -6.1
+          },
+          "Rotation": {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "w": 1
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sPointLight, Assembly-CSharp",
+          "Intensity": 2.0,
+          "Color": {
+            "x": 0.6799999999999999,
+            "y": 0.6000000000000001,
+            "z": 0.5
+          },
+          "Range": 4.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 55,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 0.2999999999999998,
+            "y": 1.15,
+            "z": -5.7
+          },
+          "Rotation": {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "w": 1
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sPointLight, Assembly-CSharp",
+          "Intensity": 2.0,
+          "Color": {
+            "x": 0.6,
+            "y": 0.65,
+            "z": 0.5
+          },
+          "Range": 4.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 56,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 0.9999999999999991,
+            "y": 1.3,
+            "z": -6.5
+          },
+          "Rotation": {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "w": 1
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sPointLight, Assembly-CSharp",
+          "Intensity": 2.0,
+          "Color": {
+            "x": 0.52,
+            "y": 0.7000000000000001,
+            "z": 0.5
+          },
+          "Range": 4.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 57,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 1.6999999999999993,
+            "y": 1.45,
+            "z": -6.1
+          },
+          "Rotation": {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "w": 1
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sPointLight, Assembly-CSharp",
+          "Intensity": 2.0,
+          "Color": {
+            "x": 0.43999999999999995,
+            "y": 0.75,
+            "z": 0.5
+          },
+          "Range": 4.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 58,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 2.3999999999999995,
+            "y": 1.0,
+            "z": -5.7
+          },
+          "Rotation": {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "w": 1
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sPointLight, Assembly-CSharp",
+          "Intensity": 2.0,
+          "Color": {
+            "x": 0.36,
+            "y": 0.8,
+            "z": 0.5
+          },
+          "Range": 4.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 59,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 3.0999999999999996,
+            "y": 1.15,
+            "z": -6.5
+          },
+          "Rotation": {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "w": 1
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sPointLight, Assembly-CSharp",
+          "Intensity": 2.0,
+          "Color": {
+            "x": 0.28,
+            "y": 0.8500000000000001,
+            "z": 0.5
+          },
+          "Range": 4.0,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 60,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 0,
+            "y": 5,
+            "z": -5
+          },
+          "Rotation": {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "w": 1
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sDirectionalLight, Assembly-CSharp",
+          "Direction": {
+            "x": 0.5,
+            "y": 0.25,
+            "z": 0,
+            "w": 0.83
+          },
+          "Color": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          },
+          "Intensity": 0.5,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    },
+    {
+      "EntityID": 61,
+      "components": [
+        {
+          "$type": "SceneSerialization.sTransform, Assembly-CSharp",
+          "Position": {
+            "x": 0,
+            "y": 5,
+            "z": -5
+          },
+          "Rotation": {
+            "x": 0,
+            "y": 0,
+            "z": 0,
+            "w": 1
+          },
+          "Scale": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          }
+        },
+        {
+          "$type": "SceneSerialization.sDirectionalLight, Assembly-CSharp",
+          "Direction": {
+            "x": 0.5,
+            "y": -0.3,
+            "z": 0,
+            "w": 0.81
+          },
+          "Color": {
+            "x": 1,
+            "y": 1,
+            "z": 1
+          },
+          "Intensity": 0.5,
+          "IsCastingShadows": true,
+          "ShadowStrength": 1.0
+        }
+      ]
+    }
+  ],
+  "EnviromentLighting": {
+    "Color": {
+      "x": 0.0,
+      "y": 0.0,
+      "z": 0.0
+    },
+    "AmbientIntensity": 0.05,
+    "SkyboxPaths": [
+      "Assets/Scene/textures/FluffballDayFront_9852452c.hdr",
+      "Assets/Scene/textures/FluffballDayBack_392749dd.hdr",
+      "Assets/Scene/textures/FluffballDayRight_976ce4fb.hdr",
+      "Assets/Scene/textures/FluffballDayLeft_53679ff1.hdr",
+      "Assets/Scene/textures/FluffballDayTop_08394a24.hdr",
+      "Assets/Scene/textures/FluffballDayBottom_fa5cfdaf.hdr"
+    ],
+    "ReflectionIntensity": 0.0
+  }
+}
