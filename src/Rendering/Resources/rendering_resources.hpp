@@ -118,10 +118,17 @@ private:
     void createShadowMapResources();
     void createDescriptorPool(const DescriptorBudget& budget);
     void createBuffers();
-    // Creates the layouts and returns what the pool has to hold for the sets that createDescriptorSets allocates.
+    // Creates the layouts and returns what the pool has to hold for the sets that allocateDescriptorSets allocates.
     DescriptorBudget createDescriptorSetLayouts();
-    void createDescriptorSets();
-    void createShadowMapSamplerDescriptorSets();
+    // Allocates every set, one family at a time in layout order; the write* functions fill them, one per consumer.
+    void allocateDescriptorSets();
+    void writeBufferSets();
+    void writeGBufferSets();
+    void writeShadowMapSamplerSets();
+    void writeCompositionSets();
+    void writePostProcessSets();
+    void writeDepthPyramidSets();
+    void writeRCSets();
     void createTransparencyResources();
     void createGIResources();
     void createRCAtlases();

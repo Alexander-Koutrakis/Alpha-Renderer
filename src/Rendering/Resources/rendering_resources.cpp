@@ -54,8 +54,14 @@ RenderingResources::RenderingResources(Device& device, SwapChain& swapChain,
     createDescriptorPool(createDescriptorSetLayouts());
     loadSMAALUTTextures();
     createShadowMapResources();
-    createDescriptorSets();
-    createShadowMapSamplerDescriptorSets();
+    allocateDescriptorSets();
+    writeBufferSets();
+    writeGBufferSets();
+    writeShadowMapSamplerSets();
+    writeCompositionSets();
+    writePostProcessSets();
+    writeDepthPyramidSets();
+    writeRCSets();
 
     // Bind the scene skybox, or a placeholder when the scene has none, so the descriptor is always valid
     initializeSkyboxFromScene();
@@ -217,11 +223,11 @@ void RenderingResources::createLightPassResources() {
     lightPassSampler = createSampler(device.getDevice(), VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR,
                                      VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK, 0.0f);
 
-    // Create light pass render target images
+    // Light pass render target, then the incident diffuse buffer (pre-albedo) with the same format and usages.
+    // Each image is created for every frame before the next image.
+    const VkImageCreateInfo imageInfo =
+        imageCreateInfo2D(width, height, hdrFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VkImageCreateInfo imageInfo = imageCreateInfo2D(
-            width, height, hdrFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-
         device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, lightPassResultImages[i],
                                    lightPassResultMemories[i]);
 
@@ -235,8 +241,8 @@ void RenderingResources::createLightPassResources() {
                      "LightPassView_Frame" + std::to_string(i));
         setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)lightPassResultMemories[i],
                      "LightPassMemory_Frame" + std::to_string(i));
-
-        // Incident diffuse buffer (pre-albedo) – same format/usages
+    }
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, lightIncidentImages[i],
                                    lightIncidentMemories[i]);
 
@@ -674,7 +680,7 @@ void RenderingResources::createDescriptorPool(const DescriptorBudget& budget) {
 }
 
 DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
-    // Every layout states how many sets createDescriptorSets allocates from it; the pool is sized from these.
+    // Every layout states how many sets allocateDescriptorSets allocates from it; the pool is sized from these.
     // The depth pyramid has one set per mip level of each frame (the seed set is mip 0).
     uint32_t depthPyramidSetCount = 0;
     for (const uint32_t mipLevels : depthPyramidMipLevels) {
@@ -910,29 +916,111 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
     return budget;
 }
 
-void RenderingResources::createDescriptorSets() {
+void RenderingResources::allocateDescriptorSets() {
+    // One family of sets at a time, in the order createDescriptorSetLayouts creates their layouts; every frame of a
+    // family is allocated before the next family. An empty name leaves the sets unnamed.
+    auto allocateFrames = [this](std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT>& sets, VkDescriptorSetLayout layout,
+                                 const std::string& name) {
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+            sets[i] = allocateDescriptorSet(*descriptorPool, layout);
+            if (!name.empty()) {
+                setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)sets[i], name + "_Frame" + std::to_string(i));
+            }
+        }
+    };
+
+    allocateFrames(modelsDescriptorSets, modelsDescriptorSetLayout, "ModelsDescriptorSet");
+    allocateFrames(cameraDescriptorSets, cameraDescriptorSetLayout, "CameraDescriptorSet");
+    allocateFrames(gBufferDescriptorSets, gBufferDescriptorSetLayout, "GBufferDescriptorSet");
+    allocateFrames(lightArrayDescriptorSets, lightArrayDescriptorSetLayout, "LightArrayDescriptorSet");
+    allocateFrames(cascadeSplitsDescriptorSets, cascadeSplitsSetLayout, "");
+    allocateFrames(sceneLightingDescriptorSets, sceneLightingDescriptorSetLayout, "");
+    allocateFrames(lightMatrixDescriptorSets, shadowcastinglightMatrixDescriptorSetLayout, "");
+    allocateFrames(shadowMapSamplerSets, shadowMapSamplerLayout, "");
+    allocateFrames(shadowModelMatrixDescriptorSets, shadowModelMatrixDescriptorSetLayout, "");
+
+    // Skybox: a single set, not per frame. updateSkyboxDescriptorSet writes it.
+    skyboxDescriptorSet = allocateDescriptorSet(*descriptorPool, skyboxDescriptorSetLayout);
+    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)skyboxDescriptorSet, "SkyboxDescriptorSet");
+
+    allocateFrames(transparencyModelMatrixDescriptorSets, transparencyModelDescriptorSetLayout, "");
+    allocateFrames(compositionDescriptorSets, compositionSetLayout, "CompositionDescriptorSet");
+    allocateFrames(smaaEdgeDescriptorSets, smaaEdgeSetLayout, "SMAAEdgeDescriptorSet");
+    allocateFrames(smaaWeightDescriptorSets, smaaWeightSetLayout, "SMAAWeightDescriptorSet");
+    allocateFrames(smaaBlendDescriptorSets, smaaBlendSetLayout, "SMAABlendDescriptorSet");
+    allocateFrames(colorCorrectionDescriptorSets, colorCorrectionSetLayout, "ColorCorrectionDescriptorSet");
+    allocateFrames(rcBuildDescriptorSets, rcBuildSetLayout, "RCBuildDescriptorSet");
+    allocateFrames(rcResolveDescriptorSets, rcResolveSetLayout, "RCResolveDescriptorSet");
+
+    // Depth pyramid: per frame, the seed set (depth -> mip 0), then one set per mip 1..N-1 for the downsample loop.
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        depthPyramidDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, depthPyramidSetLayout);
+        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)depthPyramidDescriptorSets[i],
+                     "DepthPyramidDescriptorSet_Frame" + std::to_string(i));
+
+        depthPyramidMipDescriptorSets[i].resize(depthPyramidMipLevels[i]);
+        for (uint32_t m = 1; m < depthPyramidMipLevels[i]; ++m) {
+            depthPyramidMipDescriptorSets[i][m] = allocateDescriptorSet(*descriptorPool, depthPyramidSetLayout);
+            setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)depthPyramidMipDescriptorSets[i][m],
+                         "DepthPyramidMipDescriptorSet_Frame" + std::to_string(i) + "_Mip" + std::to_string(m));
+        }
+    }
+}
+
+void RenderingResources::writeBufferSets() {
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        //Create descriptor set for instance buffer
-        modelsDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, modelsDescriptorSetLayout);
+        // Instance buffers
         DescriptorWriter()
             .buffer(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, modelMatrixBuffers[i]->descriptorInfo())
             .buffer(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, normalMatrixBuffers[i]->descriptorInfo())
             .update(device, modelsDescriptorSets[i]);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)modelsDescriptorSets[i],
-                     "ModelsDescriptorSet_Frame" + std::to_string(i));
 
-        //Create descriptor set for camera buffer
-        cameraDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, cameraDescriptorSetLayout);
+        // Camera buffer
         DescriptorWriter()
             .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, cameraUniformBuffers[i]->descriptorInfo())
             .update(device, cameraDescriptorSets[i]);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)cameraDescriptorSets[i],
-                     "CameraDescriptorSet_Frame" + std::to_string(i));
 
-        //Create descriptor set for gbuffer
+        // Light array buffer
+        DescriptorWriter()
+            .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                    lightArrayUniformBuffers[i]->descriptorInfo(lightArrayUniformBuffers[i]->getBufferSize()))
+            .update(device, lightArrayDescriptorSets[i]);
 
-        gBufferDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, gBufferDescriptorSetLayout);
-        const VkSampler gBufferSampler = gBuffer->getSampler();
+        // Cascade splits buffer
+        DescriptorWriter()
+            .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                    cascadeSplitsBuffers[i]->descriptorInfo(cascadeSplitsBuffers[i]->getBufferSize()))
+            .update(device, cascadeSplitsDescriptorSets[i]);
+
+        // Scene lighting buffer
+        DescriptorWriter()
+            .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                    sceneLightingBuffers[i]->descriptorInfo(sceneLightingBuffers[i]->getBufferSize()))
+            .update(device, sceneLightingDescriptorSets[i]);
+
+        // Light matrices
+        DescriptorWriter()
+            .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                    lightMatrixBuffers[i]->descriptorInfo(lightMatrixBuffers[i]->getBufferSize()))
+            .update(device, lightMatrixDescriptorSets[i]);
+
+        // Shadow model matrices
+        DescriptorWriter()
+            .buffer(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
+                    shadowModelMatrixBuffers[i]->descriptorInfo(shadowModelMatrixBuffers[i]->getBufferSize()))
+            .update(device, shadowModelMatrixDescriptorSets[i]);
+
+        // Transparency model matrices
+        DescriptorWriter()
+            .buffer(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, transparencyModelMatrixBuffers[i]->descriptorInfo())
+            .buffer(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, transparencyNormalMatrixBuffers[i]->descriptorInfo())
+            .update(device, transparencyModelMatrixDescriptorSets[i]);
+    }
+}
+
+void RenderingResources::writeGBufferSets() {
+    const VkSampler gBufferSampler = gBuffer->getSampler();
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         DescriptorWriter()
             .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                    {gBufferSampler, gBuffer->getPositionView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
@@ -943,57 +1031,38 @@ void RenderingResources::createDescriptorSets() {
             .image(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                    {gBufferSampler, gBuffer->getMaterialView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .update(device, gBufferDescriptorSets[i]);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)gBufferDescriptorSets[i],
-                     "GBufferDescriptorSet_Frame" + std::to_string(i));
+    }
+}
 
-        //Create descriptor set for light array buffer
-        lightArrayDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, lightArrayDescriptorSetLayout);
+void RenderingResources::writeShadowMapSamplerSets() {
+    // Each frame's set holds that frame's shadow maps.
+    for (size_t frameIndex = 0; frameIndex < MAX_FRAMES_IN_FLIGHT; frameIndex++) {
+        // createShadowMapResources made every shadow map of every frame, so each array is written in full.
+        auto imageInfos = [frameIndex](const auto& maps) {
+            std::array<VkDescriptorImageInfo, std::tuple_size_v<std::decay_t<decltype(maps)>>> infos{};
+            for (size_t lightIndex = 0; lightIndex < infos.size(); lightIndex++) {
+                const ShadowMap& map = *maps[lightIndex][frameIndex];
+                infos[lightIndex] = {map.getSampler(), map.getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
+            }
+            return infos;
+        };
+        const auto directionalImageInfos = imageInfos(directionalMaps);
+        const auto spotImageInfos = imageInfos(spotlightMaps);
+        const auto pointImageInfos = imageInfos(pointlightMaps);
+
         DescriptorWriter()
-            .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                    lightArrayUniformBuffers[i]->descriptorInfo(lightArrayUniformBuffers[i]->getBufferSize()))
-            .update(device, lightArrayDescriptorSets[i]);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)lightArrayDescriptorSets[i],
-                     "LightArrayDescriptorSet_Frame" + std::to_string(i));
+            .images(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, directionalImageInfos.data(),
+                    static_cast<uint32_t>(directionalImageInfos.size()))
+            .images(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, spotImageInfos.data(),
+                    static_cast<uint32_t>(spotImageInfos.size()))
+            .images(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, pointImageInfos.data(),
+                    static_cast<uint32_t>(pointImageInfos.size()))
+            .update(device, shadowMapSamplerSets[frameIndex]);
+    }
+}
 
-        //Create descriptor set for cascade splits buffer
-        cascadeSplitsDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, cascadeSplitsSetLayout);
-        DescriptorWriter()
-            .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                    cascadeSplitsBuffers[i]->descriptorInfo(cascadeSplitsBuffers[i]->getBufferSize()))
-            .update(device, cascadeSplitsDescriptorSets[i]);
-
-        //Create descriptor set for scene lighting buffer
-        sceneLightingDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, sceneLightingDescriptorSetLayout);
-        DescriptorWriter()
-            .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                    sceneLightingBuffers[i]->descriptorInfo(sceneLightingBuffers[i]->getBufferSize()))
-            .update(device, sceneLightingDescriptorSets[i]);
-
-        //Create descriptor set for light matrix
-        lightMatrixDescriptorSets[i] =
-            allocateDescriptorSet(*descriptorPool, shadowcastinglightMatrixDescriptorSetLayout);
-        DescriptorWriter()
-            .buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                    lightMatrixBuffers[i]->descriptorInfo(lightMatrixBuffers[i]->getBufferSize()))
-            .update(device, lightMatrixDescriptorSets[i]);
-
-        //Create descriptor sets for show model matrices
-        shadowModelMatrixDescriptorSets[i] =
-            allocateDescriptorSet(*descriptorPool, shadowModelMatrixDescriptorSetLayout);
-        DescriptorWriter()
-            .buffer(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,
-                    shadowModelMatrixBuffers[i]->descriptorInfo(shadowModelMatrixBuffers[i]->getBufferSize()))
-            .update(device, shadowModelMatrixDescriptorSets[i]);
-
-        //Create descriptor set for transparency model matrix
-        transparencyModelMatrixDescriptorSets[i] =
-            allocateDescriptorSet(*descriptorPool, transparencyModelDescriptorSetLayout);
-        DescriptorWriter()
-            .buffer(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, transparencyModelMatrixBuffers[i]->descriptorInfo())
-            .buffer(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, transparencyNormalMatrixBuffers[i]->descriptorInfo())
-            .update(device, transparencyModelMatrixDescriptorSets[i]);
-
-        compositionDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, compositionSetLayout);
+void RenderingResources::writeCompositionSets() {
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         // The indirect GI buffer stays in GENERAL because RCGI computes and readers share it within one frame.
         DescriptorWriter()
             .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -1008,20 +1077,18 @@ void RenderingResources::createDescriptorSets() {
             .image(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                    {lightPassSampler, giIndirectViews[i], VK_IMAGE_LAYOUT_GENERAL}) // indirect GI
             .update(device, compositionDescriptorSets[i]);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)compositionDescriptorSets[i],
-                     "CompositionDescriptorSet_Frame" + std::to_string(i));
+    }
+}
 
-        // Create descriptor set for SMAA edge pass
-        smaaEdgeDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, smaaEdgeSetLayout);
+void RenderingResources::writePostProcessSets() {
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        // SMAA edge pass
         DescriptorWriter()
             .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                    {postProcessSampler, compositionColorViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .update(device, smaaEdgeDescriptorSets[i]);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)smaaEdgeDescriptorSets[i],
-                     "SMAAEdgeDescriptorSet_Frame" + std::to_string(i));
 
-        // Create descriptor set for SMAA weight pass
-        smaaWeightDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, smaaWeightSetLayout);
+        // SMAA weight pass
         DescriptorWriter()
             .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                    {postProcessSampler, smaaEdgeViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
@@ -1030,49 +1097,35 @@ void RenderingResources::createDescriptorSets() {
             .image(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                    {smaaSearchSampler, smaaSearchView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .update(device, smaaWeightDescriptorSets[i]);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)smaaWeightDescriptorSets[i],
-                     "SMAAWeightDescriptorSet_Frame" + std::to_string(i));
 
-        // Create descriptor set for SMAA blend pass
-        smaaBlendDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, smaaBlendSetLayout);
+        // SMAA blend pass
         DescriptorWriter()
             .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                    {postProcessSampler, compositionColorViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .image(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                    {postProcessSampler, smaaBlendViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .update(device, smaaBlendDescriptorSets[i]);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)smaaBlendDescriptorSets[i],
-                     "SMAABlendDescriptorSet_Frame" + std::to_string(i));
 
-        // Create descriptor set for color correction pass
-        colorCorrectionDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, colorCorrectionSetLayout);
+        // Color correction pass
         DescriptorWriter()
             .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                    {postProcessSampler, postAAColorViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .update(device, colorCorrectionDescriptorSets[i]);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)colorCorrectionDescriptorSets[i],
-                     "ColorCorrectionDescriptorSet_Frame" + std::to_string(i));
+    }
+}
 
-        // Create descriptor set for depth pyramid build (src depth + dst pyramid mip0)
-        depthPyramidDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, depthPyramidSetLayout);
-        // Source depth is point sampled; the destination is pyramid mip 0 as a storage image, transitioned
-        // to GENERAL before the dispatch.
+void RenderingResources::writeDepthPyramidSets() {
+    for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        // Seed set: source depth is point sampled; the destination is pyramid mip 0 as a storage image,
+        // transitioned to GENERAL before the dispatch.
         DescriptorWriter()
             .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                    {depthPyramidSampler, depthViews[i], VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL})
             .image(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
                    {VK_NULL_HANDLE, depthPyramidMipStorageViews[i][0], VK_IMAGE_LAYOUT_GENERAL})
             .update(device, depthPyramidDescriptorSets[i]);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)depthPyramidDescriptorSets[i],
-                     "DepthPyramidDescriptorSet_Frame" + std::to_string(i));
 
-        // Allocate per-mip descriptor sets (mips 1..N-1) for the downsample loop
-        depthPyramidMipDescriptorSets[i].resize(depthPyramidMipLevels[i]);
         for (uint32_t m = 1; m < depthPyramidMipLevels[i]; ++m) {
-            depthPyramidMipDescriptorSets[i][m] = allocateDescriptorSet(*descriptorPool, depthPyramidSetLayout);
-            setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)depthPyramidMipDescriptorSets[i][m],
-                         "DepthPyramidMipDescriptorSet_Frame" + std::to_string(i) + "_Mip" + std::to_string(m));
-
             // Source: previous mip level (m-1), sampled. It is in SHADER_READ_ONLY_OPTIMAL at dispatch time
             // (transitioned by setMipLevelBarriers).
             // Destination: current mip level (m), written as a storage image. It is in GENERAL at dispatch time
@@ -1086,20 +1139,19 @@ void RenderingResources::createDescriptorSets() {
                 .update(device, depthPyramidMipDescriptorSets[i][m]);
         }
     }
+}
 
-    // RC build/resolve descriptor sets per frame
+void RenderingResources::writeRCSets() {
     for (uint32_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-        // RC Build
-        rcBuildDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, rcBuildSetLayout);
-
-        // GBuffer images (position, normal, albedo, material), reused by the resolve set below.
+        // GBuffer images (position, normal, albedo, material), shared by the build and resolve sets.
         const std::array<VkDescriptorImageInfo, 4> gbInfos{{
             {gBuffer->getSampler(), gBuffer->getPositionView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
             {gBuffer->getSampler(), gBuffer->getNormalView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
             {gBuffer->getSampler(), gBuffer->getAlbedoView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
             {gBuffer->getSampler(), gBuffer->getMaterialView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL},
         }};
-        // RC atlases as a storage image array
+
+        // RC build: RC atlases as a storage image array
         std::vector<VkDescriptorImageInfo> radStorageInfos(RC_CASCADE_COUNT);
         for (uint32_t c = 0; c < RC_CASCADE_COUNT; ++c) {
             radStorageInfos[c] = {VK_NULL_HANDLE, rcRadianceViews[c][i], VK_IMAGE_LAYOUT_GENERAL};
@@ -1118,14 +1170,9 @@ void RenderingResources::createDescriptorSets() {
                    {lightPassSampler, lightIncidentViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .images(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, radStorageInfos.data(), RC_CASCADE_COUNT)
             .update(device, rcBuildDescriptorSets[i]);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)rcBuildDescriptorSets[i],
-                     "RCBuildDescriptorSet_Frame" + std::to_string(i));
 
-        // RC Resolve
-        rcResolveDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, rcResolveSetLayout);
-
-        // RC atlases as sampled arrays (lightPassSampler as the generic sampler). They stay in GENERAL during
-        // build and resolve, so sample from GENERAL to avoid layout mismatches.
+        // RC resolve: RC atlases as sampled arrays (lightPassSampler as the generic sampler). They stay in GENERAL
+        // during build and resolve, so sample from GENERAL to avoid layout mismatches.
         std::vector<VkDescriptorImageInfo> radSampleInfos(RC_CASCADE_COUNT);
         for (uint32_t c = 0; c < RC_CASCADE_COUNT; ++c) {
             radSampleInfos[c] = {lightPassSampler, rcRadianceViews[c][i], VK_IMAGE_LAYOUT_GENERAL};
@@ -1152,45 +1199,6 @@ void RenderingResources::createDescriptorSets() {
                    {gBuffer->getSampler(), gBuffer->getNormalView(historyFrameIndex),
                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .update(device, rcResolveDescriptorSets[i]);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)rcResolveDescriptorSets[i],
-                     "RCResolveDescriptorSet_Frame" + std::to_string(i));
-    }
-
-    // Create skybox descriptor set (single set, not per frame)
-    // Note: We need a skybox texture to properly populate this, for now just allocate the set
-    skyboxDescriptorSet = allocateDescriptorSet(*descriptorPool, skyboxDescriptorSetLayout);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)skyboxDescriptorSet, "SkyboxDescriptorSet");
-}
-
-void RenderingResources::createShadowMapSamplerDescriptorSets() {
-    // Allocate descriptor sets for each frame
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        shadowMapSamplerSets[i] = allocateDescriptorSet(*descriptorPool, shadowMapSamplerLayout);
-    }
-
-    // Update descriptor sets for each frame with frame-specific shadow maps
-    for (size_t frameIndex = 0; frameIndex < MAX_FRAMES_IN_FLIGHT; frameIndex++) {
-        // createShadowMapResources made every shadow map of every frame, so each array is written in full.
-        auto imageInfos = [frameIndex](const auto& maps) {
-            std::array<VkDescriptorImageInfo, std::tuple_size_v<std::decay_t<decltype(maps)>>> infos{};
-            for (size_t lightIndex = 0; lightIndex < infos.size(); lightIndex++) {
-                const ShadowMap& map = *maps[lightIndex][frameIndex];
-                infos[lightIndex] = {map.getSampler(), map.getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
-            }
-            return infos;
-        };
-        const auto directionalImageInfos = imageInfos(directionalMaps);
-        const auto spotImageInfos = imageInfos(spotlightMaps);
-        const auto pointImageInfos = imageInfos(pointlightMaps);
-
-        DescriptorWriter()
-            .images(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, directionalImageInfos.data(),
-                    static_cast<uint32_t>(directionalImageInfos.size()))
-            .images(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, spotImageInfos.data(),
-                    static_cast<uint32_t>(spotImageInfos.size()))
-            .images(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, pointImageInfos.data(),
-                    static_cast<uint32_t>(pointImageInfos.size()))
-            .update(device, shadowMapSamplerSets[frameIndex]);
     }
 }
 
@@ -1234,31 +1242,30 @@ void RenderingResources::createShadowMapResources() {
 }
 
 void RenderingResources::createTransparencyResources() {
+    // Accumulation for every frame, then revealage (R8) for every frame.
+    const VkImageCreateInfo accumulationImageInfo =
+        imageCreateInfo2D(width, height, hdrFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VkImageCreateInfo accumulationImageInfo = imageCreateInfo2D(
-            width, height, hdrFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-
         device.createImageWithInfo(accumulationImageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, accumulationImages[i],
                                    accumulationMemories[i]);
 
         accumulationViews[i] = createImageView(device.getDevice(), accumulationImages[i], hdrFormat);
 
-        // Create revealage texture (R8)
-        VkImageCreateInfo revealageImageInfo = imageCreateInfo2D(
-            width, height, revealageFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-
-        device.createImageWithInfo(revealageImageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, revealageImages[i],
-                                   revealageMemories[i]);
-
-        revealageViews[i] = createImageView(device.getDevice(), revealageImages[i], revealageFormat);
-
-        // Set debug names for transparency resources
         setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)accumulationImages[i],
                      "AccumulationImage_Frame" + std::to_string(i));
         setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)accumulationViews[i],
                      "AccumulationView_Frame" + std::to_string(i));
         setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)accumulationMemories[i],
                      "AccumulationMemory_Frame" + std::to_string(i));
+    }
+
+    const VkImageCreateInfo revealageImageInfo = imageCreateInfo2D(
+        width, height, revealageFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        device.createImageWithInfo(revealageImageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, revealageImages[i],
+                                   revealageMemories[i]);
+
+        revealageViews[i] = createImageView(device.getDevice(), revealageImages[i], revealageFormat);
 
         setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)revealageImages[i], "RevealageImage_Frame" + std::to_string(i));
         setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)revealageViews[i], "RevealageView_Frame" + std::to_string(i));
@@ -1316,13 +1323,20 @@ void RenderingResources::createPostProcessResources() {
         setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)memory, name + "_Memory");
     };
 
+    // Each image is created for every frame before the next image.
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         makeColorImage(postProcessFormat, compositionColorImages[i], compositionColorMemories[i],
                        compositionColorViews[i], "CompositionColor_Frame" + std::to_string(i));
+    }
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         makeColorImage(smaaEdgeFormat, smaaEdgeImages[i], smaaEdgeMemories[i], smaaEdgeViews[i],
                        "SMAAEdge_Frame" + std::to_string(i));
+    }
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         makeColorImage(smaaBlendFormat, smaaBlendImages[i], smaaBlendMemories[i], smaaBlendViews[i],
                        "SMAABlend_Frame" + std::to_string(i));
+    }
+    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         makeColorImage(postProcessFormat, postAAColorImages[i], postAAColorMemories[i], postAAColorViews[i],
                        "PostAAColor_Frame" + std::to_string(i));
     }
