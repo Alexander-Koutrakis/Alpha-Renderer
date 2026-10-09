@@ -5,6 +5,7 @@
 #include "Rendering/Core/device.hpp"
 #include "Rendering/Core/swapchain.hpp"
 #include "Rendering/Core/buffer.hpp"
+#include "Rendering/Resources/frame_image.hpp"
 #include "Rendering/Resources/gbuffer.hpp"
 #include "Rendering/Core/descriptors.hpp"
 #include "Rendering/rendering_constants.hpp"
@@ -86,16 +87,17 @@ public:
 
     // GBuffer accessor
     GBuffer& getGBuffer() { return *gBuffer; }
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getDepthViews() { return depthViews; }
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getLightPassResultViews() { return lightPassResultViews; }
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getLightIncidentViews() { return lightIncidentViews; }
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getAlbedoViews() { return gBuffer->getAlbedoViews(); }
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getAccumulationViews() { return accumulationViews; }
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getRevealageViews() { return revealageViews; }
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getCompositionColorViews() { return compositionColorViews; }
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getSMAAEdgeViews() { return smaaEdgeViews; }
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getSMAABlendViews() { return smaaBlendViews; }
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getPostAAColorViews() { return postAAColorViews; }
+    using FrameViews = std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>;
+    const FrameViews& getDepthViews() const { return depthImage->views(); }
+    const FrameViews& getLightPassResultViews() const { return lightPassResultImage->views(); }
+    const FrameViews& getLightIncidentViews() const { return lightIncidentImage->views(); }
+    const FrameViews& getAlbedoViews() const { return gBuffer->getAlbedoViews(); }
+    const FrameViews& getAccumulationViews() const { return accumulationImage->views(); }
+    const FrameViews& getRevealageViews() const { return revealageImage->views(); }
+    const FrameViews& getCompositionColorViews() const { return compositionColorImage->views(); }
+    const FrameViews& getSMAAEdgeViews() const { return smaaEdgeImage->views(); }
+    const FrameViews& getSMAABlendViews() const { return smaaBlendImage->views(); }
+    const FrameViews& getPostAAColorViews() const { return postAAColorImage->views(); }
 
     auto& getDirectionalLightMaps() { return directionalMaps; }
     auto& getPointLightMaps() { return pointlightMaps; }
@@ -108,9 +110,6 @@ public:
     std::array<FrameContext, MAX_FRAMES_IN_FLIGHT> createFrameContexts();
 
 private:
-    // Debug naming helper
-    void setDebugName(VkObjectType objectType, uint64_t handle, const std::string& name);
-
     void findResourcesFormats();
     void createDepthResources();
     void createDepthPyramidResources();
@@ -154,28 +153,25 @@ private:
     VkFormat postProcessFormat{VK_FORMAT_UNDEFINED}; // HDR post-AA chain format
     VkFormat smaaEdgeFormat{VK_FORMAT_R8G8_UNORM};
     VkFormat smaaBlendFormat{VK_FORMAT_R8G8B8A8_UNORM};
-    // Incident diffuse buffer (direct light, pre-albedo)
-    std::array<VkImage, MAX_FRAMES_IN_FLIGHT> lightIncidentImages{};
-    std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT> lightIncidentMemories{};
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> lightIncidentViews{};
 
     std::unique_ptr<DescriptorPool> descriptorPool{nullptr};
 
-    std::array<VkImage, MAX_FRAMES_IN_FLIGHT> depthImages{};
-    std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT> depthMemories{};
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> depthViews{};
+    // Per-frame images
+    std::unique_ptr<FrameImage> depthImage;
+    std::unique_ptr<FrameImage> depthPyramidImage; // linearized depth, mip chain, per-mip views
+    std::unique_ptr<FrameImage> lightPassResultImage;
+    std::unique_ptr<FrameImage> lightIncidentImage; // incident diffuse (direct light, pre-albedo)
+    std::unique_ptr<FrameImage> accumulationImage;
+    std::unique_ptr<FrameImage> revealageImage;
+    std::unique_ptr<FrameImage> giIndirectImage;
+    std::unique_ptr<FrameImage> compositionColorImage;
+    std::unique_ptr<FrameImage> smaaEdgeImage;
+    std::unique_ptr<FrameImage> smaaBlendImage;
+    std::unique_ptr<FrameImage> postAAColorImage;                               // HDR post-AA chain
+    std::array<std::unique_ptr<FrameImage>, RC_CASCADE_COUNT> rcRadianceImages; // RC atlas per cascade
 
-    // Depth pyramid (linearized depth, mip chain)
-    std::array<VkImage, MAX_FRAMES_IN_FLIGHT> depthPyramidImages{};
-    std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT> depthPyramidMemories{};
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> depthPyramidViews{};
-    std::array<uint32_t, MAX_FRAMES_IN_FLIGHT> depthPyramidMipLevels{};
-    std::array<std::vector<VkImageView>, MAX_FRAMES_IN_FLIGHT> depthPyramidMipStorageViews{};
     std::array<std::vector<VkDescriptorSet>, MAX_FRAMES_IN_FLIGHT> depthPyramidMipDescriptorSets{};
 
-    std::array<VkImage, MAX_FRAMES_IN_FLIGHT> lightPassResultImages{};
-    std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT> lightPassResultMemories{};
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> lightPassResultViews{};
     VkSampler lightPassSampler{VK_NULL_HANDLE};
     // Depth pyramid is used for ray-depth comparisons; it must be sampled with POINT/NEAREST filtering.
     VkSampler depthPyramidSampler{VK_NULL_HANDLE};
@@ -185,36 +181,6 @@ private:
     std::array<std::array<std::unique_ptr<ShadowMap>, MAX_FRAMES_IN_FLIGHT>, MAX_DIRECTIONAL_LIGHTS> directionalMaps;
     std::array<std::array<std::unique_ptr<ShadowMap>, MAX_FRAMES_IN_FLIGHT>, MAX_POINT_LIGHTS> pointlightMaps;
     std::array<std::array<std::unique_ptr<ShadowMap>, MAX_FRAMES_IN_FLIGHT>, MAX_SPOT_LIGHTS> spotlightMaps;
-
-    std::array<VkImage, MAX_FRAMES_IN_FLIGHT> accumulationImages{};
-    std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT> accumulationMemories{};
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> accumulationViews{};
-
-    std::array<VkImage, MAX_FRAMES_IN_FLIGHT> revealageImages{};
-    std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT> revealageMemories{};
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> revealageViews{};
-
-    // Indirect GI buffer (per-frame)
-    std::array<VkImage, MAX_FRAMES_IN_FLIGHT> giIndirectImages{};
-    std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT> giIndirectMemories{};
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> giIndirectViews{};
-
-    // Post-process render targets
-    std::array<VkImage, MAX_FRAMES_IN_FLIGHT> compositionColorImages{};
-    std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT> compositionColorMemories{};
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> compositionColorViews{};
-
-    std::array<VkImage, MAX_FRAMES_IN_FLIGHT> smaaEdgeImages{};
-    std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT> smaaEdgeMemories{};
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> smaaEdgeViews{};
-
-    std::array<VkImage, MAX_FRAMES_IN_FLIGHT> smaaBlendImages{};
-    std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT> smaaBlendMemories{};
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> smaaBlendViews{};
-
-    std::array<VkImage, MAX_FRAMES_IN_FLIGHT> postAAColorImages{};
-    std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT> postAAColorMemories{};
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> postAAColorViews{};
 
     // SMAA LUTs (shared) - manually managed for proper sampler/mip settings
     VkImage smaaAreaImage{VK_NULL_HANDLE};
@@ -226,11 +192,6 @@ private:
     VkDeviceMemory smaaSearchMemory{VK_NULL_HANDLE};
     VkImageView smaaSearchView{VK_NULL_HANDLE};
     VkSampler smaaSearchSampler{VK_NULL_HANDLE};
-
-    // RC atlases per cascade (per frame)
-    std::array<std::array<VkImage, MAX_FRAMES_IN_FLIGHT>, RC_CASCADE_COUNT> rcRadianceImages{};
-    std::array<std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT>, RC_CASCADE_COUNT> rcRadianceMemories{};
-    std::array<std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>, RC_CASCADE_COUNT> rcRadianceViews{};
 
     Texture* skyboxTexture{nullptr};
 

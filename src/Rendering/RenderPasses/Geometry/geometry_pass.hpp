@@ -28,7 +28,7 @@ public:
         VkFormat albedoFormat;
         VkFormat materialFormat;
         GBuffer* gBuffer;
-        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* depthViewsPtr;
+        const std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* depthViewsPtr;
     };
 
     GeometryPass(Device& device, const CreateInfo& createInfo);

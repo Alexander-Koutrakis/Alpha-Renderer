@@ -1,6 +1,7 @@
 #include "rendering_resources.hpp"
 #include "Engine/log.hpp"
 #include "Rendering/Core/barriers.hpp"
+#include "Rendering/Core/debug_names.hpp"
 #include "Rendering/Core/images.hpp"
 #include "Rendering/Core/samplers.hpp"
 #include <stdexcept>
@@ -12,20 +13,6 @@
 #include "external/smaa_textures/SearchTex.h"
 
 namespace Rendering {
-
-void RenderingResources::setDebugName(VkObjectType objectType, uint64_t handle, const std::string& name) {
-    VkDebugUtilsObjectNameInfoEXT nameInfo{};
-    nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-    nameInfo.objectType = objectType;
-    nameInfo.objectHandle = handle;
-    nameInfo.pObjectName = name.c_str();
-
-    auto func =
-        (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(device.getDevice(), "vkSetDebugUtilsObjectNameEXT");
-    if (func != nullptr) {
-        func(device.getDevice(), &nameInfo);
-    }
-}
 
 RenderingResources::RenderingResources(Device& device, SwapChain& swapChain,
                                        VkDescriptorSetLayout materialDescriptorSetLayout)
@@ -126,22 +113,13 @@ void RenderingResources::findResourcesFormats() {
 }
 
 void RenderingResources::createDepthResources() {
-    VkImageCreateInfo imageInfo = imageCreateInfo2D(
-        width, height, depthFormat, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        // Create depth image
-        device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImages[i], depthMemories[i]);
-
-        // Create depth image view
-        depthViews[i] = createImageView(device.getDevice(), depthImages[i], depthFormat, VK_IMAGE_VIEW_TYPE_2D,
-                                        VK_IMAGE_ASPECT_DEPTH_BIT);
-
-        // Set debug names
-        setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)depthImages[i], "DepthImage_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)depthViews[i], "DepthView_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)depthMemories[i], "DepthMemory_Frame" + std::to_string(i));
-    }
+    FrameImage::CreateInfo info{};
+    info.format = depthFormat;
+    info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    info.extent = {width, height};
+    info.aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
+    info.name = "Depth";
+    depthImage = std::make_unique<FrameImage>(device, info);
 
     Log::debug("Depth resources created: ", width, "x", height, " format=", depthFormat);
 }
@@ -160,60 +138,34 @@ void RenderingResources::createDepthPyramidResources() {
     const uint32_t maxPossible = computeMipLevels(width, height);
     const uint32_t mipLevels = requested == 0 ? maxPossible : std::min(requested, maxPossible);
 
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VkImageCreateInfo imageInfo =
-            imageCreateInfo2D(width, height, depthPyramidFormat,
-                              VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT |
-                                  VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT,
-                              mipLevels);
-
-        device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthPyramidImages[i],
-                                   depthPyramidMemories[i]);
-
-        depthPyramidViews[i] = createImageView(device.getDevice(), depthPyramidImages[i], depthPyramidFormat,
-                                               VK_IMAGE_VIEW_TYPE_2D, VK_IMAGE_ASPECT_COLOR_BIT, 0, mipLevels);
-
-        depthPyramidMipLevels[i] = mipLevels;
-
-        // Create per-mip views for all mips (0..mipLevels-1); used for both storage and sampling
-        depthPyramidMipStorageViews[i].resize(mipLevels, VK_NULL_HANDLE);
-        for (uint32_t m = 0; m < mipLevels; ++m) {
-            depthPyramidMipStorageViews[i][m] =
-                createImageView(device.getDevice(), depthPyramidImages[i], depthPyramidFormat, VK_IMAGE_VIEW_TYPE_2D,
-                                VK_IMAGE_ASPECT_COLOR_BIT, m);
-
-            setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)depthPyramidMipStorageViews[i][m],
-                         "DepthPyramidMipView_Frame" + std::to_string(i) + "_Mip" + std::to_string(m));
-        }
-
-        // Set debug names for main pyramid resources
-        setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)depthPyramidImages[i],
-                     "DepthPyramidImage_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)depthPyramidViews[i],
-                     "DepthPyramidView_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)depthPyramidMemories[i],
-                     "DepthPyramidMemory_Frame" + std::to_string(i));
-    }
+    // Per-mip views for all mips (0..mipLevels-1) are used for both storage and sampling.
+    FrameImage::CreateInfo info{};
+    info.format = depthPyramidFormat;
+    info.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT |
+                 VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    info.extent = {width, height};
+    info.mipLevels = mipLevels;
+    info.perMipViews = true;
+    info.name = "DepthPyramid";
+    depthPyramidImage = std::make_unique<FrameImage>(device, info);
 
     // One-time init: transition all pyramid images (all mips) to READ_ONLY so passes can assume a known starting layout
     VkCommandBuffer cmd = device.beginSingleTimeCommands();
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         cmdImageBarriers(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                          VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT | VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-                         ImageBarrierDesc::undefinedToShaderRead(depthPyramidImages[i], VK_IMAGE_ASPECT_COLOR_BIT, 1,
-                                                                 depthPyramidMipLevels[i]));
+                         ImageBarrierDesc::undefinedToShaderRead(depthPyramidImage->image(i), VK_IMAGE_ASPECT_COLOR_BIT,
+                                                                 1, mipLevels));
     }
     device.endSingleTimeCommands(cmd);
 
     // Create a dedicated sampler for depth pyramid sampling.
     // IMPORTANT: depth comparisons must be done with point sampling to avoid mixing geometry depth
     // with far-plane ("sky") depth near edges, which produces banding/missing-hit artifacts.
-    if (depthPyramidSampler == VK_NULL_HANDLE) {
-        depthPyramidSampler = createSampler(device.getDevice(), VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_NEAREST,
-                                            VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
-                                            static_cast<float>(mipLevels));
-        setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)depthPyramidSampler, "DepthPyramidSampler");
-    }
+    depthPyramidSampler = createSampler(device.getDevice(), VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_NEAREST,
+                                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK,
+                                        static_cast<float>(mipLevels));
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_SAMPLER, (uint64_t)depthPyramidSampler, "DepthPyramidSampler");
 
     Log::debug("Depth pyramid created with ", mipLevels, " mips at ", width, "x", height);
 }
@@ -224,39 +176,16 @@ void RenderingResources::createLightPassResources() {
                                      VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK, 0.0f);
 
     // Light pass render target, then the incident diffuse buffer (pre-albedo) with the same format and usages.
-    // Each image is created for every frame before the next image.
-    const VkImageCreateInfo imageInfo =
-        imageCreateInfo2D(width, height, hdrFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, lightPassResultImages[i],
-                                   lightPassResultMemories[i]);
+    FrameImage::CreateInfo info{};
+    info.format = hdrFormat;
+    info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    info.extent = {width, height};
+    info.name = "LightPass";
+    lightPassResultImage = std::make_unique<FrameImage>(device, info);
+    info.name = "LightIncident";
+    lightIncidentImage = std::make_unique<FrameImage>(device, info);
 
-        // Create image view
-        lightPassResultViews[i] = createImageView(device.getDevice(), lightPassResultImages[i], hdrFormat);
-
-        // Set debug names
-        setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)lightPassResultImages[i],
-                     "LightPassImage_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)lightPassResultViews[i],
-                     "LightPassView_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)lightPassResultMemories[i],
-                     "LightPassMemory_Frame" + std::to_string(i));
-    }
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, lightIncidentImages[i],
-                                   lightIncidentMemories[i]);
-
-        lightIncidentViews[i] = createImageView(device.getDevice(), lightIncidentImages[i], hdrFormat);
-        setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)lightIncidentImages[i],
-                     "LightIncidentImage_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)lightIncidentViews[i],
-                     "LightIncidentView_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)lightIncidentMemories[i],
-                     "LightIncidentMemory_Frame" + std::to_string(i));
-    }
-
-    // Set debug name for sampler
-    setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)lightPassSampler, "LightPassSampler");
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_SAMPLER, (uint64_t)lightPassSampler, "LightPassSampler");
 }
 
 void RenderingResources::cleanup() {
@@ -389,159 +318,20 @@ void RenderingResources::cleanup() {
         smaaSearchMemory = VK_NULL_HANDLE;
     }
 
-    // Clean up depth resources
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        if (depthViews[i] != VK_NULL_HANDLE) {
-            vkDestroyImageView(device.getDevice(), depthViews[i], nullptr);
-            depthViews[i] = VK_NULL_HANDLE;
-        }
-        if (depthImages[i] != VK_NULL_HANDLE) {
-            vkDestroyImage(device.getDevice(), depthImages[i], nullptr);
-            depthImages[i] = VK_NULL_HANDLE;
-        }
-        if (depthMemories[i] != VK_NULL_HANDLE) {
-            vkFreeMemory(device.getDevice(), depthMemories[i], nullptr);
-            depthMemories[i] = VK_NULL_HANDLE;
-        }
-    }
-
-    // Clean up depth pyramid resources
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        // Clean up per-mip storage views first
-        for (auto& mipView : depthPyramidMipStorageViews[i]) {
-            if (mipView != VK_NULL_HANDLE) {
-                vkDestroyImageView(device.getDevice(), mipView, nullptr);
-                mipView = VK_NULL_HANDLE;
-            }
-        }
-        depthPyramidMipStorageViews[i].clear();
-
-        if (depthPyramidViews[i] != VK_NULL_HANDLE) {
-            vkDestroyImageView(device.getDevice(), depthPyramidViews[i], nullptr);
-            depthPyramidViews[i] = VK_NULL_HANDLE;
-        }
-        if (depthPyramidImages[i] != VK_NULL_HANDLE) {
-            vkDestroyImage(device.getDevice(), depthPyramidImages[i], nullptr);
-            depthPyramidImages[i] = VK_NULL_HANDLE;
-        }
-        if (depthPyramidMemories[i] != VK_NULL_HANDLE) {
-            vkFreeMemory(device.getDevice(), depthPyramidMemories[i], nullptr);
-            depthPyramidMemories[i] = VK_NULL_HANDLE;
-        }
-    }
-
-    // Clean up light pass resources
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        if (lightPassResultViews[i] != VK_NULL_HANDLE) {
-            vkDestroyImageView(device.getDevice(), lightPassResultViews[i], nullptr);
-            lightPassResultViews[i] = VK_NULL_HANDLE;
-        }
-        if (lightIncidentViews[i] != VK_NULL_HANDLE) {
-            vkDestroyImageView(device.getDevice(), lightIncidentViews[i], nullptr);
-            lightIncidentViews[i] = VK_NULL_HANDLE;
-        }
-        if (lightPassResultImages[i] != VK_NULL_HANDLE) {
-            vkDestroyImage(device.getDevice(), lightPassResultImages[i], nullptr);
-            lightPassResultImages[i] = VK_NULL_HANDLE;
-        }
-        if (lightIncidentImages[i] != VK_NULL_HANDLE) {
-            vkDestroyImage(device.getDevice(), lightIncidentImages[i], nullptr);
-            lightIncidentImages[i] = VK_NULL_HANDLE;
-        }
-        if (lightPassResultMemories[i] != VK_NULL_HANDLE) {
-            vkFreeMemory(device.getDevice(), lightPassResultMemories[i], nullptr);
-            lightPassResultMemories[i] = VK_NULL_HANDLE;
-        }
-        if (lightIncidentMemories[i] != VK_NULL_HANDLE) {
-            vkFreeMemory(device.getDevice(), lightIncidentMemories[i], nullptr);
-            lightIncidentMemories[i] = VK_NULL_HANDLE;
-        }
-    }
-
-    // Clean up transparency resources
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        if (accumulationViews[i] != VK_NULL_HANDLE) {
-            vkDestroyImageView(device.getDevice(), accumulationViews[i], nullptr);
-            accumulationViews[i] = VK_NULL_HANDLE;
-        }
-        if (accumulationImages[i] != VK_NULL_HANDLE) {
-            vkDestroyImage(device.getDevice(), accumulationImages[i], nullptr);
-            accumulationImages[i] = VK_NULL_HANDLE;
-        }
-        if (accumulationMemories[i] != VK_NULL_HANDLE) {
-            vkFreeMemory(device.getDevice(), accumulationMemories[i], nullptr);
-            accumulationMemories[i] = VK_NULL_HANDLE;
-        }
-
-        if (revealageViews[i] != VK_NULL_HANDLE) {
-            vkDestroyImageView(device.getDevice(), revealageViews[i], nullptr);
-            revealageViews[i] = VK_NULL_HANDLE;
-        }
-        if (revealageImages[i] != VK_NULL_HANDLE) {
-            vkDestroyImage(device.getDevice(), revealageImages[i], nullptr);
-            revealageImages[i] = VK_NULL_HANDLE;
-        }
-        if (revealageMemories[i] != VK_NULL_HANDLE) {
-            vkFreeMemory(device.getDevice(), revealageMemories[i], nullptr);
-            revealageMemories[i] = VK_NULL_HANDLE;
-        }
-    }
-
-    // Clean up GI indirect resources
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        if (giIndirectViews[i] != VK_NULL_HANDLE) {
-            vkDestroyImageView(device.getDevice(), giIndirectViews[i], nullptr);
-            giIndirectViews[i] = VK_NULL_HANDLE;
-        }
-        if (giIndirectImages[i] != VK_NULL_HANDLE) {
-            vkDestroyImage(device.getDevice(), giIndirectImages[i], nullptr);
-            giIndirectImages[i] = VK_NULL_HANDLE;
-        }
-        if (giIndirectMemories[i] != VK_NULL_HANDLE) {
-            vkFreeMemory(device.getDevice(), giIndirectMemories[i], nullptr);
-            giIndirectMemories[i] = VK_NULL_HANDLE;
-        }
-    }
-
-    // Clean up post-process render targets
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-        auto destroyImageTriple = [&](VkImage& image, VkDeviceMemory& memory, VkImageView& view) {
-            if (view != VK_NULL_HANDLE) {
-                vkDestroyImageView(device.getDevice(), view, nullptr);
-                view = VK_NULL_HANDLE;
-            }
-            if (image != VK_NULL_HANDLE) {
-                vkDestroyImage(device.getDevice(), image, nullptr);
-                image = VK_NULL_HANDLE;
-            }
-            if (memory != VK_NULL_HANDLE) {
-                vkFreeMemory(device.getDevice(), memory, nullptr);
-                memory = VK_NULL_HANDLE;
-            }
-        };
-
-        destroyImageTriple(compositionColorImages[i], compositionColorMemories[i], compositionColorViews[i]);
-        destroyImageTriple(smaaEdgeImages[i], smaaEdgeMemories[i], smaaEdgeViews[i]);
-        destroyImageTriple(smaaBlendImages[i], smaaBlendMemories[i], smaaBlendViews[i]);
-        destroyImageTriple(postAAColorImages[i], postAAColorMemories[i], postAAColorViews[i]);
-    }
-
-    // Clean up RC atlases
-    for (uint32_t cascade = 0; cascade < RC_CASCADE_COUNT; ++cascade) {
-        for (size_t frame = 0; frame < MAX_FRAMES_IN_FLIGHT; ++frame) {
-            if (rcRadianceViews[cascade][frame] != VK_NULL_HANDLE) {
-                vkDestroyImageView(device.getDevice(), rcRadianceViews[cascade][frame], nullptr);
-                rcRadianceViews[cascade][frame] = VK_NULL_HANDLE;
-            }
-            if (rcRadianceImages[cascade][frame] != VK_NULL_HANDLE) {
-                vkDestroyImage(device.getDevice(), rcRadianceImages[cascade][frame], nullptr);
-                rcRadianceImages[cascade][frame] = VK_NULL_HANDLE;
-            }
-            if (rcRadianceMemories[cascade][frame] != VK_NULL_HANDLE) {
-                vkFreeMemory(device.getDevice(), rcRadianceMemories[cascade][frame], nullptr);
-                rcRadianceMemories[cascade][frame] = VK_NULL_HANDLE;
-            }
-        }
+    // Per-frame images, in the order they were destroyed before FrameImage
+    depthImage.reset();
+    depthPyramidImage.reset();
+    lightPassResultImage.reset();
+    lightIncidentImage.reset();
+    accumulationImage.reset();
+    revealageImage.reset();
+    giIndirectImage.reset();
+    compositionColorImage.reset();
+    smaaEdgeImage.reset();
+    smaaBlendImage.reset();
+    postAAColorImage.reset();
+    for (auto& rcRadianceImage : rcRadianceImages) {
+        rcRadianceImage.reset();
     }
 
     // Clean up shadow maps - now per frame per light
@@ -601,11 +391,11 @@ void RenderingResources::createBuffers() {
         normalMatrixBuffers[i]->map();
 
         // Set debug names for buffers
-        setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)cameraUniformBuffers[i]->getBuffer(),
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_BUFFER, (uint64_t)cameraUniformBuffers[i]->getBuffer(),
                      "CameraUniformBuffer_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)modelMatrixBuffers[i]->getBuffer(),
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_BUFFER, (uint64_t)modelMatrixBuffers[i]->getBuffer(),
                      "ModelMatrixBuffer_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)normalMatrixBuffers[i]->getBuffer(),
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_BUFFER, (uint64_t)normalMatrixBuffers[i]->getBuffer(),
                      "NormalMatrixBuffer_Frame" + std::to_string(i));
     }
 
@@ -615,7 +405,7 @@ void RenderingResources::createBuffers() {
             std::make_unique<Buffer>(device, unifiedLightBufferSize, 1, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         lightArrayUniformBuffers[i]->map();
-        setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)lightArrayUniformBuffers[i]->getBuffer(),
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_BUFFER, (uint64_t)lightArrayUniformBuffers[i]->getBuffer(),
                      "LightArrayUniformBuffer_Frame" + std::to_string(i));
     }
 
@@ -634,7 +424,7 @@ void RenderingResources::createBuffers() {
             std::make_unique<Buffer>(device, sceneLightingBufferSize, 1, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
                                      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
         sceneLightingBuffers[i]->map();
-        setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)sceneLightingBuffers[i]->getBuffer(),
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_BUFFER, (uint64_t)sceneLightingBuffers[i]->getBuffer(),
                      "SceneLightingBuffer_Frame" + std::to_string(i));
     }
 
@@ -682,10 +472,7 @@ void RenderingResources::createDescriptorPool(const DescriptorBudget& budget) {
 DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
     // Every layout states how many sets allocateDescriptorSets allocates from it; the pool is sized from these.
     // The depth pyramid has one set per mip level of each frame (the seed set is mip 0).
-    uint32_t depthPyramidSetCount = 0;
-    for (const uint32_t mipLevels : depthPyramidMipLevels) {
-        depthPyramidSetCount += mipLevels;
-    }
+    const uint32_t depthPyramidSetCount = MAX_FRAMES_IN_FLIGHT * depthPyramidImage->mipLevels();
     DescriptorBudget budget;
 
     // Create descriptor set layout for instance storage buffers
@@ -696,7 +483,7 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
                                       layoutBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
                                   },
                                   budget, MAX_FRAMES_IN_FLIGHT);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)modelsDescriptorSetLayout,
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)modelsDescriptorSetLayout,
                  "ModelsDescriptorSetLayout");
 
     //Create descriptor set layout for camera uniform buffer
@@ -707,7 +494,7 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
                                                     VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
                                   },
                                   budget, MAX_FRAMES_IN_FLIGHT);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)cameraDescriptorSetLayout,
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)cameraDescriptorSetLayout,
                  "CameraDescriptorSetLayout");
 
     gBufferDescriptorSetLayout = createDescriptorSetLayout(
@@ -719,7 +506,7 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
             layoutBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
         },
         budget, MAX_FRAMES_IN_FLIGHT);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)gBufferDescriptorSetLayout,
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)gBufferDescriptorSetLayout,
                  "GBufferDescriptorSetLayout");
 
     lightArrayDescriptorSetLayout =
@@ -728,7 +515,7 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
                                       layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
                                   },
                                   budget, MAX_FRAMES_IN_FLIGHT);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)lightArrayDescriptorSetLayout,
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)lightArrayDescriptorSetLayout,
                  "LightArrayDescriptorSetLayout");
 
     cascadeSplitsSetLayout =
@@ -737,7 +524,7 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
                                       layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
                                   },
                                   budget, MAX_FRAMES_IN_FLIGHT);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)cascadeSplitsSetLayout,
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)cascadeSplitsSetLayout,
                  "CascadeSplitsDescriptorSetLayout");
 
     sceneLightingDescriptorSetLayout =
@@ -746,7 +533,7 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
                                       layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
                                   },
                                   budget, MAX_FRAMES_IN_FLIGHT);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)sceneLightingDescriptorSetLayout,
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)sceneLightingDescriptorSetLayout,
                  "SceneLightingDescriptorSetLayout");
 
     // Create descriptor set layout (shared between both pipelines)
@@ -757,8 +544,8 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
                           VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
         },
         budget, MAX_FRAMES_IN_FLIGHT);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowcastinglightMatrixDescriptorSetLayout,
-                 "ShadowLightMatrixDescriptorSetLayout");
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+                 (uint64_t)shadowcastinglightMatrixDescriptorSetLayout, "ShadowLightMatrixDescriptorSetLayout");
 
     // Create descriptor set layout for shadow map samplers
     shadowMapSamplerLayout = createDescriptorSetLayout(
@@ -770,7 +557,7 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
             layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, MAX_POINT_LIGHTS),
         },
         budget, MAX_FRAMES_IN_FLIGHT);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowMapSamplerLayout,
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowMapSamplerLayout,
                  "ShadowMapSamplerDescriptorSetLayout");
 
     //Create descriptor set layout for shadow model matrix
@@ -780,8 +567,8 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
                                       layoutBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
                                   },
                                   budget, MAX_FRAMES_IN_FLIGHT);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowModelMatrixDescriptorSetLayout,
-                 "ShadowModelMatrixDescriptorSetLayout");
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+                 (uint64_t)shadowModelMatrixDescriptorSetLayout, "ShadowModelMatrixDescriptorSetLayout");
 
     //Create descriptor set layout for skybox
     skyboxDescriptorSetLayout =
@@ -791,7 +578,7 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
                                                     VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT),
                                   },
                                   budget, 1);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)skyboxDescriptorSetLayout,
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)skyboxDescriptorSetLayout,
                  "SkyboxDescriptorSetLayout");
 
     //Create descriptor set layout for transparency model matrix
@@ -802,8 +589,8 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
                                       layoutBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
                                   },
                                   budget, MAX_FRAMES_IN_FLIGHT);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)transparencyModelDescriptorSetLayout,
-                 "TransparencyModelDescriptorSetLayout");
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT,
+                 (uint64_t)transparencyModelDescriptorSetLayout, "TransparencyModelDescriptorSetLayout");
 
     // Create descriptor set layout for composition textures
     compositionSetLayout = createDescriptorSetLayout(
@@ -815,7 +602,7 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
             layoutBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
         },
         budget, MAX_FRAMES_IN_FLIGHT);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)compositionSetLayout,
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)compositionSetLayout,
                  "CompositionDescriptorSetLayout");
 
     // SMAA edge descriptor set layout (compositionColor input)
@@ -825,7 +612,8 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
             layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
         },
         budget, MAX_FRAMES_IN_FLIGHT);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)smaaEdgeSetLayout, "SMAAEdgeDescriptorSetLayout");
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)smaaEdgeSetLayout,
+                 "SMAAEdgeDescriptorSetLayout");
 
     // SMAA weight descriptor set layout (edges + area/search LUT)
     smaaWeightSetLayout = createDescriptorSetLayout(
@@ -836,7 +624,8 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
             layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
         },
         budget, MAX_FRAMES_IN_FLIGHT);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)smaaWeightSetLayout, "SMAAWeightDescriptorSetLayout");
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)smaaWeightSetLayout,
+                 "SMAAWeightDescriptorSetLayout");
 
     // SMAA blend descriptor set layout (compositionColor + blend weights)
     smaaBlendSetLayout = createDescriptorSetLayout(
@@ -846,7 +635,8 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
             layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
         },
         budget, MAX_FRAMES_IN_FLIGHT);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)smaaBlendSetLayout, "SMAABlendDescriptorSetLayout");
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)smaaBlendSetLayout,
+                 "SMAABlendDescriptorSetLayout");
 
     // Color correction descriptor set layout (post-AA color input)
     colorCorrectionSetLayout = createDescriptorSetLayout(
@@ -855,7 +645,7 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
             layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
         },
         budget, MAX_FRAMES_IN_FLIGHT);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)colorCorrectionSetLayout,
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)colorCorrectionSetLayout,
                  "ColorCorrectionDescriptorSetLayout");
 
     // RC Build descriptor set layout
@@ -873,7 +663,8 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
             layoutBinding(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, RC_CASCADE_COUNT),
         },
         budget, MAX_FRAMES_IN_FLIGHT);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)rcBuildSetLayout, "RCBuildDescriptorSetLayout");
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)rcBuildSetLayout,
+                 "RCBuildDescriptorSetLayout");
 
     // RC Resolve descriptor set layout
     // NOTE: keep binding numbers stable (skip binding 6) to avoid shifting shader bindings:
@@ -900,7 +691,8 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
             layoutBinding(10, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
         },
         budget, MAX_FRAMES_IN_FLIGHT);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)rcResolveSetLayout, "RCResolveDescriptorSetLayout");
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)rcResolveSetLayout,
+                 "RCResolveDescriptorSetLayout");
 
     // Depth pyramid build descriptor set layout (centralized)
     depthPyramidSetLayout = createDescriptorSetLayout(
@@ -910,7 +702,7 @@ DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
             layoutBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT),
         },
         budget, depthPyramidSetCount);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)depthPyramidSetLayout,
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)depthPyramidSetLayout,
                  "DepthPyramidDescriptorSetLayout");
 
     return budget;
@@ -924,7 +716,8 @@ void RenderingResources::allocateDescriptorSets() {
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             sets[i] = allocateDescriptorSet(*descriptorPool, layout);
             if (!name.empty()) {
-                setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)sets[i], name + "_Frame" + std::to_string(i));
+                setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)sets[i],
+                             name + "_Frame" + std::to_string(i));
             }
         }
     };
@@ -941,7 +734,8 @@ void RenderingResources::allocateDescriptorSets() {
 
     // Skybox: a single set, not per frame. updateSkyboxDescriptorSet writes it.
     skyboxDescriptorSet = allocateDescriptorSet(*descriptorPool, skyboxDescriptorSetLayout);
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)skyboxDescriptorSet, "SkyboxDescriptorSet");
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)skyboxDescriptorSet,
+                 "SkyboxDescriptorSet");
 
     allocateFrames(transparencyModelMatrixDescriptorSets, transparencyModelDescriptorSetLayout, "");
     allocateFrames(compositionDescriptorSets, compositionSetLayout, "CompositionDescriptorSet");
@@ -955,13 +749,14 @@ void RenderingResources::allocateDescriptorSets() {
     // Depth pyramid: per frame, the seed set (depth -> mip 0), then one set per mip 1..N-1 for the downsample loop.
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
         depthPyramidDescriptorSets[i] = allocateDescriptorSet(*descriptorPool, depthPyramidSetLayout);
-        setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)depthPyramidDescriptorSets[i],
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)depthPyramidDescriptorSets[i],
                      "DepthPyramidDescriptorSet_Frame" + std::to_string(i));
 
-        depthPyramidMipDescriptorSets[i].resize(depthPyramidMipLevels[i]);
-        for (uint32_t m = 1; m < depthPyramidMipLevels[i]; ++m) {
+        depthPyramidMipDescriptorSets[i].resize(depthPyramidImage->mipLevels());
+        for (uint32_t m = 1; m < depthPyramidImage->mipLevels(); ++m) {
             depthPyramidMipDescriptorSets[i][m] = allocateDescriptorSet(*descriptorPool, depthPyramidSetLayout);
-            setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)depthPyramidMipDescriptorSets[i][m],
+            setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET,
+                         (uint64_t)depthPyramidMipDescriptorSets[i][m],
                          "DepthPyramidMipDescriptorSet_Frame" + std::to_string(i) + "_Mip" + std::to_string(m));
         }
     }
@@ -1066,16 +861,16 @@ void RenderingResources::writeCompositionSets() {
         // The indirect GI buffer stays in GENERAL because RCGI computes and readers share it within one frame.
         DescriptorWriter()
             .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                   {lightPassSampler, lightPassResultViews[i],
+                   {lightPassSampler, lightPassResultImage->view(i),
                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}) // opaque result of the light pass
             .image(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                   {lightPassSampler, accumulationViews[i],
+                   {lightPassSampler, accumulationImage->view(i),
                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}) // transparency accumulation
             .image(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                   {lightPassSampler, revealageViews[i],
+                   {lightPassSampler, revealageImage->view(i),
                     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL}) // transparency revealage
             .image(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                   {lightPassSampler, giIndirectViews[i], VK_IMAGE_LAYOUT_GENERAL}) // indirect GI
+                   {lightPassSampler, giIndirectImage->view(i), VK_IMAGE_LAYOUT_GENERAL}) // indirect GI
             .update(device, compositionDescriptorSets[i]);
     }
 }
@@ -1085,13 +880,13 @@ void RenderingResources::writePostProcessSets() {
         // SMAA edge pass
         DescriptorWriter()
             .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                   {postProcessSampler, compositionColorViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+                   {postProcessSampler, compositionColorImage->view(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .update(device, smaaEdgeDescriptorSets[i]);
 
         // SMAA weight pass
         DescriptorWriter()
             .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                   {postProcessSampler, smaaEdgeViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+                   {postProcessSampler, smaaEdgeImage->view(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .image(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                    {smaaAreaSampler, smaaAreaView, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .image(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -1101,15 +896,15 @@ void RenderingResources::writePostProcessSets() {
         // SMAA blend pass
         DescriptorWriter()
             .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                   {postProcessSampler, compositionColorViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+                   {postProcessSampler, compositionColorImage->view(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .image(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                   {postProcessSampler, smaaBlendViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+                   {postProcessSampler, smaaBlendImage->view(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .update(device, smaaBlendDescriptorSets[i]);
 
         // Color correction pass
         DescriptorWriter()
             .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                   {postProcessSampler, postAAColorViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+                   {postProcessSampler, postAAColorImage->view(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .update(device, colorCorrectionDescriptorSets[i]);
     }
 }
@@ -1120,22 +915,22 @@ void RenderingResources::writeDepthPyramidSets() {
         // transitioned to GENERAL before the dispatch.
         DescriptorWriter()
             .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                   {depthPyramidSampler, depthViews[i], VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL})
+                   {depthPyramidSampler, depthImage->view(i), VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL})
             .image(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                   {VK_NULL_HANDLE, depthPyramidMipStorageViews[i][0], VK_IMAGE_LAYOUT_GENERAL})
+                   {VK_NULL_HANDLE, depthPyramidImage->mipView(i, 0), VK_IMAGE_LAYOUT_GENERAL})
             .update(device, depthPyramidDescriptorSets[i]);
 
-        for (uint32_t m = 1; m < depthPyramidMipLevels[i]; ++m) {
+        for (uint32_t m = 1; m < depthPyramidImage->mipLevels(); ++m) {
             // Source: previous mip level (m-1), sampled. It is in SHADER_READ_ONLY_OPTIMAL at dispatch time
             // (transitioned by setMipLevelBarriers).
             // Destination: current mip level (m), written as a storage image. It is in GENERAL at dispatch time
             // (also transitioned by setMipLevelBarriers).
             DescriptorWriter()
                 .image(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                       {depthPyramidSampler, depthPyramidMipStorageViews[i][m - 1],
+                       {depthPyramidSampler, depthPyramidImage->mipView(i, m - 1),
                         VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
                 .image(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                       {VK_NULL_HANDLE, depthPyramidMipStorageViews[i][m], VK_IMAGE_LAYOUT_GENERAL})
+                       {VK_NULL_HANDLE, depthPyramidImage->mipView(i, m), VK_IMAGE_LAYOUT_GENERAL})
                 .update(device, depthPyramidMipDescriptorSets[i][m]);
         }
     }
@@ -1154,7 +949,7 @@ void RenderingResources::writeRCSets() {
         // RC build: RC atlases as a storage image array
         std::vector<VkDescriptorImageInfo> radStorageInfos(RC_CASCADE_COUNT);
         for (uint32_t c = 0; c < RC_CASCADE_COUNT; ++c) {
-            radStorageInfos[c] = {VK_NULL_HANDLE, rcRadianceViews[c][i], VK_IMAGE_LAYOUT_GENERAL};
+            radStorageInfos[c] = {VK_NULL_HANDLE, rcRadianceImages[c]->view(i), VK_IMAGE_LAYOUT_GENERAL};
         }
 
         DescriptorWriter buildWriter;
@@ -1165,9 +960,9 @@ void RenderingResources::writeRCSets() {
         // Depth pyramid must use point sampling; the light pass result can use linear.
         buildWriter
             .image(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                   {depthPyramidSampler, depthPyramidViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+                   {depthPyramidSampler, depthPyramidImage->view(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .image(6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                   {lightPassSampler, lightIncidentViews[i], VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+                   {lightPassSampler, lightIncidentImage->view(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .images(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, radStorageInfos.data(), RC_CASCADE_COUNT)
             .update(device, rcBuildDescriptorSets[i]);
 
@@ -1175,13 +970,11 @@ void RenderingResources::writeRCSets() {
         // during build and resolve, so sample from GENERAL to avoid layout mismatches.
         std::vector<VkDescriptorImageInfo> radSampleInfos(RC_CASCADE_COUNT);
         for (uint32_t c = 0; c < RC_CASCADE_COUNT; ++c) {
-            radSampleInfos[c] = {lightPassSampler, rcRadianceViews[c][i], VK_IMAGE_LAYOUT_GENERAL};
+            radSampleInfos[c] = {lightPassSampler, rcRadianceImages[c]->view(i), VK_IMAGE_LAYOUT_GENERAL};
         }
 
         // GI history: frame i uses the previous frame's GI output for temporal accumulation, and the previous
         // frame's position and normal buffers for temporal validation.
-        const uint32_t historyFrameIndex = (i + MAX_FRAMES_IN_FLIGHT - 1) % MAX_FRAMES_IN_FLIGHT;
-
         DescriptorWriter resolveWriter;
         resolveWriter.buffer(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, cameraUniformBuffers[i]->descriptorInfo());
         for (uint32_t b = 0; b < 4; ++b) {
@@ -1189,15 +982,14 @@ void RenderingResources::writeRCSets() {
         }
         resolveWriter.images(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, radSampleInfos.data(), RC_CASCADE_COUNT)
             .image(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
-                   {VK_NULL_HANDLE, giIndirectViews[i], VK_IMAGE_LAYOUT_GENERAL}) // GI output
+                   {VK_NULL_HANDLE, giIndirectImage->view(i), VK_IMAGE_LAYOUT_GENERAL}) // GI output
             .image(8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                   {lightPassSampler, giIndirectViews[historyFrameIndex], VK_IMAGE_LAYOUT_GENERAL})
-            .image(9, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                   {gBuffer->getSampler(), gBuffer->getPositionView(historyFrameIndex),
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+                   {lightPassSampler, giIndirectImage->previousView(i), VK_IMAGE_LAYOUT_GENERAL})
+            .image(
+                9, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                {gBuffer->getSampler(), gBuffer->position().previousView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .image(10, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                   {gBuffer->getSampler(), gBuffer->getNormalView(historyFrameIndex),
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
+                   {gBuffer->getSampler(), gBuffer->normal().previousView(i), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL})
             .update(device, rcResolveDescriptorSets[i]);
     }
 }
@@ -1242,63 +1034,32 @@ void RenderingResources::createShadowMapResources() {
 }
 
 void RenderingResources::createTransparencyResources() {
-    // Accumulation for every frame, then revealage (R8) for every frame.
-    const VkImageCreateInfo accumulationImageInfo =
-        imageCreateInfo2D(width, height, hdrFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        device.createImageWithInfo(accumulationImageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, accumulationImages[i],
-                                   accumulationMemories[i]);
+    FrameImage::CreateInfo info{};
+    info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+    info.extent = {width, height};
 
-        accumulationViews[i] = createImageView(device.getDevice(), accumulationImages[i], hdrFormat);
+    info.format = hdrFormat;
+    info.name = "Accumulation";
+    accumulationImage = std::make_unique<FrameImage>(device, info);
 
-        setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)accumulationImages[i],
-                     "AccumulationImage_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)accumulationViews[i],
-                     "AccumulationView_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)accumulationMemories[i],
-                     "AccumulationMemory_Frame" + std::to_string(i));
-    }
-
-    const VkImageCreateInfo revealageImageInfo = imageCreateInfo2D(
-        width, height, revealageFormat, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        device.createImageWithInfo(revealageImageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, revealageImages[i],
-                                   revealageMemories[i]);
-
-        revealageViews[i] = createImageView(device.getDevice(), revealageImages[i], revealageFormat);
-
-        setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)revealageImages[i], "RevealageImage_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)revealageViews[i], "RevealageView_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)revealageMemories[i],
-                     "RevealageMemory_Frame" + std::to_string(i));
-    }
+    info.format = revealageFormat; // R8
+    info.name = "Revealage";
+    revealageImage = std::make_unique<FrameImage>(device, info);
 }
 
 void RenderingResources::createGIResources() {
-    // Create per-frame GI indirect images and views
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-        VkImageCreateInfo imageInfo = imageCreateInfo2D(width, height, giIndirectFormat,
-                                                        VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT |
-                                                            VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT);
-
-        device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, giIndirectImages[i],
-                                   giIndirectMemories[i]);
-
-        giIndirectViews[i] = createImageView(device.getDevice(), giIndirectImages[i], giIndirectFormat);
-
-        // Set debug names
-        setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)giIndirectImages[i], "GIIndirectImage_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)giIndirectViews[i],
-                     "GIIndirectView_Frame" + std::to_string(i));
-        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)giIndirectMemories[i],
-                     "GIIndirectMemory_Frame" + std::to_string(i));
-    }
+    FrameImage::CreateInfo info{};
+    info.format = giIndirectFormat;
+    info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_STORAGE_BIT;
+    info.extent = {width, height};
+    info.name = "GIIndirect";
+    giIndirectImage = std::make_unique<FrameImage>(device, info);
 
     // One-time init: transition GI images to GENERAL for compute writes
     VkCommandBuffer cmd = device.beginSingleTimeCommands();
     for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
         cmdImageBarriers(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                         ImageBarrierDesc::undefinedToGeneralShaderWrite(giIndirectImages[i]));
+                         ImageBarrierDesc::undefinedToGeneralShaderWrite(giIndirectImage->image(i)));
     }
     device.endSingleTimeCommands(cmd);
 }
@@ -1307,39 +1068,21 @@ void RenderingResources::createPostProcessResources() {
     // Shared sampler for post-process textures (linear clamp)
     postProcessSampler = createSampler(device.getDevice(), VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_LINEAR,
                                        VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK, 0.0f);
-    setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)postProcessSampler, "PostProcessSampler");
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_SAMPLER, (uint64_t)postProcessSampler, "PostProcessSampler");
 
-    auto makeColorImage = [&](VkFormat format, VkImage& image, VkDeviceMemory& memory, VkImageView& view,
-                              const std::string& name) {
-        VkImageCreateInfo imageInfo =
-            imageCreateInfo2D(width, height, format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-
-        device.createImageWithInfo(imageInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, memory);
-
-        view = createImageView(device.getDevice(), image, format);
-
-        setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)image, name + "_Image");
-        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)view, name + "_View");
-        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)memory, name + "_Memory");
+    auto makeColorImage = [&](VkFormat format, const std::string& name) {
+        FrameImage::CreateInfo info{};
+        info.format = format;
+        info.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        info.extent = {width, height};
+        info.name = name;
+        return std::make_unique<FrameImage>(device, info);
     };
 
-    // Each image is created for every frame before the next image.
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-        makeColorImage(postProcessFormat, compositionColorImages[i], compositionColorMemories[i],
-                       compositionColorViews[i], "CompositionColor_Frame" + std::to_string(i));
-    }
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-        makeColorImage(smaaEdgeFormat, smaaEdgeImages[i], smaaEdgeMemories[i], smaaEdgeViews[i],
-                       "SMAAEdge_Frame" + std::to_string(i));
-    }
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-        makeColorImage(smaaBlendFormat, smaaBlendImages[i], smaaBlendMemories[i], smaaBlendViews[i],
-                       "SMAABlend_Frame" + std::to_string(i));
-    }
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-        makeColorImage(postProcessFormat, postAAColorImages[i], postAAColorMemories[i], postAAColorViews[i],
-                       "PostAAColor_Frame" + std::to_string(i));
-    }
+    compositionColorImage = makeColorImage(postProcessFormat, "CompositionColor");
+    smaaEdgeImage = makeColorImage(smaaEdgeFormat, "SMAAEdge");
+    smaaBlendImage = makeColorImage(smaaBlendFormat, "SMAABlend");
+    postAAColorImage = makeColorImage(postProcessFormat, "PostAAColor");
 }
 
 void RenderingResources::loadSMAALUTTextures() {
@@ -1394,9 +1137,9 @@ void RenderingResources::loadSMAALUTTextures() {
         // Create image view
         outView = createImageView(device.getDevice(), outImage, format);
 
-        setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)outImage, name + "_Image");
-        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)outView, name + "_View");
-        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)outMemory, name + "_Memory");
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_IMAGE, (uint64_t)outImage, name + "_Image");
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)outView, name + "_View");
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)outMemory, name + "_Memory");
     };
 
     // Create Area texture (160x560, R8G8, linear filtering, clamp)
@@ -1408,7 +1151,7 @@ void RenderingResources::loadSMAALUTTextures() {
         smaaAreaSampler =
             createSampler(device.getDevice(), VK_FILTER_LINEAR, VK_SAMPLER_MIPMAP_MODE_NEAREST,
                           VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK, 0.0f);
-        setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)smaaAreaSampler, "SMAA_Area_Sampler");
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_SAMPLER, (uint64_t)smaaAreaSampler, "SMAA_Area_Sampler");
     }
 
     // Create Search texture (64x16, R8, POINT/NEAREST filtering, clamp)
@@ -1422,7 +1165,7 @@ void RenderingResources::loadSMAALUTTextures() {
         smaaSearchSampler =
             createSampler(device.getDevice(), VK_FILTER_NEAREST, VK_SAMPLER_MIPMAP_MODE_NEAREST,
                           VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE, VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK, 0.0f);
-        setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)smaaSearchSampler, "SMAA_Search_Sampler");
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_SAMPLER, (uint64_t)smaaSearchSampler, "SMAA_Search_Sampler");
     }
 
     Log::debug("SMAA LUT textures loaded (Area: ", AREATEX_WIDTH, "x", AREATEX_HEIGHT, ", Search: ", SEARCHTEX_WIDTH,
@@ -1438,32 +1181,15 @@ void RenderingResources::createRCAtlases() {
         const uint32_t probesX = (width + stridePx - 1) / stridePx;
         const uint32_t probesY = (height + stridePx - 1) / stridePx;
 
-        const uint32_t atlasWidth = std::max(1u, probesX * tileSize);
-        const uint32_t atlasHeight = std::max(1u, probesY * tileSize);
+        FrameImage::CreateInfo info{};
+        info.format = VK_FORMAT_R16G16B16A16_SFLOAT;
+        info.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+        info.extent = {std::max(1u, probesX * tileSize), std::max(1u, probesY * tileSize)};
+        info.name = "RCRadianceCascade" + std::to_string(cascade);
+        rcRadianceImages[cascade] = std::make_unique<FrameImage>(device, info);
 
-        for (size_t frame = 0; frame < MAX_FRAMES_IN_FLIGHT; ++frame) {
-            // Radiance atlas
-            VkImageCreateInfo radInfo = imageCreateInfo2D(atlasWidth, atlasHeight, VK_FORMAT_R16G16B16A16_SFLOAT,
-                                                          VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT);
-
-            device.createImageWithInfo(radInfo, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, rcRadianceImages[cascade][frame],
-                                       rcRadianceMemories[cascade][frame]);
-
-            rcRadianceViews[cascade][frame] =
-                createImageView(device.getDevice(), rcRadianceImages[cascade][frame], VK_FORMAT_R16G16B16A16_SFLOAT);
-
-            // Set debug names
-            std::string cascadeFrameStr = "Cascade" + std::to_string(cascade) + "_Frame" + std::to_string(frame);
-            setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)rcRadianceImages[cascade][frame],
-                         "RCRadianceImage_" + cascadeFrameStr);
-            setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)rcRadianceViews[cascade][frame],
-                         "RCRadianceView_" + cascadeFrameStr);
-            setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)rcRadianceMemories[cascade][frame],
-                         "RCRadianceMemory_" + cascadeFrameStr);
-
-            Log::debug("RC atlas c=", cascade, " f=", frame, " size=", atlasWidth, "x", atlasHeight,
-                       " stridePx=", stridePx, " tile=", tileSize);
-        }
+        Log::debug("RC atlas c=", cascade, " size=", info.extent.width, "x", info.extent.height, " stridePx=", stridePx,
+                   " tile=", tileSize);
     }
 
     // One-time init: transition all RC atlas images to GENERAL for compute writes
@@ -1471,7 +1197,7 @@ void RenderingResources::createRCAtlases() {
     for (uint32_t cascade = 0; cascade < RC_CASCADE_COUNT; ++cascade) {
         for (size_t frame = 0; frame < MAX_FRAMES_IN_FLIGHT; ++frame) {
             cmdImageBarriers(cmd, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT,
-                             ImageBarrierDesc::undefinedToGeneralShaderWrite(rcRadianceImages[cascade][frame]));
+                             ImageBarrierDesc::undefinedToGeneralShaderWrite(rcRadianceImages[cascade]->image(frame)));
         }
     }
     device.endSingleTimeCommands(cmd);
@@ -1523,41 +1249,40 @@ std::array<FrameContext, MAX_FRAMES_IN_FLIGHT> RenderingResources::createFrameCo
         ctx.transparencyNormalMatrixBuffer = transparencyNormalMatrixBuffers[i].get();
 
         // Depth resources
-        ctx.depthView = depthViews[i];
-        ctx.depthImage = depthImages[i];
+        ctx.depthView = depthImage->view(i);
+        ctx.depthImage = depthImage->image(i);
         // Depth pyramid
-        ctx.depthPyramidView = depthPyramidViews[i];
-        ctx.depthPyramidImage = depthPyramidImages[i];
-        ctx.depthPyramidMipLevels = depthPyramidMipLevels[i];
-        ctx.depthPyramidMipStorageViews = depthPyramidMipStorageViews[i];
+        ctx.depthPyramidView = depthPyramidImage->view(i);
+        ctx.depthPyramidImage = depthPyramidImage->image(i);
+        ctx.depthPyramidMipLevels = depthPyramidImage->mipLevels();
+        ctx.depthPyramidMipStorageViews = depthPyramidImage->mipViews(i);
         ctx.depthPyramidMipDescriptorSets = depthPyramidMipDescriptorSets[i];
 
         // Light pass resources
-        ctx.lightPassResultView = lightPassResultViews[i];
+        ctx.lightPassResultView = lightPassResultImage->view(i);
         ctx.lightPassSampler = lightPassSampler; // Single sampler, not per frame
-        ctx.lightIncidentView = lightIncidentViews[i];
+        ctx.lightIncidentView = lightIncidentImage->view(i);
 
         // Transparency resources
-        ctx.accumulationView = accumulationViews[i];
-        ctx.revealageView = revealageViews[i];
+        ctx.accumulationView = accumulationImage->view(i);
+        ctx.revealageView = revealageImage->view(i);
 
         // GI indirect buffer
-        ctx.giIndirectView = giIndirectViews[i];
-        ctx.giIndirectImage = giIndirectImages[i];
+        ctx.giIndirectView = giIndirectImage->view(i);
+        ctx.giIndirectImage = giIndirectImage->image(i);
 
         // Post-process render targets
-        ctx.compositionColorView = compositionColorViews[i];
-        ctx.compositionColorImage = compositionColorImages[i];
-        ctx.smaaEdgeView = smaaEdgeViews[i];
-        ctx.smaaEdgeImage = smaaEdgeImages[i];
-        ctx.smaaBlendView = smaaBlendViews[i];
-        ctx.smaaBlendImage = smaaBlendImages[i];
-        ctx.postAAColorView = postAAColorViews[i];
-        ctx.postAAColorImage = postAAColorImages[i];
+        ctx.compositionColorView = compositionColorImage->view(i);
+        ctx.compositionColorImage = compositionColorImage->image(i);
+        ctx.smaaEdgeView = smaaEdgeImage->view(i);
+        ctx.smaaEdgeImage = smaaEdgeImage->image(i);
+        ctx.smaaBlendView = smaaBlendImage->view(i);
+        ctx.smaaBlendImage = smaaBlendImage->image(i);
+        ctx.postAAColorView = postAAColorImage->view(i);
+        ctx.postAAColorImage = postAAColorImage->image(i);
 
         // GI history for temporal accumulation (previous frame's output)
-        uint32_t historyIndex = (i + MAX_FRAMES_IN_FLIGHT - 1) % MAX_FRAMES_IN_FLIGHT;
-        ctx.giHistoryView = giIndirectViews[historyIndex];
+        ctx.giHistoryView = giIndirectImage->previousView(i);
         ctx.giHistorySampler = lightPassSampler;
 
         // Initialize temporal frame index
@@ -1575,7 +1300,7 @@ std::array<FrameContext, MAX_FRAMES_IN_FLIGHT> RenderingResources::createFrameCo
 
         // RC atlas views for this frame
         for (uint32_t cascade = 0; cascade < RC_CASCADE_COUNT; ++cascade) {
-            ctx.rcRadianceViews[cascade] = rcRadianceViews[cascade][i];
+            ctx.rcRadianceViews[cascade] = rcRadianceImages[cascade]->view(i);
         }
 
         // Shadow map references - now frame-specific shadow maps

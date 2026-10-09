@@ -20,7 +20,7 @@ public:
         uint32_t height;
         VkDescriptorSetLayout compositionDescriptorSetLayout;
         VkFormat targetFormat;
-        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* targetViews;
+        const std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* targetViews;
     };
 
     CompositionPass(Device& device, const CreateInfo& createInfo);
@@ -44,7 +44,7 @@ private:
     uint32_t width;
     uint32_t height;
     VkFormat targetFormat;
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* targetViews;
+    const std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* targetViews;
 
     VkRenderPass renderPass{VK_NULL_HANDLE};
     std::unique_ptr<Pipeline> pipeline{nullptr};

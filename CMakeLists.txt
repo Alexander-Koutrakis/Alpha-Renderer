@@ -69,10 +69,12 @@ add_executable(AlphaRenderer
   "src/Rendering/Core/pipeline_layouts.cpp"
   "src/Rendering/Core/render_passes.cpp"
   "src/Rendering/Core/samplers.cpp"
+  "src/Rendering/Core/debug_names.cpp"
 
   # Rendering Resources
   "src/Rendering/Resources/rendering_resources.cpp"
   "src/Rendering/Resources/gbuffer.cpp"
+  "src/Rendering/Resources/frame_image.cpp"
   "src/Rendering/Resources/material.cpp"
   "src/Rendering/Resources/texture.cpp"
   "src/Rendering/Resources/mesh.cpp"

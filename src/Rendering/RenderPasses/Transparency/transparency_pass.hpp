@@ -29,9 +29,9 @@ public:
         VkFormat hdrFormat;
         VkFormat revealageFormat;
         VkFormat depthFormat;
-        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* accumulationViewsPtr;
-        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* revealageViewsPtr;
-        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* depthViewsPtr;
+        const std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* accumulationViewsPtr;
+        const std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* revealageViewsPtr;
+        const std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* depthViewsPtr;
     };
 
     TransparencyPass(Device& device, const CreateInfo& createInfo);
