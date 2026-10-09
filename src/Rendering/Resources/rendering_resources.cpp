@@ -5,6 +5,8 @@
 #include "Rendering/Core/samplers.hpp"
 #include <stdexcept>
 #include <algorithm>
+#include <tuple>
+#include <type_traits>
 #include "Scene/scene.hpp"
 #include "external/smaa_textures/AreaTex.h"
 #include "external/smaa_textures/SearchTex.h"
@@ -1180,37 +1182,19 @@ void RenderingResources::createShadowMapSamplerDescriptorSets() {
 
     // Update descriptor sets for each frame with frame-specific shadow maps
     for (size_t frameIndex = 0; frameIndex < MAX_FRAMES_IN_FLIGHT; frameIndex++) {
-        // Prepare image infos for directional lights - use frame-specific shadow maps
-        std::vector<VkDescriptorImageInfo> directionalImageInfos;
-        for (size_t lightIndex = 0; lightIndex < MAX_DIRECTIONAL_LIGHTS; lightIndex++) {
-            if (directionalMaps[lightIndex][frameIndex]) {
-                directionalImageInfos.push_back({directionalMaps[lightIndex][frameIndex]->getSampler(),
-                                                 directionalMaps[lightIndex][frameIndex]->getImageView(),
-                                                 VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
+        // createShadowMapResources made every shadow map of every frame, so each array is written in full.
+        auto imageInfos = [frameIndex](const auto& maps) {
+            std::array<VkDescriptorImageInfo, std::tuple_size_v<std::decay_t<decltype(maps)>>> infos{};
+            for (size_t lightIndex = 0; lightIndex < infos.size(); lightIndex++) {
+                const ShadowMap& map = *maps[lightIndex][frameIndex];
+                infos[lightIndex] = {map.getSampler(), map.getImageView(), VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL};
             }
-        }
+            return infos;
+        };
+        const auto directionalImageInfos = imageInfos(directionalMaps);
+        const auto spotImageInfos = imageInfos(spotlightMaps);
+        const auto pointImageInfos = imageInfos(pointlightMaps);
 
-        // Prepare image infos for spot lights - use frame-specific shadow maps
-        std::vector<VkDescriptorImageInfo> spotImageInfos;
-        for (size_t lightIndex = 0; lightIndex < MAX_SPOT_LIGHTS; lightIndex++) {
-            if (spotlightMaps[lightIndex][frameIndex]) {
-                spotImageInfos.push_back({spotlightMaps[lightIndex][frameIndex]->getSampler(),
-                                          spotlightMaps[lightIndex][frameIndex]->getImageView(),
-                                          VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
-            }
-        }
-
-        // Prepare image infos for point lights - use frame-specific shadow maps
-        std::vector<VkDescriptorImageInfo> pointImageInfos;
-        for (size_t lightIndex = 0; lightIndex < MAX_POINT_LIGHTS; lightIndex++) {
-            if (pointlightMaps[lightIndex][frameIndex]) {
-                pointImageInfos.push_back({pointlightMaps[lightIndex][frameIndex]->getSampler(),
-                                           pointlightMaps[lightIndex][frameIndex]->getImageView(),
-                                           VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL});
-            }
-        }
-
-        // One array write per light type; the array sizes are however many shadow maps exist this frame.
         DescriptorWriter()
             .images(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, directionalImageInfos.data(),
                     static_cast<uint32_t>(directionalImageInfos.size()))
