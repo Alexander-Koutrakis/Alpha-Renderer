@@ -36,12 +36,10 @@ public:
     std::vector<ECS::Renderable*> getIntersectingRenderers(const Math::AABB& bounds);
     std::vector<ECS::Light*> getIntersectingLights(const Math::AABB& bounds);
     const EnvironmentLighting& getEnvironmentLighting() const { return environmentLighting; }
-    void getVisibleBounds(const Math::ViewFrustum& frustum, Math::AABB& sceneBounds);
 
 private:
     Scene();
-    void createSpotLightAABB(ECS::SpotLight& light, Math::AABB& worldAABB);
-    void createPointLightAABB(ECS::PointLight& light, Math::AABB& worldAABB);
+    void createLightAABB(const ECS::Light& light, Math::AABB& worldAABB);
     Math::Octree<ECS::Renderable> rendererTree;
     Math::Octree<ECS::Light> lightTree;
     std::unordered_map<const ECS::Renderable*, typename Math::Octree<ECS::Renderable>::OctreeObject*> rendererMap{};

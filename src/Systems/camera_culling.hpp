@@ -12,7 +12,7 @@ public:
     static void updateFrameContext(Rendering::FrameContext& frameContext);
 
 private:
-    static void frustumCullRenderers(const Math::ViewFrustum viewFrustum, Math::AABB& frameSceneBounds,
+    static void frustumCullRenderers(const Math::ViewFrustum viewFrustum,
                                      Rendering::MeshRenderingData& meshRenderingData);
 
     static void updateOpaqueModelBuffers(Rendering::FrameContext& frameContext,

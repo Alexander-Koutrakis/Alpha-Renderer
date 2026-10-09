@@ -3,6 +3,7 @@
 #include "Rendering/Resources/material.hpp"
 #include "Scene/scene.hpp"
 #include "Systems/bounding_box_system.hpp"
+#include "Systems/shadow_budget.hpp"
 #include <vector>
 #include <limits>
 #include <algorithm>
@@ -198,8 +199,9 @@ void LightSystem::calculateCascadeViewProjections(DirectionalLight& dirLight, Ca
         const float finalExtendX = finalLightSpaceAABB.extents.x * extentMultiplier;
         const float finalExtendY = finalLightSpaceAABB.extents.y * extentMultiplier;
 
-        // Get final center in view space for ortho projection centering
-        glm::vec3 finalLightSpaceCenter = glm::vec3(lightView * glm::vec4(snappedWorldCenter, 1.0f));
+        // Center the ortho projection on the middle of the slice's light-space bounds. The mean of the corners (what
+        // the view looks at) is not that middle, and the 10% padding does not cover the difference on a slanted sun.
+        glm::vec3 finalLightSpaceCenter = finalLightSpaceAABB.center;
 
         // Recalculate texel size with final extents and apply final snapping
         const float finalTexelSizeX = (finalExtendX * 2.0f) / shadowMapResolution;
@@ -211,7 +213,9 @@ void LightSystem::calculateCascadeViewProjections(DirectionalLight& dirLight, Ca
         glm::mat4 ortho = glm::orthoLH_ZO(
             finalLightSpaceCenter.x - finalExtendX, finalLightSpaceCenter.x + finalExtendX,
             finalLightSpaceCenter.y - finalExtendY, finalLightSpaceCenter.y + finalExtendY, 0.0f, radius * 5.0f);
+        // Flip Y for Vulkan clip space: the scale and the translation (the ortho is no longer centered on y = 0).
         ortho[1][1] *= -1.0f;
+        ortho[3][1] *= -1.0f;
 
         dirLight.viewProjectionMatrix[i] = ortho * lightView;
     }
@@ -371,47 +375,6 @@ void LightSystem::frustumCullLights(CameraData& cameraData, LightData& lightData
         }
     }
 }
-
-namespace {
-
-// Processes the shadow-casting lights nearest to the camera first and stops at `budget` lights that ended up with
-// shadow data. Lights beyond the budget keep their lighting but get no shadow; that is logged when the count changes.
-template <typename LightT, typename ProcessFn>
-void processNearestCasters(const std::vector<LightT*>& lights, const glm::vec3& cameraPosition, size_t budget,
-                           const char* kind, std::vector<LightT*>& casters, ProcessFn process) {
-    std::vector<LightT*> candidates;
-    for (LightT* light : lights) {
-        if (light->isCastingShadows) {
-            candidates.push_back(light);
-        }
-    }
-    std::stable_sort(candidates.begin(), candidates.end(), [&cameraPosition](const LightT* a, const LightT* b) {
-        return glm::distance2(a->transform.position, cameraPosition) <
-               glm::distance2(b->transform.position, cameraPosition);
-    });
-
-    size_t dropped = 0;
-    for (LightT* light : candidates) {
-        if (casters.size() >= budget) {
-            ++dropped;
-            continue;
-        }
-        if (process(*light)) {
-            casters.push_back(light);
-        }
-    }
-
-    static size_t lastReported = 0;
-    if (dropped != lastReported) {
-        if (dropped > 0) {
-            Log::warn(dropped, " ", kind, " light(s) cast shadows beyond the budget of ", budget, "; the nearest ",
-                      budget, " keep their shadows, the others are lit without one");
-        }
-        lastReported = dropped;
-    }
-}
-
-} // namespace
 
 void LightSystem::lightFrustumCullShadowCasters(LightData& lightData, ShadowcastingData& shadowcastingData,
                                                 const CameraData& cameraData) {

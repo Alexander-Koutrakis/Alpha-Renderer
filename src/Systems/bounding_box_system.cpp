@@ -110,12 +110,11 @@ void BoundingBoxSystem::calculateSpotLightCorners(const glm::vec3& position, con
     // Calculate the radius of the cone base
     float radius = range * std::tan(outerCutoffRadians);
 
-    // Create a coordinate system where direction is the z-axis
+    // Create a coordinate system where direction is the z-axis. A direction along world up has no usable cross
+    // product with it (normalize of the zero vector is NaN), so pick another helper axis there.
     glm::vec3 normalizedDir = glm::normalize(direction);
-    glm::vec3 right = glm::normalize(glm::cross(normalizedDir, glm::vec3(0, 1, 0)));
-    if (glm::length(right) < 0.001f) {
-        right = glm::normalize(glm::cross(normalizedDir, glm::vec3(1, 0, 0)));
-    }
+    const glm::vec3 helperAxis = std::abs(normalizedDir.y) > 0.999f ? glm::vec3(1, 0, 0) : glm::vec3(0, 1, 0);
+    glm::vec3 right = glm::normalize(glm::cross(normalizedDir, helperAxis));
     glm::vec3 up = glm::normalize(glm::cross(right, normalizedDir));
 
     // Calculate the end position of the cone
