@@ -116,9 +116,10 @@ private:
     void createDepthPyramidResources();
     void createLightPassResources();
     void createShadowMapResources();
-    void createDescriptorPool();
+    void createDescriptorPool(const DescriptorBudget& budget);
     void createBuffers();
-    void createDescriptorSetLayouts();
+    // Creates the layouts and returns what the pool has to hold for the sets that createDescriptorSets allocates.
+    DescriptorBudget createDescriptorSetLayouts();
     void createDescriptorSets();
     void createShadowMapSamplerDescriptorSets();
     void createTransparencyResources();

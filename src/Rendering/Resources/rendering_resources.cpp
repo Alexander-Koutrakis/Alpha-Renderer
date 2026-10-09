@@ -51,8 +51,7 @@ RenderingResources::RenderingResources(Device& device, SwapChain& swapChain,
     createRCAtlases();
     createPostProcessResources();
     createBuffers();
-    createDescriptorPool();
-    createDescriptorSetLayouts();
+    createDescriptorPool(createDescriptorSetLayouts());
     loadSMAALUTTextures();
     createShadowMapResources();
     createDescriptorSets();
@@ -664,107 +663,83 @@ void RenderingResources::createBuffers() {
     }
 }
 
-void RenderingResources::createDescriptorPool() {
-    // Recompute descriptor pool sizes with current pipelines (including RC and depth pyramid)
-    uint32_t pyrMaxMips = 0;
-    for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; ++i) {
-        pyrMaxMips = std::max(pyrMaxMips, depthPyramidMipLevels[i]);
+void RenderingResources::createDescriptorPool(const DescriptorBudget& budget) {
+    const std::vector<VkDescriptorPoolSize> poolSizes = budget.poolSizes();
+    for (const VkDescriptorPoolSize& size : poolSizes) {
+        Log::debug("Pool size: type ", size.type, " x", size.descriptorCount);
     }
-    const uint32_t pyramidExtraSetsPerFrame = (pyrMaxMips > 0) ? (pyrMaxMips - 1) : 0; // exclude seed mip0
+    Log::debug("Pool sets: ", budget.maxSets());
 
-    // Sets per frame:
-    // 18 core sets (models, camera, gbuffer, lights, shadows, transparency, composition,
-    // depth pyramid seed, RC build, RC resolve, SMAA edge/weight/blend, color correction, shadow sampler)
-    // + per-mip depth pyramid sets.
-    const uint32_t totalDescriptorSets = MAX_FRAMES_IN_FLIGHT * (18 + pyramidExtraSetsPerFrame) + 1; // skybox
-
-    // Uniform buffers per frame: camera, light array, cascade splits, scene lighting, light matrix, RC build, RC resolve
-    const uint32_t uniformBufferCount = MAX_FRAMES_IN_FLIGHT * 7;
-
-    // Storage buffers per frame: models (2), shadow models (1), transparency models (2)
-    const uint32_t storageBufferCount = MAX_FRAMES_IN_FLIGHT * 5;
-
-    // Combined image samplers per frame:
-    const uint32_t gbufferSamplers = MAX_FRAMES_IN_FLIGHT * 4;
-    const uint32_t shadowSamplers =
-        MAX_FRAMES_IN_FLIGHT * (MAX_DIRECTIONAL_LIGHTS + MAX_SPOT_LIGHTS + MAX_POINT_LIGHTS);
-    const uint32_t compositionSamplers = MAX_FRAMES_IN_FLIGHT * 4;
-    const uint32_t depthPyramidSamplers = MAX_FRAMES_IN_FLIGHT * (1 + pyramidExtraSetsPerFrame); // seed + per-mip
-    const uint32_t rcBuildSamplers = MAX_FRAMES_IN_FLIGHT * 6; // gbuffer4 + depth + incident
-    const uint32_t rcResolveSamplers =
-        MAX_FRAMES_IN_FLIGHT * (RC_CASCADE_COUNT + 7); // gbuffer4 + radiance array + history + prev pos + prev normal
-    const uint32_t smaaSamplers = MAX_FRAMES_IN_FLIGHT * (1 + 3 + 2); // edge + weight + blend
-    const uint32_t colorCorrectionSamplers = MAX_FRAMES_IN_FLIGHT * 1;
-    const uint32_t skyboxSamplers = 1;
-    const uint32_t combinedImageSamplerCount = gbufferSamplers + shadowSamplers + compositionSamplers +
-                                               depthPyramidSamplers + rcBuildSamplers + rcResolveSamplers +
-                                               smaaSamplers + colorCorrectionSamplers + skyboxSamplers;
-
-    // Storage images per frame:
-    // RC build radiance atlases (N), depth pyramid seed (1), per-mip outputs, RC resolve GI output (1)
-    const uint32_t storageImageCount =
-        MAX_FRAMES_IN_FLIGHT * (RC_CASCADE_COUNT + 2 + pyramidExtraSetsPerFrame); // +2 = depth seed + gi output
-
-    Log::debug("Pool sizes: ", totalDescriptorSets, " sets, ", uniformBufferCount, " uniform buffers, ",
-               storageBufferCount, " storage buffers, ", combinedImageSamplerCount, " combined image samplers, ",
-               storageImageCount, " storage images");
-
-    descriptorPool = DescriptorPool::Builder(device)
-                         .setMaxSets(totalDescriptorSets)
-                         .addPoolSize(VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, uniformBufferCount)
-                         .addPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, storageBufferCount)
-                         .addPoolSize(VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, storageImageCount)
-                         .addPoolSize(VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, combinedImageSamplerCount)
-                         .build();
+    descriptorPool = DescriptorPool::Builder(device).fromBudget(budget).build();
 }
 
-void RenderingResources::createDescriptorSetLayouts() {
+DescriptorBudget RenderingResources::createDescriptorSetLayouts() {
+    // Every layout states how many sets createDescriptorSets allocates from it; the pool is sized from these.
+    // The depth pyramid has one set per mip level of each frame (the seed set is mip 0).
+    uint32_t depthPyramidSetCount = 0;
+    for (const uint32_t mipLevels : depthPyramidMipLevels) {
+        depthPyramidSetCount += mipLevels;
+    }
+    DescriptorBudget budget;
+
     // Create descriptor set layout for instance storage buffers
-    modelsDescriptorSetLayout = createDescriptorSetLayout(
-        device, {
-                    layoutBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
-                    layoutBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
-                });
+    modelsDescriptorSetLayout =
+        createDescriptorSetLayout(device,
+                                  {
+                                      layoutBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
+                                      layoutBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
+                                  },
+                                  budget, MAX_FRAMES_IN_FLIGHT);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)modelsDescriptorSetLayout,
                  "ModelsDescriptorSetLayout");
 
     //Create descriptor set layout for camera uniform buffer
     cameraDescriptorSetLayout =
-        createDescriptorSetLayout(device, {
-                                              layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                                                            VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
-                                          });
+        createDescriptorSetLayout(device,
+                                  {
+                                      layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                                                    VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+                                  },
+                                  budget, MAX_FRAMES_IN_FLIGHT);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)cameraDescriptorSetLayout,
                  "CameraDescriptorSetLayout");
 
     gBufferDescriptorSetLayout = createDescriptorSetLayout(
-        device, {
-                    layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                });
+        device,
+        {
+            layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+            layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+            layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+            layoutBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+        },
+        budget, MAX_FRAMES_IN_FLIGHT);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)gBufferDescriptorSetLayout,
                  "GBufferDescriptorSetLayout");
 
-    lightArrayDescriptorSetLayout = createDescriptorSetLayout(
-        device, {
-                    layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                });
+    lightArrayDescriptorSetLayout =
+        createDescriptorSetLayout(device,
+                                  {
+                                      layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                                  },
+                                  budget, MAX_FRAMES_IN_FLIGHT);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)lightArrayDescriptorSetLayout,
                  "LightArrayDescriptorSetLayout");
 
-    cascadeSplitsSetLayout = createDescriptorSetLayout(
-        device, {
-                    layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                });
+    cascadeSplitsSetLayout =
+        createDescriptorSetLayout(device,
+                                  {
+                                      layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                                  },
+                                  budget, MAX_FRAMES_IN_FLIGHT);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)cascadeSplitsSetLayout,
                  "CascadeSplitsDescriptorSetLayout");
 
-    sceneLightingDescriptorSetLayout = createDescriptorSetLayout(
-        device, {
-                    layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                });
+    sceneLightingDescriptorSetLayout =
+        createDescriptorSetLayout(device,
+                                  {
+                                      layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
+                                  },
+                                  budget, MAX_FRAMES_IN_FLIGHT);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)sceneLightingDescriptorSetLayout,
                  "SceneLightingDescriptorSetLayout");
 
@@ -774,7 +749,8 @@ void RenderingResources::createDescriptorSetLayouts() {
         {
             layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
                           VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_GEOMETRY_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
-        });
+        },
+        budget, MAX_FRAMES_IN_FLIGHT);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowcastinglightMatrixDescriptorSetLayout,
                  "ShadowLightMatrixDescriptorSetLayout");
 
@@ -786,127 +762,152 @@ void RenderingResources::createDescriptorSetLayouts() {
                           MAX_DIRECTIONAL_LIGHTS),
             layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, MAX_SPOT_LIGHTS),
             layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT, MAX_POINT_LIGHTS),
-        });
+        },
+        budget, MAX_FRAMES_IN_FLIGHT);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowMapSamplerLayout,
                  "ShadowMapSamplerDescriptorSetLayout");
 
     //Create descriptor set layout for shadow model matrix
-    shadowModelMatrixDescriptorSetLayout = createDescriptorSetLayout(
-        device, {
-                    layoutBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
-                });
+    shadowModelMatrixDescriptorSetLayout =
+        createDescriptorSetLayout(device,
+                                  {
+                                      layoutBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
+                                  },
+                                  budget, MAX_FRAMES_IN_FLIGHT);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)shadowModelMatrixDescriptorSetLayout,
                  "ShadowModelMatrixDescriptorSetLayout");
 
     //Create descriptor set layout for skybox
     skyboxDescriptorSetLayout =
-        createDescriptorSetLayout(device, {
-                                              layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                                            VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT),
-                                          });
+        createDescriptorSetLayout(device,
+                                  {
+                                      layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                                                    VK_SHADER_STAGE_FRAGMENT_BIT | VK_SHADER_STAGE_COMPUTE_BIT),
+                                  },
+                                  budget, 1);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)skyboxDescriptorSetLayout,
                  "SkyboxDescriptorSetLayout");
 
     //Create descriptor set layout for transparency model matrix
-    transparencyModelDescriptorSetLayout = createDescriptorSetLayout(
-        device, {
-                    layoutBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
-                    layoutBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
-                });
+    transparencyModelDescriptorSetLayout =
+        createDescriptorSetLayout(device,
+                                  {
+                                      layoutBinding(0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
+                                      layoutBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, VK_SHADER_STAGE_VERTEX_BIT),
+                                  },
+                                  budget, MAX_FRAMES_IN_FLIGHT);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)transparencyModelDescriptorSetLayout,
                  "TransparencyModelDescriptorSetLayout");
 
     // Create descriptor set layout for composition textures
     compositionSetLayout = createDescriptorSetLayout(
-        device, {
-                    layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                });
+        device,
+        {
+            layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+            layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+            layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+            layoutBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+        },
+        budget, MAX_FRAMES_IN_FLIGHT);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)compositionSetLayout,
                  "CompositionDescriptorSetLayout");
 
     // SMAA edge descriptor set layout (compositionColor input)
     smaaEdgeSetLayout = createDescriptorSetLayout(
-        device, {
-                    layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                });
+        device,
+        {
+            layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+        },
+        budget, MAX_FRAMES_IN_FLIGHT);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)smaaEdgeSetLayout, "SMAAEdgeDescriptorSetLayout");
 
     // SMAA weight descriptor set layout (edges + area/search LUT)
     smaaWeightSetLayout = createDescriptorSetLayout(
-        device, {
-                    layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                });
+        device,
+        {
+            layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+            layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+            layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+        },
+        budget, MAX_FRAMES_IN_FLIGHT);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)smaaWeightSetLayout, "SMAAWeightDescriptorSetLayout");
 
     // SMAA blend descriptor set layout (compositionColor + blend weights)
     smaaBlendSetLayout = createDescriptorSetLayout(
-        device, {
-                    layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                });
+        device,
+        {
+            layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+            layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+        },
+        budget, MAX_FRAMES_IN_FLIGHT);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)smaaBlendSetLayout, "SMAABlendDescriptorSetLayout");
 
     // Color correction descriptor set layout (post-AA color input)
     colorCorrectionSetLayout = createDescriptorSetLayout(
-        device, {
-                    layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                });
+        device,
+        {
+            layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
+        },
+        budget, MAX_FRAMES_IN_FLIGHT);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)colorCorrectionSetLayout,
                  "ColorCorrectionDescriptorSetLayout");
 
     // RC Build descriptor set layout
     // NOTE: β is packed into uRadiance alpha (radiance.rgb, beta.a), so we only need one storage atlas array.
     rcBuildSetLayout = createDescriptorSetLayout(
-        device, {
-                    layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT),
-                    layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
-                    layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
-                    layoutBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
-                    layoutBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
-                    layoutBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
-                    layoutBinding(6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
-                    layoutBinding(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, RC_CASCADE_COUNT),
-                });
+        device,
+        {
+            layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_COMPUTE_BIT),
+            layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
+            layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
+            layoutBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
+            layoutBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
+            layoutBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
+            layoutBinding(6, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
+            layoutBinding(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT, RC_CASCADE_COUNT),
+        },
+        budget, MAX_FRAMES_IN_FLIGHT);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)rcBuildSetLayout, "RCBuildDescriptorSetLayout");
 
     // RC Resolve descriptor set layout
     // NOTE: keep binding numbers stable (skip binding 6) to avoid shifting shader bindings:
     // binding 5 = radiance (rgba16f, beta in alpha), binding 7 = gi out, binding 8/9/10 = history/prev pos/prev normal.
     rcResolveSetLayout = createDescriptorSetLayout(
-        device, {
-                    layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                                  VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                  VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                  VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                  VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                  VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                  VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, RC_CASCADE_COUNT),
-                    layoutBinding(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT),
-                    layoutBinding(8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
-                    layoutBinding(9, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                                  VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(10, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
-                });
+        device,
+        {
+            layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                          VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+            layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                          VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+            layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                          VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+            layoutBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                          VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+            layoutBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                          VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+            layoutBinding(5, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                          VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT, RC_CASCADE_COUNT),
+            layoutBinding(7, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT),
+            layoutBinding(8, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
+            layoutBinding(9, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                          VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT),
+            layoutBinding(10, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
+        },
+        budget, MAX_FRAMES_IN_FLIGHT);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)rcResolveSetLayout, "RCResolveDescriptorSetLayout");
 
     // Depth pyramid build descriptor set layout (centralized)
     depthPyramidSetLayout = createDescriptorSetLayout(
-        device, {
-                    layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
-                    layoutBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT),
-                });
+        device,
+        {
+            layoutBinding(0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_COMPUTE_BIT),
+            layoutBinding(1, VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, VK_SHADER_STAGE_COMPUTE_BIT),
+        },
+        budget, depthPyramidSetCount);
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)depthPyramidSetLayout,
                  "DepthPyramidDescriptorSetLayout");
+
+    return budget;
 }
 
 void RenderingResources::createDescriptorSets() {
