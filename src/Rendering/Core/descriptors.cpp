@@ -28,7 +28,39 @@ VkDescriptorSetLayout createDescriptorSetLayout(Device& device,
     return createDescriptorSetLayout(device, bindings.begin(), static_cast<uint32_t>(bindings.size()));
 }
 
+// *************** Descriptor Budget *********************
+
+void DescriptorBudget::add(const VkDescriptorSetLayoutBinding* bindings, uint32_t bindingCount, uint32_t setCount) {
+    sets += setCount;
+    for (uint32_t i = 0; i < bindingCount; ++i) {
+        descriptorCounts[bindings[i].descriptorType] += bindings[i].descriptorCount * setCount;
+    }
+}
+
+std::vector<VkDescriptorPoolSize> DescriptorBudget::poolSizes() const {
+    std::vector<VkDescriptorPoolSize> sizes;
+    for (const auto& [type, count] : descriptorCounts) {
+        if (count > 0) {
+            sizes.push_back({type, count});
+        }
+    }
+    return sizes;
+}
+
+VkDescriptorSetLayout createDescriptorSetLayout(Device& device,
+                                                std::initializer_list<VkDescriptorSetLayoutBinding> bindings,
+                                                DescriptorBudget& budget, uint32_t setCount) {
+    budget.add(bindings.begin(), static_cast<uint32_t>(bindings.size()), setCount);
+    return createDescriptorSetLayout(device, bindings);
+}
+
 // *************** Descriptor Pool Builder *********************
+
+DescriptorPool::Builder& DescriptorPool::Builder::fromBudget(const DescriptorBudget& budget) {
+    maxSets = budget.maxSets();
+    poolSizes = budget.poolSizes();
+    return *this;
+}
 
 DescriptorPool::Builder& DescriptorPool::Builder::addPoolSize(VkDescriptorType descriptorType, uint32_t count) {
     poolSizes.push_back({descriptorType, count});

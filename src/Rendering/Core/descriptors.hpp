@@ -6,6 +6,7 @@
 // std
 #include <memory>
 #include <initializer_list>
+#include <map>
 #include <vector>
 
 namespace Rendering {
@@ -24,12 +25,36 @@ VkDescriptorSetLayout createDescriptorSetLayout(Device& device, const VkDescript
 VkDescriptorSetLayout createDescriptorSetLayout(Device& device,
                                                 std::initializer_list<VkDescriptorSetLayoutBinding> bindings);
 
+// What a descriptor pool has to hold, summed from the layouts it will serve: for every layout, the number of sets that
+// will be allocated from it. Each descriptor type's total is (binding count x sets) over all layouts, so the pool
+// cannot drift from the layouts. Build the pool from it with DescriptorPool::Builder::fromBudget.
+class DescriptorBudget {
+public:
+    // Reserves `setCount` sets of a layout with these bindings.
+    void add(const VkDescriptorSetLayoutBinding* bindings, uint32_t bindingCount, uint32_t setCount);
+
+    uint32_t maxSets() const { return sets; }
+    // One entry per descriptor type in use, in type order; never an entry with a zero count.
+    std::vector<VkDescriptorPoolSize> poolSizes() const;
+
+private:
+    uint32_t sets = 0;
+    std::map<VkDescriptorType, uint32_t> descriptorCounts;
+};
+
+// Creates the layout and reserves `setCount` sets of it in `budget`, so a layout cannot exist without a stated count.
+VkDescriptorSetLayout createDescriptorSetLayout(Device& device,
+                                                std::initializer_list<VkDescriptorSetLayoutBinding> bindings,
+                                                DescriptorBudget& budget, uint32_t setCount);
+
 class DescriptorPool {
 public:
     class Builder {
     public:
         Builder(Device& device) : device{device} {}
 
+        // Sets the maximum set count and every pool size from the budget.
+        Builder& fromBudget(const DescriptorBudget& budget);
         Builder& addPoolSize(VkDescriptorType descriptorType, uint32_t count);
         Builder& setPoolFlags(VkDescriptorPoolCreateFlags flags);
         Builder& setMaxSets(uint32_t count);
