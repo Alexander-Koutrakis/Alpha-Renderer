@@ -18,7 +18,9 @@ namespace Rendering {
 // Central registry and lifetime owner of GPU resources
 class RenderingResources {
 public:
-    RenderingResources(Device& device, SwapChain& swapChain);
+    // materialDescriptorSetLayout is the layout every material set is allocated from. The ResourceManager owns it
+    // (materials load before this object exists); it must outlive this object.
+    RenderingResources(Device& device, SwapChain& swapChain, VkDescriptorSetLayout materialDescriptorSetLayout);
     ~RenderingResources();
 
     // Non-copyable
@@ -224,7 +226,7 @@ private:
 
     Texture* skyboxTexture{nullptr};
 
-    VkDescriptorSetLayout materialDescriptorSetLayout{VK_NULL_HANDLE};
+    VkDescriptorSetLayout materialDescriptorSetLayout{VK_NULL_HANDLE}; // borrowed, see the constructor
     VkDescriptorSetLayout modelsDescriptorSetLayout{VK_NULL_HANDLE};
     VkDescriptorSetLayout cameraDescriptorSetLayout{VK_NULL_HANDLE};
     VkDescriptorSetLayout gBufferDescriptorSetLayout{VK_NULL_HANDLE};

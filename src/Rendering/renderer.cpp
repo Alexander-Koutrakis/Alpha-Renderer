@@ -9,7 +9,8 @@ using namespace ECS;
 using namespace Systems;
 namespace Rendering {
 
-Renderer::Renderer(Window& window, Device& device) : window{window}, device{device} {
+Renderer::Renderer(Window& window, Device& device, VkDescriptorSetLayout materialDescriptorSetLayout)
+    : window{window}, device{device}, materialDescriptorSetLayout{materialDescriptorSetLayout} {
     recreateSwapChain();
     recreateWindowDependentResources();
     createCommandBuffers();
@@ -274,7 +275,7 @@ void Renderer::createRCGIPass() {
 }
 
 void Renderer::createRenderingResources() {
-    renderingResources = std::make_unique<RenderingResources>(device, *swapChain);
+    renderingResources = std::make_unique<RenderingResources>(device, *swapChain, materialDescriptorSetLayout);
     frameContexts = renderingResources->createFrameContexts();
 }
 
