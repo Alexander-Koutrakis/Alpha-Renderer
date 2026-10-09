@@ -40,8 +40,7 @@ public:
 
 private:
     Scene();
-    void createSpotLightAABB(ECS::SpotLight& light, Math::AABB& worldAABB);
-    void createPointLightAABB(ECS::PointLight& light, Math::AABB& worldAABB);
+    void createLightAABB(const ECS::Light& light, Math::AABB& worldAABB);
     Math::Octree<ECS::Renderable> rendererTree;
     Math::Octree<ECS::Light> lightTree;
     std::unordered_map<const ECS::Renderable*, typename Math::Octree<ECS::Renderable>::OctreeObject*> rendererMap{};

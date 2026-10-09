@@ -147,3 +147,41 @@ TEST_CASE("a spot light's bounds follow its direction and range") {
     CHECK(asSet(scene.getIntersectingLights(atBase)).count(&light) == 1);
     CHECK(asSet(scene.getIntersectingLights(behind)).count(&light) == 0);
 }
+
+TEST_CASE("a spot light is found at every point of its cone, whichever way it points") {
+    // Includes straight up and straight down, where cross(direction, world up) is zero and a naive basis is NaN.
+    auto& scene = Scene::Scene::getInstance();
+    const glm::vec3 directions[] = {{0, 0, 1}, {1, 0, 0},  {0, 1, 0},      {0, -1, 0},
+                                    {1, 1, 1}, {-2, 3, 1}, {0, -1, 0.001f}};
+    const float range = 12.0f;
+    const float outerDegrees = 40.0f;
+    for (const glm::vec3& rawDirection : directions) {
+        const glm::vec3 direction = glm::normalize(rawDirection);
+        const glm::vec3 origin(30, 40, 50);
+        SpotLight light = spotLightAt(origin, glm::rotation(glm::vec3(0, 0, 1), direction), range, outerDegrees);
+        REQUIRE(glm::length(Systems::TransformSystem::getForward(light.transform) - direction) < 1e-4f);
+        SceneLights lights;
+        lights.add(light);
+
+        const glm::vec3 helper = std::abs(direction.y) > 0.99f ? glm::vec3(1, 0, 0) : glm::vec3(0, 1, 0);
+        const glm::vec3 u = glm::normalize(glm::cross(direction, helper));
+        const glm::vec3 v = glm::cross(direction, u);
+        // outerCutoff is the full cone angle; sample the real cone (half that angle) just inside its surface.
+        const float radius = range * std::tan(glm::radians(outerDegrees * 0.5f)) * 0.99f;
+        for (int i = 0; i < 12; ++i) {
+            const float angle = 2.0f * kPi * float(i) / 12.0f;
+            AABB probe{};
+            probe.center = origin + direction * range * 0.99f + radius * (std::cos(angle) * u + std::sin(angle) * v);
+            probe.extents = glm::vec3(0.01f);
+            CHECK_MESSAGE(asSet(scene.getIntersectingLights(probe)).count(&light) == 1, "direction (", rawDirection.x,
+                          ", ", rawDirection.y, ", ", rawDirection.z, ") probe ", i);
+        }
+
+        // A probe far away from the cone must not find it (a NaN bounds box would match anything).
+        AABB faraway{};
+        faraway.center = origin + glm::vec3(300, 300, 300);
+        faraway.extents = glm::vec3(1.0f);
+        CHECK_MESSAGE(asSet(scene.getIntersectingLights(faraway)).count(&light) == 0, "direction (", rawDirection.x,
+                      ", ", rawDirection.y, ", ", rawDirection.z, ")");
+    }
+}

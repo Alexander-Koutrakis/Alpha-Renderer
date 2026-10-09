@@ -21,6 +21,10 @@ AABB box(glm::vec3 center, glm::vec3 extents) {
     return result;
 }
 
+bool hasNan(const AABB& bounds) {
+    return glm::any(glm::isnan(bounds.center)) || glm::any(glm::isnan(bounds.extents));
+}
+
 } // namespace
 
 // ---------------------------------------------------------------- getWorldBounds
@@ -160,6 +164,36 @@ TEST_CASE("calculatePointLightBounds is a cube of half-size range around the lig
     BoundingBoxSystem::calculatePointLightBounds(bounds, {1, 2, 3}, 5.0f);
     CHECK_VEC3(bounds.center, glm::vec3(1, 2, 3));
     CHECK_VEC3(bounds.extents, glm::vec3(5, 5, 5));
+}
+
+TEST_CASE("calculateSpotlightBounds contains the tip and the whole base circle in every direction") {
+    const float range = 10.0f;
+    const float outerDegrees = 30.0f;
+    const glm::vec3 position(1, 2, 3);
+    // Includes straight up and straight down, where the cross product with world up is zero.
+    const glm::vec3 directions[] = {{0, 0, 1}, {1, 0, 0},  {0, -1, 0},      {0, 1, 0},
+                                    {1, 1, 1}, {-2, 3, 1}, {0, -1, 0.0001f}};
+    for (const glm::vec3& rawDirection : directions) {
+        const glm::vec3 direction = glm::normalize(rawDirection);
+        AABB bounds{};
+        BoundingBoxSystem::calculateSpotlightBounds(bounds, position, direction, range, outerDegrees);
+        REQUIRE_FALSE(hasNan(bounds));
+
+        CHECK(BoundingBoxSystem::Contains(bounds, position));
+
+        // Build the circle independently of the implementation.
+        const glm::vec3 helper = std::abs(direction.y) > 0.99f ? glm::vec3(1, 0, 0) : glm::vec3(0, 1, 0);
+        const glm::vec3 u = glm::normalize(glm::cross(direction, helper));
+        const glm::vec3 v = glm::cross(direction, u);
+        const float radius = range * std::tan(glm::radians(outerDegrees));
+        for (int i = 0; i < 16; ++i) {
+            const float angle = 2.0f * kPi * float(i) / 16.0f;
+            const glm::vec3 onCircle =
+                position + direction * range + radius * (std::cos(angle) * u + std::sin(angle) * v);
+            CHECK_MESSAGE(BoundingBoxSystem::Contains(bounds, onCircle), "direction (", rawDirection.x, ", ",
+                          rawDirection.y, ", ", rawDirection.z, ") angle step ", i);
+        }
+    }
 }
 
 // ---------------------------------------------------------------- overlapsViewDepthRange
