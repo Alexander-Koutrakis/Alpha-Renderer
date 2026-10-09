@@ -76,6 +76,7 @@ private:
     VkDescriptorPool imguiDescriptorPool{VK_NULL_HANDLE};
     VkRenderPass imguiRenderPass{VK_NULL_HANDLE};
     std::vector<VkFramebuffer> framebuffers;
+    VkExtent2D framebufferExtent{}; // the swapchain extent the framebuffers were made with
     bool initialized{false};
 
     // Frame statistics

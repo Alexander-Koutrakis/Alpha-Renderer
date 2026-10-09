@@ -55,6 +55,10 @@ validation:
     ./scripts/validation_check.ps1
     ./scripts/validation_check.ps1 -Scene many_lights
 
+# Resize the window under validation layers: RenderingResources must rebuild cleanly (needs a GPU; not in `check`).
+resize-check:
+    ./scripts/resize_check.ps1
+
 # Toolchain sanity check.
 doctor:
     just --version

@@ -72,11 +72,12 @@ void ImGuiManager::createRenderPass(SwapChain& swapChain) {
 }
 
 void ImGuiManager::createFramebuffers(SwapChain& swapChain) {
+    framebufferExtent = swapChain.getExtent();
     framebuffers.resize(swapChain.imageCount());
 
     for (size_t i = 0; i < swapChain.imageCount(); i++) {
         framebuffers[i] = createFramebuffer(device.getDevice(), imguiRenderPass, swapChain.getImageView(i),
-                                            swapChain.getExtent().width, swapChain.getExtent().height);
+                                            framebufferExtent.width, framebufferExtent.height);
     }
 }
 
@@ -138,6 +139,14 @@ void ImGuiManager::beginFrame() {
     // Start the Dear ImGui frame
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplGlfw_NewFrame();
+
+    // The GLFW backend sets the display size from the live window, which can already have its new size while the
+    // renderer has not yet handled the resize event. ImGui draws into framebuffers made for the current swapchain, so
+    // its display must be exactly their extent (in window coordinates, hence divided by the backend's scale).
+    ImGuiIO& io = ImGui::GetIO();
+    io.DisplaySize = ImVec2(static_cast<float>(framebufferExtent.width) / io.DisplayFramebufferScale.x,
+                            static_cast<float>(framebufferExtent.height) / io.DisplayFramebufferScale.y);
+
     ImGui::NewFrame();
 }
 
@@ -152,8 +161,7 @@ void ImGuiManager::endFrame(VkCommandBuffer commandBuffer, uint32_t imageIndex) 
     renderPassInfo.renderPass = imguiRenderPass;
     renderPassInfo.framebuffer = framebuffers[imageIndex];
     renderPassInfo.renderArea.offset = {0, 0};
-    renderPassInfo.renderArea.extent.width = static_cast<uint32_t>(drawData->DisplaySize.x);
-    renderPassInfo.renderArea.extent.height = static_cast<uint32_t>(drawData->DisplaySize.y);
+    renderPassInfo.renderArea.extent = framebufferExtent;
 
     vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
