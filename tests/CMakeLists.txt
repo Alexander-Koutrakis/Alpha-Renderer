@@ -6,6 +6,7 @@ add_executable(AlphaTests
   view_frustum_test.cpp
   octree_test.cpp
   shader_constants_test.cpp
+  shader_layout_test.cpp
   ecs_test.cpp
 
   ${CMAKE_SOURCE_DIR}/src/Math/AABB.cpp
@@ -34,5 +35,7 @@ endif()
 
 # shader_constants_test.cpp reads the shared GLSL limits.
 target_compile_definitions(AlphaTests PRIVATE ALPHA_SHADER_DIR="${CMAKE_SOURCE_DIR}/shaders")
+# shader_layout_test.cpp reads the block layouts that scripts/dump_block_layouts.ps1 writes next to the compiled shaders.
+target_compile_definitions(AlphaTests PRIVATE ALPHA_BLOCK_LAYOUTS="${CMAKE_SOURCE_DIR}/build/shader-check/block_layouts.txt")
 
 add_test(NAME AlphaTests COMMAND AlphaTests)

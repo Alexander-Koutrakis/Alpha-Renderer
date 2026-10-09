@@ -34,6 +34,30 @@ public:
     // Entry point: sequences compute stages
     void run(FrameContext& frameContext);
 
+    // Push-constant blocks of the compute shaders; tests/shader_layout_test.cpp checks them against the GLSL.
+    struct CascadeBuildPushConstants {
+        int cascadeIndex = 0;
+        int probeStridePx = 0;
+        int tileSize = 0;
+        int depthMipCount = 0;
+        int frameIndex = 0;
+        float tStart = 0.0f;
+        float segmentLen = 0.0f;
+    };
+
+    struct ResolvePushConstants {
+        glm::mat4 prevViewProj{1.0f}; // Previous frame's view-projection matrix for reprojection
+        int probeStridePx = 0;
+        int tileSize = 0;
+        int temporalFrame = 0; // Frame counter for jittering
+    };
+
+    struct DepthPyramidPushConstants {
+        float cameraNear = 0.0f;
+        float cameraFar = 0.0f;
+        float padding = 0.0f;
+    };
+
 private:
     // Depth pyramid stage (current)
     void createDepthPyramidPipeline();
@@ -51,33 +75,12 @@ private:
     void resolveIndirect(FrameContext& frameContext);
     void emitComputeBarrier(VkCommandBuffer cmd) const;
 
-    struct CascadeBuildPushConstants {
-        int cascadeIndex = 0;
-        int probeStridePx = 0;
-        int tileSize = 0;
-        int depthMipCount = 0;
-        int frameIndex = 0;
-        float tStart = 0.0f;
-        float segmentLen = 0.0f;
-    };
-    struct ResolvePushConstants {
-        glm::mat4 prevViewProj{1.0f}; // Previous frame's view-projection matrix for reprojection
-        int probeStridePx = 0;
-        int tileSize = 0;
-        int temporalFrame = 0; // Frame counter for jittering
-    };
     struct CascadeDispatchInfo {
         CascadeBuildPushConstants push{};
         uint32_t probeCountX{0};
         uint32_t probeCountY{0};
         uint32_t groupsX{0};
         uint32_t groupsY{0};
-    };
-
-    struct DepthPyramidPushConstants {
-        float cameraNear = 0.0f;
-        float cameraFar = 0.0f;
-        float padding = 0.0f;
     };
 
     struct CascadeBand {

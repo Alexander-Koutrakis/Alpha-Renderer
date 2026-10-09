@@ -13,13 +13,14 @@ build:
     cmake --preset debug
     cmake --build --preset debug
 
-# Unit tests (doctest via CTest): math, octree, ECS. No GPU needed.
-test: build
+# Unit tests (doctest via CTest): math, octree, ECS, shader block layouts. No GPU needed.
+test: build shaders
     ctest --test-dir build --output-on-failure
 
-# Compile every shader with glslc and validate with spirv-val.
+# Compile every shader with glslc, validate with spirv-val, and dump the block layouts the layout test reads.
 shaders:
     ./scripts/check_shaders.ps1
+    ./scripts/dump_block_layouts.ps1
 
 # Behavior-neutral check: compare every shader against a base ref (default main). Use scripts/shader_equiv.ps1 -Expect for intended changes.
 shader-equiv base="main":
