@@ -30,16 +30,18 @@ Renderer::~Renderer() {
 }
 
 void Renderer::recreateSwapChain() {
-    auto extent = window.getExtent();
-    // Wait for window to be restored if minimized
-    while (window.isMinimized() || extent.width == 0 || extent.height == 0) {
+    // The swapchain takes its size from the surface (SwapChain::chooseSwapExtent), which is 0x0 while the window is
+    // minimised, possibly before GLFW reports it iconified; a swapchain cannot be zero-sized. Wait on the surface itself.
+    VkExtent2D surfaceExtent = device.getSwapChainSupport().capabilities.currentExtent;
+    while (surfaceExtent.width == 0 || surfaceExtent.height == 0) {
         glfwWaitEvents();
-        extent = window.getExtent();
         // If window is closing, break to avoid infinite loop
         if (window.shouldClose()) {
             return;
         }
+        surfaceExtent = device.getSwapChainSupport().capabilities.currentExtent;
     }
+    const VkExtent2D extent = window.getExtent();
 
     VK_CHECK(vkDeviceWaitIdle(device.getDevice()));
 
