@@ -31,8 +31,8 @@ public:
         VkDescriptorSetLayout cameraDescriptorSetLayout;
         VkDescriptorSetLayout skyboxDescriptorSetLayout;
         VkFormat albedoFormat;
-        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* albedoViewsPtr;
-        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* depthViewsPtr;
+        const std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* albedoViewsPtr;
+        const std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* depthViewsPtr;
     };
 
     SkyboxPass(Device& device, const CreateInfo& createInfo);

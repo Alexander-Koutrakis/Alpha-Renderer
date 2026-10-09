@@ -1,16 +1,14 @@
 #pragma once
 #include "Rendering/Core/device.hpp"
-#include <array>
-#include <vector>
-#include "Rendering/Core/swapchain.hpp"
+#include "Rendering/Resources/frame_image.hpp"
 #include "Rendering/rendering_constants.hpp"
-#include <stdexcept>
+#include <array>
+#include <memory>
+
 namespace Rendering {
 
 class GBuffer {
 public:
-    static constexpr uint32_t ATTACHMENT_COUNT = 4;
-
     struct CreateInfo {
         uint32_t width;
         uint32_t height;
@@ -19,65 +17,43 @@ public:
     GBuffer(Device& device, const CreateInfo& createInfo);
     ~GBuffer();
 
-    VkImageView getPositionView(size_t frameIndex) const { return positionViews[frameIndex]; }
-    VkImageView getNormalView(size_t frameIndex) const { return normalViews[frameIndex]; }
-    VkImageView getAlbedoView(size_t frameIndex) const { return albedoViews[frameIndex]; }
-    VkImageView getMaterialView(size_t frameIndex) const { return materialViews[frameIndex]; }
+    GBuffer(const GBuffer&) = delete;
+    GBuffer& operator=(const GBuffer&) = delete;
 
-    VkImage getPositionImage(size_t frameIndex) const { return positionImages[frameIndex]; }
-    VkImage getNormalImage(size_t frameIndex) const { return normalImages[frameIndex]; }
-    VkImage getAlbedoImage(size_t frameIndex) const { return albedoImages[frameIndex]; }
-    VkImage getMaterialImage(size_t frameIndex) const { return materialImages[frameIndex]; }
+    const FrameImage& position() const { return *positionImage; }
+    const FrameImage& normal() const { return *normalImage; }
 
-    std::array<VkImageView, ATTACHMENT_COUNT> getAttachmentViews(size_t frameIndex) const {
-        return {positionViews[frameIndex], normalViews[frameIndex], albedoViews[frameIndex], materialViews[frameIndex]};
-    }
+    VkImageView getPositionView(size_t frameIndex) const { return positionImage->view(frameIndex); }
+    VkImageView getNormalView(size_t frameIndex) const { return normalImage->view(frameIndex); }
+    VkImageView getAlbedoView(size_t frameIndex) const { return albedoImage->view(frameIndex); }
+    VkImageView getMaterialView(size_t frameIndex) const { return materialImage->view(frameIndex); }
 
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getPositionViews() { return positionViews; }
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getNormalViews() { return normalViews; }
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getAlbedoViews() { return albedoViews; }
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getMaterialViews() { return materialViews; }
+    VkImage getPositionImage(size_t frameIndex) const { return positionImage->image(frameIndex); }
+    VkImage getNormalImage(size_t frameIndex) const { return normalImage->image(frameIndex); }
+    VkImage getAlbedoImage(size_t frameIndex) const { return albedoImage->image(frameIndex); }
+    VkImage getMaterialImage(size_t frameIndex) const { return materialImage->image(frameIndex); }
+
+    const std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& getAlbedoViews() const { return albedoImage->views(); }
 
     VkSampler getSampler() const { return sampler; }
-    VkFormat getPositionFormat() const { return positionFormat; }
-    VkFormat getNormalFormat() const { return normalFormat; }
-    VkFormat getAlbedoFormat() const { return albedoFormat; }
-    VkFormat getMaterialFormat() const { return materialFormat; }
+    VkFormat getPositionFormat() const { return positionImage->format(); }
+    VkFormat getNormalFormat() const { return normalImage->format(); }
+    VkFormat getAlbedoFormat() const { return albedoImage->format(); }
+    VkFormat getMaterialFormat() const { return materialImage->format(); }
 
 private:
-    void setDebugName(VkObjectType objectType, uint64_t handle, const std::string& name);
-    void cleanup();
-    void findResourcesFormats();
     void createAttachments();
-    void createAttachment(VkFormat format, VkImageUsageFlags usage, std::array<VkImage, MAX_FRAMES_IN_FLIGHT>& images,
-                          std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT>& memories,
-                          std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>& views, const std::string& name);
+    void createSampler();
+
     Device& device;
     uint32_t width;
     uint32_t height;
 
-    VkFormat positionFormat{VK_FORMAT_UNDEFINED};
-    VkFormat normalFormat{VK_FORMAT_UNDEFINED};
-    VkFormat albedoFormat{VK_FORMAT_UNDEFINED};
-    VkFormat materialFormat{VK_FORMAT_UNDEFINED};
-    // Position buffer (RGB32F)
-    std::array<VkImage, MAX_FRAMES_IN_FLIGHT> positionImages{};
-    std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT> positionMemories{};
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> positionViews{};
-    // Normal buffer (RGB16F)
-    std::array<VkImage, MAX_FRAMES_IN_FLIGHT> normalImages{};
-    std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT> normalMemories{};
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> normalViews{};
-    // Albedo buffer (RGBA8)
-    std::array<VkImage, MAX_FRAMES_IN_FLIGHT> albedoImages{};
-    std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT> albedoMemories{};
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> albedoViews{};
-    // Material properties buffer (RGBA8)
-    std::array<VkImage, MAX_FRAMES_IN_FLIGHT> materialImages{};
-    std::array<VkDeviceMemory, MAX_FRAMES_IN_FLIGHT> materialMemories{};
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT> materialViews{};
+    std::unique_ptr<FrameImage> positionImage; // RGB32F
+    std::unique_ptr<FrameImage> normalImage;   // RGB10A2 or RGB16F
+    std::unique_ptr<FrameImage> albedoImage;   // RGBA8
+    std::unique_ptr<FrameImage> materialImage; // RGBA8, PBR properties
     VkSampler sampler{VK_NULL_HANDLE};
-    void createSampler();
 };
 
 } // namespace Rendering
