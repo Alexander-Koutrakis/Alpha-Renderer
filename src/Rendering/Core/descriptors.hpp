@@ -42,11 +42,6 @@ private:
     std::map<VkDescriptorType, uint32_t> descriptorCounts;
 };
 
-// Creates the layout and reserves `setCount` sets of it in `budget`, so a layout cannot exist without a stated count.
-VkDescriptorSetLayout createDescriptorSetLayout(Device& device,
-                                                std::initializer_list<VkDescriptorSetLayoutBinding> bindings,
-                                                DescriptorBudget& budget, uint32_t setCount);
-
 class DescriptorPool {
 public:
     class Builder {

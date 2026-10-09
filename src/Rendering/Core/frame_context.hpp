@@ -160,7 +160,7 @@ struct FrameContext {
     VkImage depthPyramidImage = VK_NULL_HANDLE;
     uint32_t depthPyramidMipLevels = 0;
     std::vector<VkImageView> depthPyramidMipStorageViews;
-    std::vector<VkDescriptorSet> depthPyramidMipDescriptorSets;
+    std::vector<VkDescriptorSet> depthPyramidMipDescriptorSets; // [m]: downsample into mip m; [0] is the seed set
 
     VkImageView lightPassResultView = VK_NULL_HANDLE;
     VkSampler lightPassSampler = VK_NULL_HANDLE;
