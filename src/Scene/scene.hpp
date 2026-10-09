@@ -36,7 +36,6 @@ public:
     std::vector<ECS::Renderable*> getIntersectingRenderers(const Math::AABB& bounds);
     std::vector<ECS::Light*> getIntersectingLights(const Math::AABB& bounds);
     const EnvironmentLighting& getEnvironmentLighting() const { return environmentLighting; }
-    void getVisibleBounds(const Math::ViewFrustum& frustum, Math::AABB& sceneBounds);
 
 private:
     Scene();

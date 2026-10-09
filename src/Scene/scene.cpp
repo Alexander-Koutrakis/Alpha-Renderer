@@ -151,35 +151,4 @@ std::vector<ECS::Light*> Scene::getIntersectingLights(const AABB& bounds) {
     return lightTree.getIntersectingObjects(bounds);
 }
 
-void Scene::getVisibleBounds(const ViewFrustum& frustum, AABB& sceneBounds) {
-    auto visibleRenderers = getVisibleRenderers(frustum);
-
-    // Initialize with inverse limits
-    glm::vec3 minPoint(std::numeric_limits<float>::max());
-    glm::vec3 maxPoint(std::numeric_limits<float>::lowest());
-
-    // If we have no visible objects, return a default small AABB
-    if (visibleRenderers.empty()) {
-        sceneBounds = AABB{glm::vec3(0.0f), glm::vec3(1.0f)};
-    }
-
-    // Expand the bounds to include all visible renderables
-    for (auto* renderable : visibleRenderers) {
-        auto it = rendererMap.find(renderable);
-        if (it != rendererMap.end()) {
-            const AABB& objectBounds = it->second->getBounds();
-
-            glm::vec3 objMin = objectBounds.center - objectBounds.extents;
-            glm::vec3 objMax = objectBounds.center + objectBounds.extents;
-
-            minPoint = glm::min(minPoint, objMin);
-            maxPoint = glm::max(maxPoint, objMax);
-        }
-    }
-
-    // Create and return the encompassing AABB
-    sceneBounds.center = (minPoint + maxPoint) * 0.5f;
-    sceneBounds.extents = (maxPoint - minPoint) * 0.5f;
-}
-
 } // namespace Scene

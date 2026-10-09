@@ -7,12 +7,10 @@ using namespace Rendering;
 
 namespace Systems {
 
-void CameraCulling::frustumCullRenderers(const ViewFrustum viewFrustum, AABB& frameSceneBounds,
-                                         MeshRenderingData& meshRenderingData) {
+void CameraCulling::frustumCullRenderers(const ViewFrustum viewFrustum, MeshRenderingData& meshRenderingData) {
     auto& scene = Scene::Scene::getInstance();
 
     auto visibleObjects = scene.getVisibleRenderers(viewFrustum);
-    scene.getVisibleBounds(viewFrustum, frameSceneBounds);
 
     // Process visible objects
     for (const auto& renderable : visibleObjects) {
@@ -40,8 +38,7 @@ void CameraCulling::frustumCullRenderers(const ViewFrustum viewFrustum, AABB& fr
 
 void CameraCulling::updateFrameContext(FrameContext& frameContext) {
     MeshRenderingData meshRenderingData{};
-    AABB frameSceneBounds{};
-    frustumCullRenderers(frameContext.cameraData.viewFrustum, frameSceneBounds, meshRenderingData);
+    frustumCullRenderers(frameContext.cameraData.viewFrustum, meshRenderingData);
     updateOpaqueModelBuffers(frameContext, meshRenderingData);
     updateTransparentModelBuffers(frameContext, meshRenderingData);
 }
