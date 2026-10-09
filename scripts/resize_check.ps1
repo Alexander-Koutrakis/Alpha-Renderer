@@ -40,6 +40,8 @@ $stderrFile = Join-Path $buildDir "resize.stderr.txt"
 $stdoutFile = Join-Path $buildDir "resize.stdout.txt"
 $proc = Start-Process -FilePath (Join-Path $buildDir "AlphaRenderer.exe") -WorkingDirectory $buildDir `
     -RedirectStandardError $stderrFile -RedirectStandardOutput $stdoutFile -PassThru
+# Touching Handle keeps the process handle open, so ExitCode is still readable after the app has died.
+$null = $proc.Handle
 
 $marker = "RenderingResources created with"
 $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
