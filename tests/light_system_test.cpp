@@ -142,6 +142,41 @@ TEST_CASE("cascade splits blend the logarithmic and uniform schemes") {
 
 // ---------------------------------------------------------------- directional light matrices
 
+TEST_CASE("each cascade matrix covers the part of the camera frustum it is responsible for") {
+    DirectionalEntity entity;
+    DirectionalLight& light = *entity.light;
+    Transform lightTransform;
+    lightTransform.rotation = glm::angleAxis(0.9f, glm::normalize(glm::vec3(1, 0.3f, 0))); // a slanted sun
+    CameraData camera = makeCamera({3, 2, -5});
+
+    LightSystemTestAccess::updateDirectional(light, lightTransform, camera);
+
+    const glm::vec3 forward = Systems::TransformSystem::getForward(lightTransform);
+    CHECK_VEC3(glm::vec3(light.direction), forward);
+
+    const float tanHalfY = std::tan(camera.fov * 0.5f);
+    const float tanHalfX = tanHalfY * camera.aspectRatio;
+    for (uint32_t cascade = 0; cascade < MAX_SHADOW_CASCADE_COUNT; ++cascade) {
+        REQUIRE(isFinite(light.viewProjectionMatrix[cascade]));
+        const float nearZ = cascade == 0 ? camera.nearPlane : light.cascadeSplits[cascade - 1];
+        const float farZ = light.cascadeSplits[cascade];
+        // The eight corners of the camera frustum slice, in world space (camera looks down +Z).
+        for (int corner = 0; corner < 8; ++corner) {
+            const float z = (corner & 4) ? farZ : nearZ;
+            const glm::vec3 local((corner & 1) ? tanHalfX * z : -tanHalfX * z,
+                                  (corner & 2) ? tanHalfY * z : -tanHalfY * z, z);
+            const glm::vec3 world = camera.position + local;
+            const glm::vec3 inLightNdc = ndc(light.viewProjectionMatrix[cascade], world);
+            CHECK_MESSAGE(std::abs(inLightNdc.x) <= 1.0f + 1e-3f, "cascade ", cascade, " corner ", corner, " x ",
+                          inLightNdc.x);
+            CHECK_MESSAGE(std::abs(inLightNdc.y) <= 1.0f + 1e-3f, "cascade ", cascade, " corner ", corner, " y ",
+                          inLightNdc.y);
+            CHECK_MESSAGE(inLightNdc.z >= -1e-3f, "cascade ", cascade, " corner ", corner, " z ", inLightNdc.z);
+            CHECK_MESSAGE(inLightNdc.z <= 1.0f + 1e-3f, "cascade ", cascade, " corner ", corner, " z ", inLightNdc.z);
+        }
+    }
+}
+
 TEST_CASE("a sun straight overhead gives finite cascade matrices") {
     DirectionalEntity entity;
     DirectionalLight& light = *entity.light;

@@ -199,8 +199,9 @@ void LightSystem::calculateCascadeViewProjections(DirectionalLight& dirLight, Ca
         const float finalExtendX = finalLightSpaceAABB.extents.x * extentMultiplier;
         const float finalExtendY = finalLightSpaceAABB.extents.y * extentMultiplier;
 
-        // Get final center in view space for ortho projection centering
-        glm::vec3 finalLightSpaceCenter = glm::vec3(lightView * glm::vec4(snappedWorldCenter, 1.0f));
+        // Center the ortho projection on the middle of the slice's light-space bounds. The mean of the corners (what
+        // the view looks at) is not that middle, and the 10% padding does not cover the difference on a slanted sun.
+        glm::vec3 finalLightSpaceCenter = finalLightSpaceAABB.center;
 
         // Recalculate texel size with final extents and apply final snapping
         const float finalTexelSizeX = (finalExtendX * 2.0f) / shadowMapResolution;
@@ -212,7 +213,9 @@ void LightSystem::calculateCascadeViewProjections(DirectionalLight& dirLight, Ca
         glm::mat4 ortho = glm::orthoLH_ZO(
             finalLightSpaceCenter.x - finalExtendX, finalLightSpaceCenter.x + finalExtendX,
             finalLightSpaceCenter.y - finalExtendY, finalLightSpaceCenter.y + finalExtendY, 0.0f, radius * 5.0f);
+        // Flip Y for Vulkan clip space: the scale and the translation (the ortho is no longer centered on y = 0).
         ortho[1][1] *= -1.0f;
+        ortho[3][1] *= -1.0f;
 
         dirLight.viewProjectionMatrix[i] = ortho * lightView;
     }
