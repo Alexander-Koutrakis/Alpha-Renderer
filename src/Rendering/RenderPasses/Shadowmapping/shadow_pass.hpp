@@ -21,14 +21,6 @@ namespace Rendering {
 
 class ShadowPass {
 public:
-    struct PushConstants {
-        alignas(16) uint32_t matrixIndex;
-        alignas(16) glm::mat4 modelMatrix;
-        alignas(16) glm::vec4 lightPosRange;
-        PushConstants(uint32_t matrixIndex, glm::mat4 modelMatrix, glm::vec4 lightPosRange)
-            : matrixIndex(matrixIndex), modelMatrix(modelMatrix), lightPosRange(lightPosRange) {};
-    };
-
     struct InstancedPushConstants {
         glm::vec4 lightPosRange;
         uint32_t lightMatrixIndex;
