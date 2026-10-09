@@ -76,10 +76,7 @@ void CompositionPass::createFramebuffers() {
 }
 
 void CompositionPass::createPipeline(const CreateInfo& createInfo) {
-    // Create pipeline layout
-    VkDescriptorSetLayout compositionSetLayout = createInfo.compositionDescriptorSetLayout;
-
-    pipelineLayout = createPipelineLayout(device.getDevice(), compositionSetLayout);
+    pipelineLayout = createPipelineLayout(device.getDevice(), createInfo.compositionDescriptorSetLayout);
 
     // Create pipeline configuration
     PipelineConfigInfo pipelineConfig{};
