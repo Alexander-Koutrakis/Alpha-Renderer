@@ -13,6 +13,7 @@
 namespace Systems {
 
 class LightSystem {
+    friend struct LightSystemTestAccess; // tests/light_system_test.cpp reaches the private steps
 public:
     static void updateFrameContext(Rendering::FrameContext& frameContext);
 
