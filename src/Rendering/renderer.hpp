@@ -29,7 +29,8 @@
 namespace Rendering {
 class Renderer {
 public:
-    Renderer(Window& window, Device& device);
+    // materialDescriptorSetLayout is owned by the ResourceManager and must outlive the renderer.
+    Renderer(Window& window, Device& device, VkDescriptorSetLayout materialDescriptorSetLayout);
     ~Renderer();
 
     Renderer(const Renderer&) = delete;
@@ -86,6 +87,7 @@ private:
     void updateFrameContext(VkCommandBuffer commandBuffer, FrameContext& frameContext);
     Window& window;
     Device& device;
+    VkDescriptorSetLayout materialDescriptorSetLayout;
     std::shared_ptr<SwapChain> swapChain;
     std::vector<VkCommandBuffer> commandBuffers;
     std::unique_ptr<RenderingResources> renderingResources;

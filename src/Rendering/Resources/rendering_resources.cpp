@@ -27,7 +27,9 @@ void RenderingResources::setDebugName(VkObjectType objectType, uint64_t handle, 
     }
 }
 
-RenderingResources::RenderingResources(Device& device, SwapChain& swapChain) : device(device), swapChain(swapChain) {
+RenderingResources::RenderingResources(Device& device, SwapChain& swapChain,
+                                       VkDescriptorSetLayout materialDescriptorSetLayout)
+    : device(device), swapChain(swapChain), materialDescriptorSetLayout(materialDescriptorSetLayout) {
     width = swapChain.getExtent().width;
     height = swapChain.getExtent().height;
 
@@ -257,10 +259,6 @@ void RenderingResources::cleanup() {
     vkDeviceWaitIdle(device.getDevice());
 
     // Clean up descriptor set layouts
-    if (materialDescriptorSetLayout != VK_NULL_HANDLE) {
-        vkDestroyDescriptorSetLayout(device.getDevice(), materialDescriptorSetLayout, nullptr);
-        materialDescriptorSetLayout = VK_NULL_HANDLE;
-    }
     if (modelsDescriptorSetLayout != VK_NULL_HANDLE) {
         vkDestroyDescriptorSetLayout(device.getDevice(), modelsDescriptorSetLayout, nullptr);
         modelsDescriptorSetLayout = VK_NULL_HANDLE;
@@ -729,17 +727,6 @@ void RenderingResources::createDescriptorSetLayouts() {
                 });
     setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)modelsDescriptorSetLayout,
                  "ModelsDescriptorSetLayout");
-
-    materialDescriptorSetLayout = createDescriptorSetLayout(
-        device, {
-                    layoutBinding(0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(3, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                    layoutBinding(4, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, VK_SHADER_STAGE_FRAGMENT_BIT),
-                });
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET_LAYOUT, (uint64_t)materialDescriptorSetLayout,
-                 "MaterialDescriptorSetLayout");
 
     //Create descriptor set layout for camera uniform buffer
     cameraDescriptorSetLayout =

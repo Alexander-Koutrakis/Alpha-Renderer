@@ -55,7 +55,7 @@ void AlphaEngine::init() {
 
     loadScene();
 
-    renderer = std::make_unique<Renderer>(*window, *device);
+    renderer = std::make_unique<Renderer>(*window, *device, resourceManager->getPBRDescriptorSetLayout());
 
     keyboardMovementSystem = std::make_unique<KeyboardMovementSystem>(window->getGLFWwindow());
 }
