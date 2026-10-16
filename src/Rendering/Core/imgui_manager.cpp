@@ -135,6 +135,10 @@ void ImGuiManager::setFrameStats(float fps, float frameTime) {
     currentFrameTime = frameTime;
 }
 
+void ImGuiManager::setGpuTimings(const std::vector<GpuTimer::Timing>& timings) {
+    gpuTimings = timings;
+}
+
 void ImGuiManager::beginFrame() {
     // Start the Dear ImGui frame
     ImGui_ImplVulkan_NewFrame();
@@ -188,6 +192,15 @@ void ImGuiManager::renderFPSCounter() {
     if (ImGui::Begin("FPS Counter", nullptr, windowFlags)) {
         ImGui::Text("FPS: %.1f", currentFPS);
         ImGui::Text("Frame Time: %.2f ms", currentFrameTime);
+        if (!gpuTimings.empty()) {
+            ImGui::Separator();
+            float totalMs = 0.0f;
+            for (const GpuTimer::Timing& timing : gpuTimings) {
+                ImGui::Text("%s: %.2f ms", timing.name.c_str(), timing.ms);
+                totalMs += timing.ms;
+            }
+            ImGui::Text("GPU total: %.2f ms", totalMs);
+        }
     }
     ImGui::End();
 }
