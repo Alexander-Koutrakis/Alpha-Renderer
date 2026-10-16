@@ -19,6 +19,7 @@ public:
 
     static void calculatePointLightBounds(Math::AABB& worldBounds, const glm::vec3& position, float range);
 
+    // outerCutoffDegrees is the full cone angle, like SpotLight::outerCutoff.
     static void calculateSpotlightBounds(Math::AABB& worldBounds, const glm::vec3& position, const glm::vec3& direction,
                                          float range, float outerCutoffDegrees);
 
@@ -28,6 +29,6 @@ public:
 
 private:
     static void calculateSpotLightCorners(const glm::vec3& position, const glm::vec3& direction, float range,
-                                          float outerCutoffRadians, std::vector<glm::vec3>& corners);
+                                          float halfAngleRadians, std::vector<glm::vec3>& corners);
 };
 } // namespace Systems

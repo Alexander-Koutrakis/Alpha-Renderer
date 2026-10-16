@@ -86,6 +86,8 @@ struct DirectionalLight : public Light {
 
 struct SpotLight : public Light {
     float range{10.0f};
+    // Full cone angles in degrees (the angle between opposite edges of the cone, like Unity's spot angle), not half
+    // angles: the light buffer uses cos(angle / 2) and the shadow projection's field of view is outerCutoff.
     float innerCutoff{12.5f};
     float outerCutoff{17.5f};
     glm::mat4 viewProjectionMatrix{1.0f};
