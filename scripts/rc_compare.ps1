@@ -90,7 +90,8 @@ $relDir = "build/rc-compare/$name"
 if ($MaxCascade -ge 0) { $relDir = "$relDir/c$MaxCascade" }
 $outDir = Join-Path $root $relDir
 New-Item -ItemType Directory -Force $outDir | Out-Null
-$sceneArgs = if ($Scene -eq "") { @() } else { @("-Scene", $Scene) }
+# A hashtable splat binds by name; an array splat would pass "-Scene" to the script as a positional string.
+$sceneArgs = if ($Scene -eq "") { @{} } else { @{ Scene = $Scene } }
 
 $old = $env:ALPHA_RC_MODE
 try {
