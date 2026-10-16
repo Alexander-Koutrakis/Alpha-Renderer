@@ -4,13 +4,17 @@
 #
 # Renderer::handleWindowResize destroys and rebuilds RenderingResources, which the call-log harnesses never see (they
 # only capture startup). This runs the validation build (build/validation, as validation_check.ps1 does), resizes the
-# window several times (shrink, grow, minimise, restore), then requires: the app is still running, RenderingResources
-# was rebuilt at least once per size change ("RenderingResources created with" in stdout), and no VUID outside
-# scripts/validation_baseline.txt. Needs a GPU and an untouched screen; it is not part of `just check`.
+# window several times (shrink, grow, minimise, restore), then closes it normally and requires: the app was still
+# running before the close, RenderingResources was rebuilt at least once per size change ("RenderingResources created
+# with" in stdout), the app shut down by itself with exit code 0, and no VUID outside scripts/validation_baseline.txt.
+# The normal shutdown matters: vkDestroyDevice runs while the debug messenger is alive, so the validation layer reports
+# every object that was not destroyed (validation_check.ps1 kills the app and never sees that). Needs a GPU and an
+# untouched screen; it is not part of `just check`.
 param(
     [int]$TimeoutSeconds = 120,
     [int]$StepSeconds = 3,
-    [int]$SettleSeconds = 5
+    [int]$SettleSeconds = 5,
+    [int]$ShutdownSeconds = 30
 )
 $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
@@ -67,7 +71,13 @@ Start-Sleep -Seconds $StepSeconds
 [void][AlphaResizeWin32]::ShowWindow($hwnd, $SW_RESTORE)
 Start-Sleep -Seconds $SettleSeconds
 if ($proc.HasExited) { throw "app exited after minimise/restore with code $($proc.ExitCode); see $stderrFile" }
-Stop-Process -Id $proc.Id -Force
+
+# Close the window like a user would (WM_CLOSE -> glfwWindowShouldClose) so every destructor and vkDestroyDevice run.
+[void]$proc.CloseMainWindow()
+if (-not $proc.WaitForExit($ShutdownSeconds * 1000)) {
+    Stop-Process -Id $proc.Id -Force
+    throw "app did not shut down within $ShutdownSeconds s of closing its window; see $stderrFile"
+}
 
 $rebuilds = @(Select-String -Path $stdoutFile -Pattern $marker -SimpleMatch).Count - 1
 $layerLines = @(Select-String -Path $stderrFile -Pattern "validation layer:" -SimpleMatch)
@@ -76,6 +86,10 @@ $baseline = @(Get-Content "scripts/validation_baseline.txt" | Where-Object { $_ 
 $diff = Compare-Object -ReferenceObject $baseline -DifferenceObject $found
 
 $failed = $false
+if ($proc.ExitCode -ne 0) {
+    Write-Host "resize check FAILED: app exited with code $($proc.ExitCode) after closing its window; see $stderrFile"
+    $failed = $true
+}
 if ($rebuilds -lt $sizes.Count) {
     Write-Host "resize check FAILED: RenderingResources rebuilt $rebuilds times for $($sizes.Count) size changes; see $stdoutFile"
     $failed = $true
@@ -89,4 +103,4 @@ if ($diff) {
     $failed = $true
 }
 if ($failed) { exit 1 }
-Write-Host "resize OK: $rebuilds RenderingResources rebuilds, app alive after minimise/restore, $($found.Count) VUIDs (baseline $($baseline.Count))"
+Write-Host "resize OK: $rebuilds RenderingResources rebuilds, app alive after minimise/restore, clean shutdown (exit 0), $($found.Count) VUIDs (baseline $($baseline.Count))"
