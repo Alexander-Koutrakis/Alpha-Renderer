@@ -73,6 +73,8 @@ add_executable(AlphaRenderer
 
   # Rendering Resources
   "src/Rendering/Resources/rendering_resources.cpp"
+  "src/Rendering/Resources/rendering_resources_descriptors.cpp"
+  "src/Rendering/Resources/rendering_resources_frame_contexts.cpp"
   "src/Rendering/Resources/gbuffer.cpp"
   "src/Rendering/Resources/frame_image.cpp"
   "src/Rendering/Resources/frame_descriptor.cpp"

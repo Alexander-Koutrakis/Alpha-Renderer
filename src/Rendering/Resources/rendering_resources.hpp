@@ -29,8 +29,6 @@ public:
     RenderingResources(const RenderingResources&) = delete;
     RenderingResources& operator=(const RenderingResources&) = delete;
 
-    void cleanup();
-
     // Accessor methods for formats and resources
     VkFormat getDepthFormat() const { return depthFormat; }
     VkFormat getPositionFormat() const { return positionFormat; }
@@ -136,11 +134,8 @@ private:
     void createPostProcessResources();
     void loadSMAALUTTextures();
 
-    std::array<FrameContext, MAX_FRAMES_IN_FLIGHT> frameContexts;
-
     Device& device;
     SwapChain& swapChain;
-    std::unique_ptr<GBuffer> gBuffer;
     uint32_t width;
     uint32_t height;
     VkFormat depthFormat{VK_FORMAT_UNDEFINED};
@@ -156,7 +151,26 @@ private:
     VkFormat smaaEdgeFormat{VK_FORMAT_R8G8_UNORM};
     VkFormat smaaBlendFormat{VK_FORMAT_R8G8B8A8_UNORM};
 
+    // Members are destroyed in reverse declaration order after the destructor body (which waits for the device and
+    // destroys the plain handles): descriptors, images, shadow maps, buffers, the G-buffer, and the pool last.
     std::unique_ptr<DescriptorPool> descriptorPool{nullptr};
+    std::unique_ptr<GBuffer> gBuffer;
+
+    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> modelMatrixBuffers{};
+    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> normalMatrixBuffers{};
+    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> cameraUniformBuffers{};
+    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> lightArrayUniformBuffers{};
+    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> cascadeSplitsBuffers{};
+    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> sceneLightingBuffers{};
+    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> lightMatrixBuffers{};
+    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> shadowModelMatrixBuffers{};
+    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> transparencyModelMatrixBuffers{};
+    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> transparencyNormalMatrixBuffers{};
+
+    // Shadow maps: [LightIndex][FrameIndex] - each light has MAX_FRAMES_IN_FLIGHT shadow maps
+    std::array<std::array<std::unique_ptr<ShadowMap>, MAX_FRAMES_IN_FLIGHT>, MAX_DIRECTIONAL_LIGHTS> directionalMaps;
+    std::array<std::array<std::unique_ptr<ShadowMap>, MAX_FRAMES_IN_FLIGHT>, MAX_POINT_LIGHTS> pointlightMaps;
+    std::array<std::array<std::unique_ptr<ShadowMap>, MAX_FRAMES_IN_FLIGHT>, MAX_SPOT_LIGHTS> spotlightMaps;
 
     // Per-frame images
     std::unique_ptr<FrameImage> depthImage;
@@ -176,11 +190,6 @@ private:
     // Depth pyramid is used for ray-depth comparisons; it must be sampled with POINT/NEAREST filtering.
     VkSampler depthPyramidSampler{VK_NULL_HANDLE};
     VkSampler postProcessSampler{VK_NULL_HANDLE};
-
-    // Shadow maps: [LightIndex][FrameIndex] - each light has MAX_FRAMES_IN_FLIGHT shadow maps
-    std::array<std::array<std::unique_ptr<ShadowMap>, MAX_FRAMES_IN_FLIGHT>, MAX_DIRECTIONAL_LIGHTS> directionalMaps;
-    std::array<std::array<std::unique_ptr<ShadowMap>, MAX_FRAMES_IN_FLIGHT>, MAX_POINT_LIGHTS> pointlightMaps;
-    std::array<std::array<std::unique_ptr<ShadowMap>, MAX_FRAMES_IN_FLIGHT>, MAX_SPOT_LIGHTS> spotlightMaps;
 
     // SMAA LUTs (shared) - manually managed for proper sampler/mip settings
     VkImage smaaAreaImage{VK_NULL_HANDLE};
@@ -217,17 +226,6 @@ private:
     std::unique_ptr<FrameDescriptor> rcBuildDescriptor;
     std::unique_ptr<FrameDescriptor> rcResolveDescriptor;
     std::unique_ptr<FrameDescriptor> depthPyramidDescriptor;
-
-    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> modelMatrixBuffers{};
-    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> normalMatrixBuffers{};
-    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> cameraUniformBuffers{};
-    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> lightArrayUniformBuffers{};
-    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> cascadeSplitsBuffers{};
-    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> sceneLightingBuffers{};
-    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> lightMatrixBuffers{};
-    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> shadowModelMatrixBuffers{};
-    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> transparencyModelMatrixBuffers{};
-    std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> transparencyNormalMatrixBuffers{};
 };
 
 } // namespace Rendering
