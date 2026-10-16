@@ -2,15 +2,20 @@
 #
 #   ./scripts/validation_check.ps1
 #   ./scripts/validation_check.ps1 -Scene many_lights     run tests/scenes/many_lights instead of the sample scene
+#   ./scripts/validation_check.ps1 -Sync                  also turn on the layer's synchronization validation
 #
 # Builds a separate scratch tree (build/validation, git-ignored) with ALPHA_ENABLE_VALIDATION, runs the app until it has
 # created its resources plus a settle period, stops it and diffs the unique VUID list against the baseline.
 # Exits 1 on any difference: a new VUID is a regression, a missing one means the baseline file should shrink.
+# -Sync sets VK_KHRONOS_VALIDATION_VALIDATE_SYNC for the app (the layer's own setting, no code change). Its hazards are
+# reported as SYNC-HAZARD-* ids, which are compared with the baseline like VUIDs (so any hazard is new). It is opt-in
+# because it is slower and was not clean when it was added (see findings/sync.md).
 # Needs a GPU and the Vulkan SDK validation layer; it is not part of `just check`.
 param(
     [string]$Scene = "",
     [int]$TimeoutSeconds = 120,
-    [int]$SettleSeconds = 20
+    [int]$SettleSeconds = 20,
+    [switch]$Sync
 )
 $ErrorActionPreference = "Stop"
 Set-Location (Join-Path $PSScriptRoot "..")
@@ -24,6 +29,7 @@ if ($LASTEXITCODE -ne 0) { throw "build failed" }
 # The exe loads libstdc++ and friends from msys64; Git's older copies on PATH make it exit with 0xC0000139.
 $env:PATH = "C:\msys64\mingw64\bin;" + $env:PATH
 
+if ($Sync) { $env:VK_KHRONOS_VALIDATION_VALIDATE_SYNC = "true" }
 $buildScene = Join-Path $buildDir "Assets/Scene"
 if ($Scene -ne "") {
     $sceneSource = "tests/scenes/$Scene"
@@ -46,12 +52,13 @@ if ((Get-Date) -ge $deadline) { Stop-Process -Id $proc.Id -Force; throw "timed o
 Start-Sleep -Seconds $SettleSeconds
 if ($proc.HasExited) { throw "app exited during the run with code $($proc.ExitCode); see $stderrFile" }
 Stop-Process -Id $proc.Id -Force
+Remove-Item Env:VK_KHRONOS_VALIDATION_VALIDATE_SYNC -ErrorAction SilentlyContinue
 if ($Scene -ne "") { Copy-Item "Assets/Scene/Scene.json" $buildScene -Force }
 
 # No output is a valid result (a clean run): the validation build makes Device throw at startup if the layers are
 # missing, and the marker above is only reached after the device exists, so silence cannot mean "layers not loaded".
 $layerLines = @(Select-String -Path $stderrFile -Pattern "validation layer:" -SimpleMatch)
-$found = @($layerLines | ForEach-Object { [regex]::Matches($_.Line, "VUID-[A-Za-z0-9_-]+") } | ForEach-Object Value | Sort-Object -Unique)
+$found = @($layerLines | ForEach-Object { [regex]::Matches($_.Line, "(VUID|SYNC)-[A-Za-z0-9_-]+") } | ForEach-Object Value | Sort-Object -Unique)
 $baseline = @(Get-Content "scripts/validation_baseline.txt" | Where-Object { $_ -and -not $_.StartsWith("#") } | Sort-Object -Unique)
 
 $diff = Compare-Object -ReferenceObject $baseline -DifferenceObject $found
@@ -63,4 +70,5 @@ if ($diff) {
     Write-Host "validation check FAILED; full output in $stderrFile"
     exit 1
 }
-Write-Host "validation OK: $($found.Count) VUIDs, all in the baseline ($($baseline.Count) entries)"
+$mode = if ($Sync) { " (with synchronization validation)" } else { "" }
+Write-Host "validation OK${mode}: $($found.Count) VUIDs, all in the baseline ($($baseline.Count) entries)"

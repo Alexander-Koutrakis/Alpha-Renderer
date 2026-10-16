@@ -62,6 +62,11 @@ validation:
     ./scripts/validation_check.ps1
     ./scripts/validation_check.ps1 -Scene many_lights
 
+# `validation` plus the layer's synchronization validation (opt-in: slower; a hazard is reported as SYNC-HAZARD-*; needs a GPU; not in `check`).
+validation-sync:
+    ./scripts/validation_check.ps1 -Sync
+    ./scripts/validation_check.ps1 -Sync -Scene many_lights
+
 # Resize the window under validation layers: RenderingResources must rebuild cleanly (needs a GPU; not in `check`).
 resize-check:
     ./scripts/resize_check.ps1
