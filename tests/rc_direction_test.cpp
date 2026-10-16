@@ -11,10 +11,6 @@ using namespace glm;
 #include "shaders/common/rc_direction.glsl"
 } // namespace rc_shader
 
-// A test marked should_fail pins a known defect from the radiance cascade review (F2 in RadianceCascadeFixPlan.md).
-// It passes today because the defect makes it fail. When the fix lands it starts failing the other way: remove
-// should_fail then, so the test guards the fix.
-
 namespace {
 
 constexpr float kPi = 3.14159265358979f;
@@ -46,19 +42,6 @@ TEST_CASE("RC probe basis is orthonormal and right-handed around any normal") {
         CHECK(glm::dot(basis[0], basis[2]) == doctest::Approx(0.0f).epsilon(1e-4));
         CHECK(glm::dot(glm::cross(basis[0], basis[1]), basis[2]) == doctest::Approx(1.0f).epsilon(1e-4));
         CHECK(glm::dot(basis[2], normal) == doctest::Approx(1.0f).epsilon(1e-4));
-    }
-}
-
-TEST_CASE("RC merge: a near texel reads exactly its own 2x2 children in the far tile") {
-    for (int nearTile : {2, 4, 8, 16}) {
-        for (int y = 0; y < nearTile; ++y) {
-            for (int x = 0; x < nearTile; ++x) {
-                const auto map = rc_shader::mapNearTexelToFarTile(glm::ivec2(x, y), nearTile);
-                INFO("nearTile " << nearTile << " texel " << x << "," << y);
-                CHECK(map.base == glm::ivec2(2 * x, 2 * y));
-                CHECK(map.frac == glm::vec2(0.5f));
-            }
-        }
     }
 }
 
@@ -112,47 +95,78 @@ TEST_CASE("RC F1: every tile texel direction maps back to its own texel") {
 
 namespace {
 
-// World direction a near texel represents versus the world direction of the far-tile sample the merge reads for it.
-// Returns the worst angle over the near tile.
-float worstMergeAngleDegrees(int nearTile, const glm::vec3& nearNormal, const glm::vec3& farNormal) {
+// For every texel of a near tile, the world direction it represents versus the world direction at the far-tile position the
+// merge reads for it. Returns the worst angle over the texels well inside the far probe's hemisphere (cosine to its normal
+// above 0.5; closer to the horizon the lookup clamps to the outermost texel centre on purpose), and counts the texels
+// below its horizon.
+struct MergeError {
+    float worstDegrees = 0.0f;
+    int visible = 0;
+    int hidden = 0;
+};
+
+MergeError mergeError(int nearTile, const glm::vec3& nearNormal, const glm::vec3& farNormal) {
     const int farTile = nearTile * 2;
     const glm::mat3 nearBasis = rc_shader::buildProbeBasis(nearNormal);
     const glm::mat3 farBasis = rc_shader::buildProbeBasis(farNormal);
-    float worst = 0.0f;
+    MergeError result;
     for (int y = 0; y < nearTile; ++y) {
         for (int x = 0; x < nearTile; ++x) {
             const glm::vec3 nearDir = nearBasis * localTexelDir(x, y, nearTile);
-            const auto map = rc_shader::mapNearTexelToFarTile(glm::ivec2(x, y), nearTile);
-            const glm::vec2 farUV = (glm::vec2(map.base) + map.frac + 0.5f) / float(farTile);
+            const auto lookup = rc_shader::lookupFarTile(nearDir, farBasis, farTile);
+            if (lookup.localZ <= 0.0f) {
+                ++result.hidden;
+                CHECK(rc_shader::probeHorizonWeight(lookup.localZ) < 0.5f);
+            }
+            if (lookup.localZ <= 0.5f) {
+                continue;
+            }
+            ++result.visible;
+            const glm::vec2 farUV = (glm::vec2(lookup.base) + lookup.frac + 0.5f) / float(farTile);
             const glm::vec3 farDir = farBasis * rc_shader::hemisphereDirFromUV(farUV);
-            worst = std::max(worst, angleDegrees(nearDir, farDir));
+            result.worstDegrees = std::max(result.worstDegrees, angleDegrees(nearDir, farDir));
         }
     }
-    return worst;
+    return result;
 }
 
 } // namespace
 
-// Pitch of one far texel across the hemisphere: 180 degrees over the tile width.
-TEST_CASE("RC merge: probes with the same normal merge the matching direction") {
-    const glm::vec3 normal = glm::normalize(glm::vec3(0.3f, -0.2f, 0.9f));
-    for (int nearTile : {4, 8, 16}) {
-        const float pitch = 180.0f / float(nearTile * 2);
-        const float worst = worstMergeAngleDegrees(nearTile, normal, normal);
-        INFO("nearTile " << nearTile << ": worst direction error " << worst << " degrees, far texel pitch " << pitch);
-        CHECK(worst <= pitch);
+// F2 (fixed): the merge used to index the far tile by texel coordinate. A far probe with a different normal has a different
+// tangent frame, so the same texel is another world direction (172 to 179 degrees off for a 45 degree normal change).
+// The far position is now found from the world direction in the far probe's own frame.
+TEST_CASE("RC F2: probes with different normals merge the matching direction") {
+    const glm::vec3 nearNormal(0.0f, 0.0f, 1.0f);
+    const glm::vec3 tiltedNormals[] = {
+        {0.0f, std::sin(kPi / 4.0f), std::cos(kPi / 4.0f)}, // 45 degrees away
+        glm::normalize(glm::vec3(0.3f, -0.2f, 0.9f)),       // a mild tilt
+        glm::normalize(glm::vec3(-0.7f, 0.1f, 0.7f)),       // another frame
+    };
+    for (const glm::vec3& farNormal : tiltedNormals) {
+        for (int nearTile : {2, 4, 8, 16}) {
+            const MergeError e = mergeError(nearTile, nearNormal, farNormal);
+            INFO("nearTile " << nearTile << " farNormal " << farNormal.x << ", " << farNormal.y << ", " << farNormal.z
+                             << ": worst direction error " << e.worstDegrees << " degrees over " << e.visible
+                             << " checked texels (" << e.hidden << " below the far horizon)");
+            CHECK(e.visible > 0);
+            CHECK(e.worstDegrees < 0.5f);
+        }
     }
 }
 
-// F2: the merge indexes the far tile by texel coordinate. A far probe with a different normal has a different tangent
-// frame, so the same texel is another world direction and the merged radiance points the wrong way.
-TEST_CASE("RC F2: probes with different normals merge the matching direction" * doctest::should_fail()) {
-    const glm::vec3 nearNormal(0.0f, 0.0f, 1.0f);
-    const glm::vec3 farNormal(0.0f, std::sin(kPi / 4.0f), std::cos(kPi / 4.0f)); // 45 degrees away
-    for (int nearTile : {4, 8, 16}) {
-        const float pitch = 180.0f / float(nearTile * 2);
-        const float worst = worstMergeAngleDegrees(nearTile, nearNormal, farNormal);
-        INFO("nearTile " << nearTile << ": worst direction error " << worst << " degrees, far texel pitch " << pitch);
-        CHECK(worst <= pitch);
+TEST_CASE("RC F2: probes with the same normal read the same direction and see all of it") {
+    const glm::vec3 normal = glm::normalize(glm::vec3(0.3f, -0.2f, 0.9f));
+    for (int nearTile : {2, 4, 8, 16}) {
+        const MergeError e = mergeError(nearTile, normal, normal);
+        INFO("nearTile " << nearTile << ": worst direction error " << e.worstDegrees << " degrees");
+        CHECK(e.hidden == 0);
+        CHECK(e.worstDegrees < 0.5f);
     }
+}
+
+TEST_CASE("RC F2: a probe's horizon weight is 0 below its horizon and 1 well above it") {
+    CHECK(rc_shader::probeHorizonWeight(-0.5f) == 0.0f);
+    CHECK(rc_shader::probeHorizonWeight(0.5f) == 1.0f);
+    CHECK(rc_shader::probeHorizonWeight(0.05f) > 0.0f);
+    CHECK(rc_shader::probeHorizonWeight(0.05f) < 1.0f);
 }

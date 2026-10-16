@@ -32,20 +32,28 @@ vec2 hemisphereUVFromDir(vec3 dir) {
     return clamp(e * 0.5 + 0.5, vec2(0.001), vec2(0.999));
 }
 
-// Merge: where a near-cascade tile texel reads the far cascade's tile (tile coordinates, no probe orientation applied).
-struct FarTileMap {
-    ivec2 base;   // first of the 2x2 far texels
-    vec2 frac;    // bilinear weight inside that block
+// Merge: where a far probe holds the direction a near texel represents. Every probe has its own tangent frame, so the
+// direction is converted through world space: the far texel is found from the world direction, never by tile coordinate.
+struct FarTileLookup {
+    ivec2 base;    // first of the 2x2 far texels to interpolate
+    vec2 frac;     // bilinear weight inside that block
+    float localZ;  // cosine of the angle between the direction and the far probe's normal; <= 0: below its horizon
 };
 
-FarTileMap mapNearTexelToFarTile(ivec2 nearTile, int nearTileSize) {
-    int farTileSize = nearTileSize * 2;
-    vec2 nearTileUV = (vec2(nearTile) + 0.5) / float(nearTileSize);  // [0,1] within tile
-    vec2 farTileFloat = nearTileUV * float(farTileSize) - 0.5;       // continuous far coord
-    FarTileMap result;
-    result.base = clamp(ivec2(floor(farTileFloat)), ivec2(0), ivec2(farTileSize - 2));
-    result.frac = fract(farTileFloat);
+FarTileLookup lookupFarTile(vec3 worldDir, mat3 farBasis, int farTileSize) {
+    vec3 local = transpose(farBasis) * worldDir;
+    FarTileLookup result;
+    result.localZ = local.z;
+    vec2 uv = hemisphereUVFromDir(normalize(vec3(local.x, local.y, max(local.z, 0.01))));
+    vec2 f = uv * float(farTileSize) - 0.5;                // texel centres at integers
+    result.base = clamp(ivec2(floor(f)), ivec2(0), ivec2(farTileSize - 2));
+    result.frac = clamp(f - vec2(result.base), vec2(0.0), vec2(1.0));
     return result;
+}
+
+// How much a probe can say about a direction, from the direction's cosine to the probe's normal.
+float probeHorizonWeight(float localZ) {
+    return smoothstep(-0.1, 0.2, localZ);
 }
 
 #endif
