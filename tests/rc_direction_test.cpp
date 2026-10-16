@@ -11,9 +11,9 @@ using namespace glm;
 #include "shaders/common/rc_direction.glsl"
 } // namespace rc_shader
 
-// Tests marked should_fail pin a known defect from the radiance cascade review (F1, F2 in RadianceCascadeFixPlan.md).
-// They pass today because the defect makes them fail. When the fix lands the test starts failing the other way:
-// remove should_fail then, so the test guards the fix.
+// A test marked should_fail pins a known defect from the radiance cascade review (F2 in RadianceCascadeFixPlan.md).
+// It passes today because the defect makes it fail. When the fix lands it starts failing the other way: remove
+// should_fail then, so the test guards the fix.
 
 namespace {
 
@@ -29,7 +29,7 @@ glm::vec2 texelUV(int x, int y, int tileSize) {
 
 // Direction of a tile texel in the probe's local frame (z = normal), exactly as rc_build_cascade writes it.
 glm::vec3 localTexelDir(int x, int y, int tileSize) {
-    return rc_shader::hemisphereDirFromUV(texelUV(x, y, tileSize), rc_shader::computeHemisphereShrink(tileSize));
+    return rc_shader::hemisphereDirFromUV(texelUV(x, y, tileSize));
 }
 
 } // namespace
@@ -62,9 +62,10 @@ TEST_CASE("RC merge: a near texel reads exactly its own 2x2 children in the far 
     }
 }
 
-// F1: the octahedral map covers the whole [0,1]^2 tile, but only the diamond |x|+|y| <= 1 is the upper hemisphere. The
-// corners are folded onto the horizon (z = 0), so a large part of each tile holds grazing rays that the resolve never reads.
-TEST_CASE("RC F1: no tile texel is a horizon ray" * doctest::should_fail()) {
+// F1 (fixed): the old octahedral map folded the corners of the tile onto the horizon (z = 0), so about half of each large
+// tile held grazing rays that the resolve never read. With the hemi-octahedral map the outermost texel centre is half a
+// texel inside the horizon, so its cosine to the normal is about 1/tileSize.
+TEST_CASE("RC F1: no tile texel is a horizon ray") {
     for (int tileSize : {2, 4, 8, 16, 32}) {
         float minZ = 1.0f;
         for (int y = 0; y < tileSize; ++y) {
@@ -73,13 +74,13 @@ TEST_CASE("RC F1: no tile texel is a horizon ray" * doctest::should_fail()) {
             }
         }
         INFO("tileSize " << tileSize << " lowest texel z (cos of angle to normal) " << minZ);
-        CHECK(minZ > 0.05f);
+        CHECK(minZ >= 0.9f / float(tileSize));
     }
 }
 
 // F1: cascade 0 (2x2 tile) has only four rays. They must spread over the hemisphere: for uniformly distributed directions
-// the mean cosine to the normal is 0.5. The window is wide on purpose (four samples), the current value is about 0.16.
-TEST_CASE("RC F1: cascade 0 rays are not all grazing" * doctest::should_fail()) {
+// the mean cosine to the normal is 0.5. The window is wide on purpose (four samples), it was 0.155 with the old map.
+TEST_CASE("RC F1: cascade 0 rays are not all grazing") {
     float meanCos = 0.0f;
     for (int y = 0; y < 2; ++y) {
         for (int x = 0; x < 2; ++x) {
@@ -92,15 +93,14 @@ TEST_CASE("RC F1: cascade 0 rays are not all grazing" * doctest::should_fail()) 
 }
 
 // F1: the resolve reads a direction by inverting the build mapping. Every texel the build writes must be found again.
-TEST_CASE("RC F1: every tile texel direction maps back to its own texel" * doctest::should_fail()) {
+TEST_CASE("RC F1: every tile texel direction maps back to its own texel") {
     for (int tileSize : {2, 4, 8, 16}) {
-        const float shrink = rc_shader::computeHemisphereShrink(tileSize);
         int lost = 0;
         for (int y = 0; y < tileSize; ++y) {
             for (int x = 0; x < tileSize; ++x) {
-                const glm::vec2 uv = rc_shader::hemisphereUVFromDir(localTexelDir(x, y, tileSize), shrink);
+                const glm::vec2 uv = rc_shader::hemisphereUVFromDir(localTexelDir(x, y, tileSize));
                 const glm::vec2 expected = texelUV(x, y, tileSize);
-                if (glm::any(glm::greaterThan(glm::abs(uv - expected), glm::vec2(0.5f / float(tileSize))))) {
+                if (glm::any(glm::greaterThan(glm::abs(uv - expected), glm::vec2(1e-4f)))) {
                     ++lost;
                 }
             }
@@ -124,8 +124,7 @@ float worstMergeAngleDegrees(int nearTile, const glm::vec3& nearNormal, const gl
             const glm::vec3 nearDir = nearBasis * localTexelDir(x, y, nearTile);
             const auto map = rc_shader::mapNearTexelToFarTile(glm::ivec2(x, y), nearTile);
             const glm::vec2 farUV = (glm::vec2(map.base) + map.frac + 0.5f) / float(farTile);
-            const glm::vec3 farDir =
-                farBasis * rc_shader::hemisphereDirFromUV(farUV, rc_shader::computeHemisphereShrink(farTile));
+            const glm::vec3 farDir = farBasis * rc_shader::hemisphereDirFromUV(farUV);
             worst = std::max(worst, angleDegrees(nearDir, farDir));
         }
     }

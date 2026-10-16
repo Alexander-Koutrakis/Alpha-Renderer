@@ -306,8 +306,7 @@ void main() {
 
     // World position at probe center (ray start)
     vec3 worldPos = gbufPos.xyz;
-    float hemiShrink = computeHemisphereShrink(pc.tileSize);
-    vec3 localDir = hemisphereDirFromUV(tileUV, hemiShrink);
+    vec3 localDir = hemisphereDirFromUV(tileUV);
     vec3 worldDir = normalize(probeBasis * localDir);
 
     // Surface bias: offset probe origin along normal BEFORE computing ray start.

@@ -225,8 +225,7 @@ RadianceIntervalSample sampleRadianceInterval(
         float horizonWeight = smoothstep(-0.1, 0.2, localDir.z);
         localDir.z = max(localDir.z, 0.01);
         localDir = normalize(localDir);
-        float hemiShrink = computeHemisphereShrink(params.tileSize);
-        vec2 probeUV = hemisphereUVFromDir(localDir, hemiShrink);
+        vec2 probeUV = hemisphereUVFromDir(localDir);
         if (probeUV.x < 0.0) {
             continue;
         }
@@ -355,7 +354,6 @@ IntegrationResult integrateDiffuseGI(ivec2 pixel, const ScreenSample screenSampl
     mat3 pixelBasis = buildProbeBasis(screenSample.normal);
 
     vec3 totalIrradiance = vec3(0.0);
-    const float hemiShrink = computeHemisphereShrink(cascade0.tileSize);
     // Reduced jitter amplitude from 0.07 to 0.03 to minimize frame-to-frame noise
     // The temporal accumulation will handle the rest of the variance smoothing
     float frameJitter = fract(float(pc.temporalFrame) * 0.61803398875);
@@ -366,7 +364,7 @@ IntegrationResult integrateDiffuseGI(ivec2 pixel, const ScreenSample screenSampl
             vec2 uv = (vec2(float(x) + 0.5, float(y) + 0.5) + jitter) * vec2(INV_WIDTH, INV_HEIGHT);
             uv = clamp(uv, vec2(0.02), vec2(0.98));
 
-            vec3 localDir = hemisphereDirFromUV(uv, hemiShrink);
+            vec3 localDir = hemisphereDirFromUV(uv);
             vec3 worldDir = normalize(pixelBasis * localDir);
 
             float ndotl = max(dot(screenSample.normal, worldDir), 0.0);
