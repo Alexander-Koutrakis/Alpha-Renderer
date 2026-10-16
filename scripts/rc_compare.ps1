@@ -22,7 +22,7 @@
 param(
     [string]$Scene = "",
     [string]$BuildDir = "build",
-    [int]$SettleSeconds = 20,
+    [ValidateRange(1, 300)][int]$SettleFrames = 100,
     [int]$MaxCascade = -1
 )
 $ErrorActionPreference = "Stop"
@@ -103,7 +103,7 @@ try {
         }
         $env:ALPHA_RC_MODE = $mode
         Write-Host "== ALPHA_RC_MODE=$mode"
-        & (Join-Path $PSScriptRoot "screenshot_diff.ps1") -BuildDir $BuildDir -Update -SettleSeconds $SettleSeconds `
+        & (Join-Path $PSScriptRoot "screenshot_diff.ps1") -BuildDir $BuildDir -Update -SettleFrames $SettleFrames `
             -Baseline $target @sceneArgs
         if ($LASTEXITCODE -ne 0) { throw "capture failed for mode $mode" }
     }

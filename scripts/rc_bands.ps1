@@ -11,14 +11,14 @@
 param(
     [string]$Scene = "",
     [string]$BuildDir = "build",
-    [int]$SettleSeconds = 20
+    [ValidateRange(1, 300)][int]$SettleFrames = 100
 )
 $ErrorActionPreference = "Stop"
 $reach = @(0.32, 1.28, 5.12, 20.48, 81.92, 327.68)
 $rows = @()
 for ($k = 0; $k -le 5; $k++) {
     $scenArgs = if ($Scene -eq "") { @() } else { @("-Scene", $Scene) }
-    $out = & (Join-Path $PSScriptRoot "rc_compare.ps1") -MaxCascade $k -BuildDir $BuildDir -SettleSeconds $SettleSeconds @scenArgs
+    $out = & (Join-Path $PSScriptRoot "rc_compare.ps1") -MaxCascade $k -BuildDir $BuildDir -SettleFrames $SettleFrames @scenArgs
     if ($LASTEXITCODE -ne 0 -and $null -ne $LASTEXITCODE) { throw "rc_compare failed for k=$k" }
     $line = $out | Where-Object { $_ -is [string] -and $_ -like "RESULT*" } | Select-Object -Last 1
     if (-not $line) { throw "no RESULT line for k=$k" }

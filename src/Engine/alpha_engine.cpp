@@ -1,7 +1,12 @@
 #include "alpha_engine.hpp"
 #include "Rendering/Core/vk_check.hpp"
 
+#include "Engine/log.hpp"
+
 #include <chrono>
+#include <cstdlib>
+#include <stdexcept>
+#include <string>
 
 using namespace Rendering;
 using namespace Resources;
@@ -10,8 +15,37 @@ using namespace Systems;
 // Define deltaTime here
 float AlphaEngine::deltaTime = 0.0f;
 
+namespace {
+
+constexpr int MAX_CAPTURE_FRAME = 300;
+
+// ALPHA_CAPTURE_FRAME=N (1 to MAX_CAPTURE_FRAME): after N rendered frames the engine logs "capture frame N reached" and stops
+// rendering, so the window keeps showing exactly frame N. The screenshot, validation and RC comparison scripts wait for that
+// line instead of sleeping for a number of seconds, which makes a run's length independent of the frame rate. 0 = off.
+int captureFrameFromEnvironment() {
+    const char* value = std::getenv("ALPHA_CAPTURE_FRAME");
+    if (value == nullptr) {
+        return 0;
+    }
+    int frame = 0;
+    try {
+        frame = std::stoi(value);
+    } catch (const std::exception&) {
+        frame = 0;
+    }
+    if (frame < 1 || frame > MAX_CAPTURE_FRAME) {
+        throw std::runtime_error(std::string("ALPHA_CAPTURE_FRAME must be 1 to ") + std::to_string(MAX_CAPTURE_FRAME) +
+                                 ", got: " + value);
+    }
+    return frame;
+}
+
+} // namespace
+
 void AlphaEngine::run() {
     init();
+    const int captureFrame = captureFrameFromEnvironment();
+    int framesRendered = 0;
     auto currentTime = std::chrono::high_resolution_clock::now();
     deltaTime = 0.0f;
 
@@ -22,6 +56,10 @@ void AlphaEngine::run() {
 
     while (!window->shouldClose()) {
         glfwPollEvents();
+        if (captureFrame > 0 && framesRendered >= captureFrame) {
+            glfwWaitEventsTimeout(0.05);
+            continue;
+        }
         auto newTime = std::chrono::high_resolution_clock::now();
         deltaTime = std::chrono::duration<float, std::chrono::seconds::period>(newTime - currentTime).count();
         currentTime = newTime;
@@ -43,6 +81,10 @@ void AlphaEngine::run() {
         keyboardMovementSystem->run(deltaTime);
         Systems::CameraSystem::run(*window);
         renderer->run();
+        framesRendered++;
+        if (framesRendered == captureFrame) {
+            Log::info("capture frame ", captureFrame, " reached");
+        }
     }
 
     VK_CHECK(vkDeviceWaitIdle(device->getDevice()));

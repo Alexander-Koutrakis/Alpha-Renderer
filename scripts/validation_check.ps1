@@ -5,7 +5,7 @@
 #   ./scripts/validation_check.ps1 -Sync                  also turn on the layer's synchronization validation
 #
 # Builds a separate scratch tree (build/validation, git-ignored) with ALPHA_ENABLE_VALIDATION, runs the app until it has
-# created its resources plus a settle period, stops it and diffs the unique VUID list against the baseline.
+# created its resources and rendered ALPHA_CAPTURE_FRAME (-SettleFrames, default 100, max 300) frames, stops it and diffs the unique VUID list against the baseline.
 # Exits 1 on any difference: a new VUID is a regression, a missing one means the baseline file should shrink.
 # -Sync sets VK_KHRONOS_VALIDATION_VALIDATE_SYNC for the app (the layer's own setting, no code change). Its hazards are
 # reported as SYNC-HAZARD-* ids, which are compared with the baseline like VUIDs (so any hazard is new). It is opt-in
@@ -14,7 +14,7 @@
 param(
     [string]$Scene = "",
     [int]$TimeoutSeconds = 120,
-    [int]$SettleSeconds = 20,
+    [ValidateRange(1, 300)][int]$SettleFrames = 100,
     [switch]$Sync
 )
 $ErrorActionPreference = "Stop"
@@ -38,6 +38,7 @@ if ($Scene -ne "") {
 }
 $stderrFile = Join-Path $buildDir "run.stderr.txt"
 $stdoutFile = Join-Path $buildDir "run.stdout.txt"
+$env:ALPHA_CAPTURE_FRAME = "$SettleFrames"
 $proc = Start-Process -FilePath (Join-Path $buildDir "AlphaRenderer.exe") -WorkingDirectory $buildDir `
     -RedirectStandardError $stderrFile -RedirectStandardOutput $stdoutFile -PassThru
 
@@ -49,7 +50,14 @@ while ((Get-Date) -lt $deadline) {
     Start-Sleep -Milliseconds 500
 }
 if ((Get-Date) -ge $deadline) { Stop-Process -Id $proc.Id -Force; throw "timed out waiting for '$marker'" }
-Start-Sleep -Seconds $SettleSeconds
+$frameMarker = "capture frame $SettleFrames reached"
+$deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+while ((Get-Date) -lt $deadline -and -not $proc.HasExited) {
+    if (Select-String -Path $stdoutFile -Pattern $frameMarker -SimpleMatch -Quiet) { break }
+    Start-Sleep -Milliseconds 200
+}
+Remove-Item Env:ALPHA_CAPTURE_FRAME -ErrorAction SilentlyContinue
+if (-not $proc.HasExited -and -not (Select-String -Path $stdoutFile -Pattern $frameMarker -SimpleMatch -Quiet)) { Stop-Process -Id $proc.Id -Force; throw "timed out waiting for '$frameMarker'" }
 if ($proc.HasExited) { throw "app exited during the run with code $($proc.ExitCode); see $stderrFile" }
 Stop-Process -Id $proc.Id -Force
 Remove-Item Env:VK_KHRONOS_VALIDATION_VALIDATE_SYNC -ErrorAction SilentlyContinue
