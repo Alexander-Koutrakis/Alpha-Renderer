@@ -5,6 +5,7 @@
 #include "Rendering/Core/compute_pipeline.hpp"
 #include "Rendering/Core/descriptors.hpp"
 #include "Rendering/rendering_constants.hpp"
+#include "rc_bands.hpp"
 #include "Scene/scene.hpp"
 
 #include <array>
@@ -92,13 +93,8 @@ private:
         uint32_t groupsY{0};
     };
 
-    struct CascadeBand {
-        float start = 0.0f;
-        float length = 0.0f;
-    };
-    CascadeDispatchInfo prepareCascadeDispatch(uint32_t cascadeIndex, const CascadeBand& band) const;
+    CascadeDispatchInfo prepareCascadeDispatch(uint32_t cascadeIndex) const;
     void dispatchCascade(VkCommandBuffer cmd, const CascadeDispatchInfo& dispatchInfo) const;
-    void computeCascadeBands();
 
     Device& device;
     CreateInfo info;
@@ -117,7 +113,6 @@ private:
     std::unique_ptr<ComputePipeline> rcMergePipeline;
     std::unique_ptr<ComputePipeline> rcReferencePipeline;
     std::unique_ptr<ComputePipeline> rcResolvePipeline;
-    std::array<CascadeBand, Rendering::RC_CASCADE_COUNT> cascadeBands{};
 };
 
 } // namespace Rendering

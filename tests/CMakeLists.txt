@@ -15,6 +15,7 @@ add_executable(AlphaTests
   light_system_test.cpp
   timestamp_math_test.cpp
   rc_direction_test.cpp
+  rc_bands_test.cpp
 
   ${CMAKE_SOURCE_DIR}/src/Math/AABB.cpp
   ${CMAKE_SOURCE_DIR}/src/Math/view_frustum.cpp

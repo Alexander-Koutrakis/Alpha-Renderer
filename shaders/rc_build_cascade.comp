@@ -229,22 +229,11 @@ vec4 traceWorldSpace(vec3 worldStart, vec3 worldDir, float maxDistance, ivec2 or
         float combinedAttenuation = backfaceAttenuation * selfHitAttenuation;
         vec3 radiance = incident * hitAlbedo * kD * (1.0 / PI) * combinedAttenuation;
         
-        // Beta (transmittance) for opaque surface hits:
-        // For diffuse GI with opaque geometry, a hit should block most far cascade contribution.
-        // We use a steep falloff so hits near interval end still allow smooth cascade blending,
-        // but hits in the first ~70% of the interval are effectively opaque.
-        float normalizedT = actualT / maxDistance;
-        
-        // Smooth hermite curve: steep near 0, gradual near 1
-        // This prevents the harsh cascade boundary artifact
-        float beta = smoothstep(0.0, 1.0, normalizedT);
-        beta = beta * beta;  // Square for even steeper falloff
-        
-        // Allow beta to reach 1.0 at the interval end so cascade handoff can be continuous.
-        // (Clamping to <1 permanently makes "end-of-interval hits" artificially block far cascades,
-        // which can show up as dark seams/bands at cascade transitions.)
-        beta = clamp(beta, 0.0, 1.0);
-        
+        // An opaque hit blocks everything behind it: beta = 0 (a miss returns beta = 1). Interval merging
+        // L(0..2) = L(0..1) + beta(0..1) * L(1..2) is only exact for that; a soft beta passes far light through a surface
+        // and counts the light twice.
+        float beta = 0.0;
+
         return vec4(radiance, beta);
     }
     

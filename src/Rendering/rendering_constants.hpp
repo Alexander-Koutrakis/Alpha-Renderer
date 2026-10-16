@@ -30,5 +30,4 @@ constexpr uint32_t RC_BASE_TILE_SIZE = 2; // i=0 tile: 2x2 = 4 directions per pr
 constexpr uint32_t RC_PROBE_STRIDE0_PX = 2;
 constexpr uint32_t RC_DEPTH_MIP_LEVELS = 0;
 constexpr float RC_BASE_INTERVAL_LENGTH = 0.08f;
-constexpr float RC_INTERVAL_OVERLAP_FRACTION = 0.15f;
 } // namespace Rendering
