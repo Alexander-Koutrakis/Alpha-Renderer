@@ -56,4 +56,19 @@ float probeHorizonWeight(float localZ) {
     return smoothstep(-0.1, 0.2, localZ);
 }
 
+// Resolve: the directions one pixel integrates over are the cells of a cellCounts grid on its own hemisphere map, plus a
+// small per-frame jitter in cell units.
+vec3 resolveSampleDirection(ivec2 cell, ivec2 cellCounts, vec2 jitter) {
+    vec2 uv = (vec2(cell) + 0.5 + jitter) / vec2(cellCounts);
+    return hemisphereDirFromUV(clamp(uv, vec2(0.02), vec2(0.98)));
+}
+
+// Irradiance E = integral of L cos(theta) dOmega from samples, sumLCos = sum of L_i * cos_i and sumCos = sum of cos_i.
+// The map's texels do not subtend equal solid angles, so a fixed 2*PI/N weight is biased (+41% for a 2x2 grid). Dividing by
+// the cosine sum is the cosine-weighted mean of L times PI, which is exact for a uniform field whatever the sample layout.
+const float RC_PI = 3.14159265359;
+vec3 irradianceFromSamples(vec3 sumLCos, float sumCos) {
+    return RC_PI * sumLCos / sumCos;
+}
+
 #endif

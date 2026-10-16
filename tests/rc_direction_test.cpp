@@ -170,3 +170,47 @@ TEST_CASE("RC F2: a probe's horizon weight is 0 below its horizon and 1 well abo
     CHECK(rc_shader::probeHorizonWeight(0.05f) > 0.0f);
     CHECK(rc_shader::probeHorizonWeight(0.05f) < 1.0f);
 }
+
+namespace {
+
+// Irradiance at a surface with normal z of the radiance field L(direction), estimated the way rc_resolve_indirect does:
+// one sample per cell of a cells x cells grid on the hemisphere map, weighted by cosine.
+template <typename Field> float estimateIrradiance(int cells, Field radiance) {
+    float sumLCos = 0.0f;
+    float sumCos = 0.0f;
+    for (int y = 0; y < cells; ++y) {
+        for (int x = 0; x < cells; ++x) {
+            const glm::vec3 dir =
+                rc_shader::resolveSampleDirection(glm::ivec2(x, y), glm::ivec2(cells), glm::vec2(0.0f));
+            sumLCos += radiance(dir) * dir.z;
+            sumCos += dir.z;
+        }
+    }
+    return rc_shader::irradianceFromSamples(glm::vec3(sumLCos), sumCos).x;
+}
+
+} // namespace
+
+// Resolve quadrature: the hemisphere map has unequal texel solid angles, so weighting every sample by 2*PI/N over-estimates
+// the irradiance of a uniform field (by 41% for the 2x2 grid the resolve uses: four rays at 45 degrees). A field of
+// constant radiance 1 must give exactly PI.
+TEST_CASE("RC resolve: a uniform radiance field has irradiance PI") {
+    for (int cells : {2, 4}) {
+        const float e = estimateIrradiance(cells, [](const glm::vec3&) { return 1.0f; });
+        INFO(cells << "x" << cells << " samples: irradiance " << e << ", exact " << kPi);
+        CHECK(e == doctest::Approx(kPi).epsilon(1e-4));
+    }
+}
+
+// Four samples cannot integrate a directional field exactly, but a smooth one should land within about 10%. L = cos(theta)
+// has the exact irradiance 2*PI/3; L = 1 + x/2 integrates to PI because the x term cancels by symmetry.
+TEST_CASE("RC resolve: smooth radiance fields are integrated within 10%") {
+    for (int cells : {2, 4}) {
+        const float cosine = estimateIrradiance(cells, [](const glm::vec3& d) { return d.z; });
+        const float tilted = estimateIrradiance(cells, [](const glm::vec3& d) { return 1.0f + 0.5f * d.x; });
+        INFO(cells << "x" << cells << " samples: cos field " << cosine << " (exact " << 2.0f * kPi / 3.0f
+                   << "), tilted field " << tilted << " (exact " << kPi << ")");
+        CHECK(cosine == doctest::Approx(2.0f * kPi / 3.0f).epsilon(0.10));
+        CHECK(tilted == doctest::Approx(kPi).epsilon(0.10));
+    }
+}
