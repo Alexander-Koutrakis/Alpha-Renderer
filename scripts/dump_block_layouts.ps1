@@ -3,7 +3,8 @@
 # Reads build/shader-check/*.spv (produced by scripts/check_shaders.ps1) through `spirv-cross --reflect`
 # and writes build/shader-check/block_layouts.txt, one line per fact:
 #   block <shader> <BlockName> <ubo|push|struct> <size in bytes>
-#   member <name> <offset> <array stride> <array length>   (stride and length are 0 if not an array)
+#   member <name> <offset> <array stride> <array length> <type>   (stride and length are 0 if not an array;
+#   type is the GLSL scalar, vector or matrix type, or `struct` for a member whose type is a struct)
 # `struct` blocks are structs used as array elements of a uniform block (their size is the array stride).
 # spirv-cross lists only blocks a shader actually uses, so an unused block is not dumped.
 $ErrorActionPreference = "Stop"
@@ -25,7 +26,7 @@ function Get-TypeSize([string]$type) {
     }
 }
 
-function Add-Members($lines, $members) {
+function Add-Members($lines, $members, $types) {
     foreach ($m in $members) {
         if ($null -eq $m.offset) { throw "dump_block_layouts: member '$($m.name)' has no offset" }
         $stride = 0
@@ -35,7 +36,8 @@ function Add-Members($lines, $members) {
             $stride = $m.array_stride
             $count = @($m.array)[0]
         }
-        $lines.Add("member $($m.name) $($m.offset) $stride $count")
+        $type = if ($types.PSObject.Properties[$m.type]) { "struct" } else { $m.type }
+        $lines.Add("member $($m.name) $($m.offset) $stride $count $type")
     }
 }
 
@@ -65,14 +67,14 @@ foreach ($spv in $spvs) {
             $size = $last.offset + (Get-TypeSize $last.type)
         }
         $lines.Add("block $shader $($block.name) $($entry.Kind) $size")
-        Add-Members $lines $members
+        Add-Members $lines $members $types
 
         # A struct used as an array element: dump its layout too, sized by the array stride.
         foreach ($m in $members) {
             if ($m.array -and $types.PSObject.Properties[$m.type]) {
                 $struct = $types.($m.type)
                 $lines.Add("block $shader $($struct.name) struct $($m.array_stride)")
-                Add-Members $lines $struct.members
+                Add-Members $lines $struct.members $types
             }
         }
     }

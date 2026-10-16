@@ -23,11 +23,12 @@
     },
     {
       "name": "release",
-      "displayName": "Release",
+      "displayName": "Release, warnings as errors",
       "inherits": "mingw",
       "binaryDir": "${sourceDir}/build/release",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release"
+        "CMAKE_BUILD_TYPE": "Release",
+        "ALPHA_WARNINGS_AS_ERRORS": "ON"
       }
     }
   ],

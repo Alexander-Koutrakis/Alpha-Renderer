@@ -6,12 +6,19 @@ default:
     @just --list
 
 # Everything that must be green.
-check: build shaders format-check tidy test
+check: build shaders format-check tidy test release
 
 # Configure and build with warnings visible (Ninja + MinGW, Debug).
 build:
     cmake --preset debug
     cmake --build --preset debug
+
+# Release build (-O3, -Werror, no validation layers) and its unit tests, so the optimised configuration cannot rot.
+release: shaders
+    cmake --preset release
+    cmake --build --preset release
+    if (-not (Select-String -Path build/release/CMakeCache.txt -Pattern 'ALPHA_ENABLE_VALIDATION:BOOL=OFF' -Quiet)) { Write-Error "release: validation layers are on in the release build"; exit 1 }
+    ctest --test-dir build/release --output-on-failure
 
 # Unit tests (doctest via CTest): math, octree, ECS, shader block layouts. No GPU needed.
 test: build shaders
@@ -55,9 +62,19 @@ validation:
     ./scripts/validation_check.ps1
     ./scripts/validation_check.ps1 -Scene many_lights
 
+# `validation` plus the layer's synchronization validation (opt-in: slower; a hazard is reported as SYNC-HAZARD-*; needs a GPU; not in `check`).
+validation-sync:
+    ./scripts/validation_check.ps1 -Sync
+    ./scripts/validation_check.ps1 -Sync -Scene many_lights
+
 # Resize the window under validation layers: RenderingResources must rebuild cleanly (needs a GPU; not in `check`).
 resize-check:
     ./scripts/resize_check.ps1
+
+# Clone origin's main (or `-Ref x`) into build/cold-clone and build and test it there: proves the repo builds from what git tracks.
+# Needs network; not in `check`. Usage: just cold-clone, or ./scripts/cold_clone_check.ps1 -Ref some_branch
+cold-clone:
+    ./scripts/cold_clone_check.ps1
 
 # Toolchain sanity check.
 doctor:

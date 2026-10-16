@@ -11,6 +11,7 @@
 #include <set>
 #include <sstream>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -21,18 +22,37 @@
 //
 // A GLSL block may be a prefix of its C++ struct (the vertex stages declare CameraUbo without clipPlanes), but never
 // the other way round, and an array in the block must be as long as the C++ array. Scalar types are not compared, only
-// offsets, strides and sizes (an `int` in GLSL is a `uint32_t` in the C++ Light struct on purpose). Shader storage
-// buffers are not covered.
+// offsets, strides and sizes, and the kind of each member: float, integer (`int` and `uint` count as one kind, because
+// an `int` in GLSL is a `uint32_t` in the C++ Light struct on purpose) or struct. Shader storage buffers are not covered.
 
 namespace {
 
 using namespace Rendering;
+
+enum class Kind { Float, Integer, Struct };
+
+// The kind of a C++ member type: the element type for arrays, the component type for glm vectors and matrices.
+template <typename T, typename = void> struct HasValueType : std::false_type {};
+template <typename T> struct HasValueType<T, std::void_t<typename T::value_type>> : std::true_type {};
+
+template <typename T> constexpr Kind kindOf() {
+    using Element = std::remove_all_extents_t<T>;
+    if constexpr (std::is_floating_point_v<Element>)
+        return Kind::Float;
+    else if constexpr (std::is_integral_v<Element> || std::is_enum_v<Element>)
+        return Kind::Integer;
+    else if constexpr (HasValueType<Element>::value)
+        return kindOf<typename Element::value_type>();
+    else
+        return Kind::Struct;
+}
 
 struct Field {
     std::string name;
     size_t offset;
     size_t arrayStride; // 0 if not an array
     size_t arrayLength; // 0 if not an array
+    Kind kind;
 };
 
 struct Layout {
@@ -40,10 +60,13 @@ struct Layout {
     std::vector<Field> fields;
 };
 
-#define FIELD(T, f) Field{#f, offsetof(T, f), 0, 0}
+#define FIELD(T, f)                                                                                                    \
+    Field {                                                                                                            \
+        #f, offsetof(T, f), 0, 0, kindOf<decltype(T::f)>()                                                             \
+    }
 #define ARRAY_FIELD(T, f)                                                                                              \
     Field {                                                                                                            \
-        #f, offsetof(T, f), sizeof(T::f[0]), sizeof(T::f) / sizeof(T::f[0])                                            \
+        #f, offsetof(T, f), sizeof(T::f[0]), sizeof(T::f) / sizeof(T::f[0]), kindOf<decltype(T::f)>()                  \
     }
 
 const Layout cameraUbo{sizeof(CameraUbo),
@@ -98,7 +121,7 @@ const Layout shadowPush{sizeof(ShadowPC),
 
 // The geometry and transparency passes push a bare `uint32_t` (the instance offset) without a struct:
 // vkCmdPushConstants(..., 0, sizeof(uint32_t), ...) in geometry_pass.cpp and transparency_pass.cpp.
-const Layout instanceOffsetPush{sizeof(uint32_t), {Field{"instanceOffset", 0, 0, 0}}};
+const Layout instanceOffsetPush{sizeof(uint32_t), {Field{"instanceOffset", 0, 0, 0, Kind::Integer}}};
 
 struct Binding {
     const char* shader;
@@ -152,6 +175,7 @@ struct GlslMember {
     size_t offset;
     size_t arrayStride;
     size_t arrayLength;
+    Kind kind;
 };
 
 struct GlslBlock {
@@ -161,6 +185,23 @@ struct GlslBlock {
     size_t size;
     std::vector<GlslMember> members;
 };
+
+// float, vecN and matN are floating point; int, uint, ivecN and uvecN are integer; `struct` marks a struct member.
+// Anything else (bool, double, ...) is not used by the shaders: fail rather than guess.
+Kind kindOfGlslType(const std::string& type) {
+    if (type == "struct")
+        return Kind::Struct;
+    if (type == "float" || type.rfind("vec", 0) == 0 || type.rfind("mat", 0) == 0)
+        return Kind::Float;
+    if (type == "int" || type == "uint" || type.rfind("ivec", 0) == 0 || type.rfind("uvec", 0) == 0)
+        return Kind::Integer;
+    FAIL("unknown GLSL member type '" << type << "' in " << ALPHA_BLOCK_LAYOUTS);
+    return Kind::Struct;
+}
+
+std::string kindName(Kind kind) {
+    return kind == Kind::Float ? "float" : kind == Kind::Integer ? "integer" : "struct";
+}
 
 std::vector<GlslBlock> readGlslBlocks(const std::string& path) {
     std::ifstream file(path);
@@ -178,8 +219,10 @@ std::vector<GlslBlock> readGlslBlocks(const std::string& path) {
             blocks.push_back(block);
         } else if (tag == "member") {
             GlslMember member;
-            words >> member.name >> member.offset >> member.arrayStride >> member.arrayLength;
+            std::string type;
+            words >> member.name >> member.offset >> member.arrayStride >> member.arrayLength >> type;
             REQUIRE_MESSAGE(!words.fail(), "bad member line: " << line);
+            member.kind = kindOfGlslType(type);
             REQUIRE_MESSAGE(!blocks.empty(), "member line before any block line: " << line);
             blocks.back().members.push_back(member);
         } else {
@@ -231,12 +274,14 @@ TEST_CASE("shader uniform and push-constant blocks match their C++ structs") {
                           "array stride: C++ " << cpp.arrayStride << ", GLSL " << glsl.arrayStride);
             CHECK_MESSAGE(cpp.arrayLength == glsl.arrayLength,
                           "array length: C++ " << cpp.arrayLength << ", GLSL " << glsl.arrayLength);
+            CHECK_MESSAGE(cpp.kind == glsl.kind,
+                          "type: C++ " << kindName(cpp.kind) << ", GLSL " << kindName(glsl.kind));
         }
     }
 
     for (const Binding& binding : bindings) {
-        CHECK_MESSAGE(seen.count({binding.shader, binding.block}) == 1, "registered block "
-                                                                            << binding.shader << " " << binding.block
-                                                                            << " is not in any shader any more");
+        CHECK_MESSAGE(seen.count({binding.shader, binding.block}) == 1,
+                      "registered block " << std::string(binding.shader) << " " << std::string(binding.block)
+                                          << " is not in any shader any more");
     }
 }

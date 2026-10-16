@@ -2,6 +2,11 @@
 #pragma warning(push)
 #pragma warning(disable : 4005)
 #endif
+#if defined(__GNUC__) && !defined(__clang__)
+// stb_image.h (vendored, never edited) trips -Wstringop-overflow at -O3 inside its PNG tRNS path.
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"
+#endif
 
 #define TINYGLTF_IMPLEMENTATION
 #define STB_IMAGE_IMPLEMENTATION
@@ -13,6 +18,9 @@
 #include "Rendering/Core/images.hpp"
 #if defined(_MSC_VER)
 #pragma warning(pop)
+#endif
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
 #endif
 
 #include <stdexcept>
