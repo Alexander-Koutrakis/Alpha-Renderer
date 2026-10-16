@@ -66,6 +66,11 @@ validation:
 resize-check:
     ./scripts/resize_check.ps1
 
+# Clone origin's main (or `-Ref x`) into build/cold-clone and build and test it there: proves the repo builds from what git tracks.
+# Needs network; not in `check`. Usage: just cold-clone, or ./scripts/cold_clone_check.ps1 -Ref some_branch
+cold-clone:
+    ./scripts/cold_clone_check.ps1
+
 # Toolchain sanity check.
 doctor:
     just --version
