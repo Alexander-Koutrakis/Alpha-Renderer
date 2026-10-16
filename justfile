@@ -6,7 +6,7 @@ default:
     @just --list
 
 # Everything that must be green.
-check: build shaders format-check tidy test release
+check: build shaders format-check script-lint tidy test release
 
 # Configure and build with warnings visible (Ninja + MinGW, Debug).
 build:
@@ -52,6 +52,11 @@ screenshot-baseline scene="":
 format-check:
     if (-not (Test-Path .clang-format)) { Write-Error "format-check: .clang-format missing"; exit 1 }
     $files = Get-ChildItem src,tests -Recurse -Include *.cpp,*.hpp,*.inl | ForEach-Object FullName; clang-format --dry-run -Werror $files
+
+# Script pitfalls in scripts/*.ps1. An array splat such as @("-Scene", $x) into a script passes "-Scene" as a
+# positional string, not a parameter name (rc_compare and rc_bands both had it); splat a hashtable, @{ Scene = $x }.
+script-lint:
+    $hits = Select-String -Path scripts/*.ps1 -Pattern '@\(\s*"-[A-Za-z]'; if ($hits) { $hits | ForEach-Object { Write-Host $_ }; Write-Error "script-lint: array splat of a parameter name; use a hashtable splat"; exit 1 }; Write-Host "script-lint OK"
 
 # clang-tidy initialization checks over src/ (needs build/compile_commands.json from `just build`).
 tidy: build
