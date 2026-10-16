@@ -57,17 +57,6 @@ const float TEMPORAL_NORMAL_THRESHOLD = 0.75;
 const float TEMPORAL_BLEND_ALPHA = 0.05;
 const float HISTORY_SPATIAL_BLUR_RADIUS = 1.5;
 
-vec2 uvFromHemisphereDir(vec3 dir, float hemiShrink) {
-    vec3 d = normalize(dir);
-    if (d.z <= 0.0) return vec2(-1.0);
-    float denom = abs(d.x) + abs(d.y) + d.z;
-    if (denom < 0.0001) return vec2(-1.0);
-    vec2 p = d.xy / denom;      
-    vec2 uv = 0.5 * (p + 1.0);
-    uv = 0.5 + (uv - 0.5) / hemiShrink;
-    return clamp(uv, vec2(0.001), vec2(0.999));
-}
-
 vec3 FresnelSchlick(float cosTheta, vec3 F0) {
     return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
 }
@@ -235,7 +224,7 @@ RadianceIntervalSample sampleRadianceInterval(
         localDir.z = max(localDir.z, 0.01);
         localDir = normalize(localDir);
         float hemiShrink = computeHemisphereShrink(params.tileSize);
-        vec2 probeUV = uvFromHemisphereDir(localDir, hemiShrink);
+        vec2 probeUV = hemisphereUVFromDir(localDir, hemiShrink);
         if (probeUV.x < 0.0) {
             continue;
         }

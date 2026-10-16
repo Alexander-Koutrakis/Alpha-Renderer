@@ -175,14 +175,10 @@ void main() {
     // Far cascade has 2x tile size, so near tile coord maps to 2x position in far.
     // Add sub-tile offset based on position within the near tile to create
     // smoother angular transitions (reduces grid banding at cascade boundaries).
-    vec2 nearTileUV = (vec2(nearTile) + 0.5) / float(nearTileSize);  // [0,1] within tile
-    vec2 farTileFloat = nearTileUV * float(farTileSize) - 0.5;       // continuous far coord
-    ivec2 farTileBase = ivec2(floor(farTileFloat));
-    vec2 angularFrac = fract(farTileFloat);
-    
-    // Clamp to valid range within far tile
-    farTileBase = clamp(farTileBase, ivec2(0), ivec2(farTileSize - 2));
-    
+    FarTileMap tileMap = mapNearTexelToFarTile(nearTile, nearTileSize);
+    ivec2 farTileBase = tileMap.base;
+    vec2 angularFrac = tileMap.frac;
+
     // Angular weights for smooth direction blending
     vec4 angularWeights = bilinearWeights(angularFrac);
 
