@@ -14,7 +14,7 @@ public:
         uint32_t height;
         VkFormat targetFormat;
         VkDescriptorSetLayout descriptorSetLayout;
-        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* targetViews;
+        const std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* targetViews;
     };
 
     SMAAEdgePass(Device& device, const CreateInfo& info);
@@ -37,7 +37,7 @@ private:
     uint32_t width;
     uint32_t height;
     VkFormat targetFormat;
-    std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* targetViews;
+    const std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* targetViews;
     VkDescriptorSetLayout descriptorSetLayout{VK_NULL_HANDLE};
 
     VkRenderPass renderPass{VK_NULL_HANDLE};

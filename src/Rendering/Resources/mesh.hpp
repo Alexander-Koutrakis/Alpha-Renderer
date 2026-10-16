@@ -59,8 +59,6 @@ public:
     const Math::AABB& getLocalBounds() const { return localAABB; }
 
 private:
-    void setDebugName(VkObjectType objectType, uint64_t handle, const std::string& name);
-
     void createVertexBuffers(const std::vector<Vertex>& vertices);
     void createIndexBuffers(const std::vector<uint32_t>& indices);
 

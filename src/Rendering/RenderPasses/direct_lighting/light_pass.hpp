@@ -29,8 +29,8 @@ public:
         VkDescriptorSetLayout shadowMatrixSetLayout;
         VkDescriptorSetLayout enviromentalReflectionsSetLayout;
         VkFormat lightPassFormat;
-        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* lightPassResultViewsPtr;
-        std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* lightIncidentViewsPtr;
+        const std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* lightPassResultViewsPtr;
+        const std::array<VkImageView, MAX_FRAMES_IN_FLIGHT>* lightIncidentViewsPtr;
     };
 
     LightPass(Device& device, SwapChain& swapChain, const CreateInfo& createInfo);

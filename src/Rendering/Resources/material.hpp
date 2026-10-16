@@ -74,7 +74,6 @@ private:
     static std::once_flag s_defaultTextureInitFlag;
     void createMaterialDescriptorSet();
     void updateDescriptorSet();
-    void setDebugName(VkObjectType objectType, uint64_t handle, const std::string& name);
 
     Device& device;
     MaterialInfo info;

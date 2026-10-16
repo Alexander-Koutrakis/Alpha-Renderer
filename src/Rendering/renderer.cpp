@@ -256,7 +256,7 @@ void Renderer::createLightPass() {
     createInfo.sceneLightingDescriptorSetLayout = renderingResources->getSceneLightingDescriptorSetLayout();
     createInfo.shadowSamplerSetLayout = renderingResources->getShadowSamplerDescriptorSetLayout();
     createInfo.shadowMatrixSetLayout = renderingResources->getShadowcastingLightMatrixDescriptorSetLayout();
-    createInfo.enviromentalReflectionsSetLayout = renderingResources->getEnvironmentalReflectionsDescriptorSetLayout();
+    createInfo.enviromentalReflectionsSetLayout = renderingResources->getSkyboxDescriptorSetLayout();
     createInfo.lightPassFormat = renderingResources->getHDRFormat();
     createInfo.lightPassResultViewsPtr = &renderingResources->getLightPassResultViews();
     createInfo.lightIncidentViewsPtr = &renderingResources->getLightIncidentViews();
