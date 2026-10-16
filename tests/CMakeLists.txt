@@ -14,6 +14,8 @@ add_executable(AlphaTests
   scene_test.cpp
   light_system_test.cpp
   timestamp_math_test.cpp
+  rc_direction_test.cpp
+  rc_bands_test.cpp
 
   ${CMAKE_SOURCE_DIR}/src/Math/AABB.cpp
   ${CMAKE_SOURCE_DIR}/src/Math/view_frustum.cpp
@@ -51,3 +53,6 @@ target_compile_definitions(AlphaTests PRIVATE ALPHA_BLOCK_LAYOUTS="${CMAKE_SOURC
 add_test(NAME AlphaTests COMMAND AlphaTests)
 # The shadow-budget tests trigger the engine's over-budget warning on purpose; keep it out of the test output.
 set_tests_properties(AlphaTests PROPERTIES ENVIRONMENT "ALPHA_LOG=error")
+
+# rc_direction_test.cpp compiles shader source as C++: GLSL literals such as 0.5 are float, so make C++ treat them so too.
+set_source_files_properties(rc_direction_test.cpp PROPERTIES COMPILE_OPTIONS -fsingle-precision-constant)

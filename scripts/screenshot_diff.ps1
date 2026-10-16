@@ -22,7 +22,7 @@ param(
     [string]$Baseline = "",
     [string]$Scene = "",
     [switch]$Update,
-    [int]$SettleSeconds = 14,
+    [ValidateRange(1, 300)][int]$SettleFrames = 100,
     [int]$TimeoutSeconds = 120,
     [int]$PixelTolerance = 24,
     [double]$MaxBadFraction = 0.005,
@@ -115,6 +115,7 @@ if ($Scene -ne "") {
     if (-not (Test-Path (Join-Path $sceneSource "Scene.json"))) { throw "no Scene.json in $sceneSource" }
     Copy-Item (Join-Path $sceneSource "*") $buildScene -Recurse -Force
 }
+$env:ALPHA_CAPTURE_FRAME = "$SettleFrames"
 $proc = Start-Process -FilePath $exe -WorkingDirectory $outDir -RedirectStandardOutput $stdout `
     -RedirectStandardError $stderr -PassThru
 try {
@@ -126,7 +127,16 @@ try {
         Start-Sleep -Milliseconds 500
     }
     if ((Get-Date) -ge $deadline) { throw "timed out waiting for '$marker'" }
-    Start-Sleep -Seconds $SettleSeconds
+    # The app stops rendering at frame $SettleFrames (ALPHA_CAPTURE_FRAME) and keeps that frame on screen.
+    $frameMarker = "capture frame $SettleFrames reached"
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline -and -not $proc.HasExited) {
+        if (Select-String -Path $stdout -Pattern $frameMarker -SimpleMatch -Quiet) { break }
+        Start-Sleep -Milliseconds 200
+    }
+    if (-not (Select-String -Path $stdout -Pattern $frameMarker -SimpleMatch -Quiet) -and -not $proc.HasExited) {
+        throw "timed out waiting for '$frameMarker'"
+    }
     if ($proc.HasExited) {
         $proc.WaitForExit()
         throw "app exited during the run with code $($proc.ExitCode); see $stderr (code 0 and empty stderr: the window was closed from outside, so do not type into or close windows while this runs)"
@@ -139,6 +149,7 @@ try {
     $actual = [ShotTool]::CaptureClient($hwnd)
 }
 finally {
+    Remove-Item Env:ALPHA_CAPTURE_FRAME -ErrorAction SilentlyContinue
     if (-not $proc.HasExited) { Stop-Process -Id $proc.Id -Force }
     if ($Scene -ne "") { Copy-Item (Join-Path $root "Assets/Scene/Scene.json") $buildScene -Force }
 }

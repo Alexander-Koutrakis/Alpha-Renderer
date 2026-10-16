@@ -109,7 +109,7 @@ const Layout cascadeBuildPush{sizeof(CascadeBuildPC),
 using ResolvePC = RCGIPass::ResolvePushConstants;
 const Layout resolvePush{sizeof(ResolvePC),
                          {FIELD(ResolvePC, prevViewProj), FIELD(ResolvePC, probeStridePx), FIELD(ResolvePC, tileSize),
-                          FIELD(ResolvePC, temporalFrame)}};
+                          FIELD(ResolvePC, temporalFrame), FIELD(ResolvePC, mode)}};
 
 using DepthPC = RCGIPass::DepthPyramidPushConstants;
 const Layout depthPush{sizeof(DepthPC), {FIELD(DepthPC, cameraNear), FIELD(DepthPC, cameraFar)}};
@@ -146,6 +146,8 @@ const std::vector<Binding> bindings = {
     {"rc_build_cascade.comp", "pc", &cascadeBuildPush, {}},
     {"rc_depth_copy.comp", "pc", &depthPush, {}},
     {"rc_merge.comp", "pc", &cascadeBuildPush, {}},
+    {"rc_reference.comp", "CameraUBO", &cameraUbo, {{"camPos", "cameraPosition"}}},
+    {"rc_reference.comp", "pc", &cascadeBuildPush, {}},
     {"rc_resolve_indirect.comp", "CameraUBO", &cameraUbo, {{"camPos", "cameraPosition"}}},
     {"rc_resolve_indirect.comp", "pc", &resolvePush, {}},
     {"shadowmap.frag", "MaterialUbo", &materialUbo, {}},

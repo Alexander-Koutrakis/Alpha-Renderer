@@ -4,12 +4,43 @@
 #include "Rendering/Core/samplers.hpp"
 
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
 #include <stdexcept>
 
 namespace Rendering {
 constexpr uint32_t RC_BUILD_GROUP_SIZE_X = 8u;
 constexpr uint32_t RC_BUILD_GROUP_SIZE_Y = 8u;
-RCGIPass::RCGIPass(Device& device, const CreateInfo& createInfo) : device(device), info(createInfo) {
+RCGIPass::Mode RCGIPass::modeFromEnvironment() {
+    const char* value = std::getenv("ALPHA_RC_MODE");
+    if (value == nullptr || *value == '\0' || std::strcmp(value, "cascades") == 0) {
+        return Mode::Cascades;
+    }
+    if (std::strcmp(value, "reference") == 0) {
+        return Mode::Reference;
+    }
+    if (std::strcmp(value, "off") == 0) {
+        return Mode::Off;
+    }
+    throw std::runtime_error(std::string("ALPHA_RC_MODE must be cascades, reference or off, got: ") + value);
+}
+
+uint32_t RCGIPass::maxCascadeFromEnvironment() {
+    const char* value = std::getenv("ALPHA_RC_MAX_CASCADE");
+    if (value == nullptr || *value == '\0') {
+        return RC_CASCADE_COUNT - 1u;
+    }
+    char* end = nullptr;
+    const long parsed = std::strtol(value, &end, 10);
+    if (*end != '\0' || parsed < 0 || parsed >= static_cast<long>(RC_CASCADE_COUNT)) {
+        throw std::runtime_error(std::string("ALPHA_RC_MAX_CASCADE must be 0 to ") +
+                                 std::to_string(RC_CASCADE_COUNT - 1u) + ", got: " + value);
+    }
+    return static_cast<uint32_t>(parsed);
+}
+
+RCGIPass::RCGIPass(Device& device, const CreateInfo& createInfo)
+    : device(device), info(createInfo), mode(modeFromEnvironment()), maxCascade(maxCascadeFromEnvironment()) {
     // Create a dedicated sampler for compute sampling
     // texelFetch ignores filter, but NEAREST is explicit
     rcSampler =
@@ -20,6 +51,9 @@ RCGIPass::RCGIPass(Device& device, const CreateInfo& createInfo) : device(device
     createRCBuildPipeline();
     createRCMergePipeline();
     createRCResolvePipeline();
+    if (mode == Mode::Reference) {
+        createRCReferencePipeline();
+    }
 }
 
 RCGIPass::~RCGIPass() {
@@ -45,6 +79,9 @@ RCGIPass::~RCGIPass() {
     }
     if (rcResolvePipeline) {
         rcResolvePipeline.reset();
+    }
+    if (rcReferencePipeline) {
+        rcReferencePipeline.reset();
     }
     if (rcBuildPipelineLayout != VK_NULL_HANDLE) {
         vkDestroyPipelineLayout(device.getDevice(), rcBuildPipelineLayout, nullptr);
@@ -90,6 +127,13 @@ void RCGIPass::createRCMergePipeline() {
     rcMergePipeline = std::make_unique<ComputePipeline>(device, "shaders/rc_merge.comp.spv", cfg);
 }
 
+void RCGIPass::createRCReferencePipeline() {
+    // Same descriptor set and push constants as the cascade build: it reads the same G-buffer, pyramid and incident light.
+    ComputePipelineConfigInfo cfg{};
+    cfg.pipelineLayout = rcBuildPipelineLayout;
+    rcReferencePipeline = std::make_unique<ComputePipeline>(device, "shaders/rc_reference.comp.spv", cfg);
+}
+
 void RCGIPass::createRCResolvePipeline() {
     // Push constants: cascadeIndex,probeStridePx,tileSize,giIntensity
 
@@ -122,8 +166,8 @@ void RCGIPass::buildRCCascades(FrameContext& frameContext) {
     }
 
     const int frameIndexMod = static_cast<int>(frameContext.temporalFrameIndex % 1000u);
-    for (uint32_t cascade = 0; cascade < Rendering::RC_CASCADE_COUNT; ++cascade) {
-        CascadeDispatchInfo dispatchInfo = prepareCascadeDispatch(cascade, cascadeBands[cascade]);
+    for (uint32_t cascade = 0; cascade <= maxCascade; ++cascade) {
+        CascadeDispatchInfo dispatchInfo = prepareCascadeDispatch(cascade);
         dispatchInfo.push.depthMipCount = static_cast<int>(depthMipLevels);
         dispatchInfo.push.frameIndex = frameIndexMod;
         dispatchCascade(cmd, dispatchInfo);
@@ -142,9 +186,8 @@ void RCGIPass::mergeRCCascades(FrameContext& frameContext) {
     VkDescriptorSet ds = frameContext.rcBuildDescriptorSet;
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, rcBuildPipelineLayout, 0, 1, &ds, 0, nullptr);
 
-    for (int cascade = static_cast<int>(Rendering::RC_CASCADE_COUNT) - 2; cascade >= 0; --cascade) {
-        CascadeDispatchInfo dispatchInfo =
-            prepareCascadeDispatch(static_cast<uint32_t>(cascade), cascadeBands[static_cast<size_t>(cascade)]);
+    for (int cascade = static_cast<int>(maxCascade) - 1; cascade >= 0; --cascade) {
+        CascadeDispatchInfo dispatchInfo = prepareCascadeDispatch(static_cast<uint32_t>(cascade));
         dispatchInfo.push.depthMipCount = 0;
         dispatchInfo.push.frameIndex = static_cast<int>(frameContext.temporalFrameIndex % 1000u);
         if (dispatchInfo.groupsX == 0u || dispatchInfo.groupsY == 0u) {
@@ -160,43 +203,8 @@ void RCGIPass::mergeRCCascades(FrameContext& frameContext) {
     }
 }
 
-void RCGIPass::computeCascadeBands() {
-    // 4x branching: angular resolution quadruples each cascade (2x per dimension),
-    // so interval length must also scale by 4x to maintain the penumbra condition.
-    //
-    // Formula:
-    //   interval_scale(c) = 0 for c=0, else 4^c
-    //   interval_range(c) = [scale(c), scale(c+1)] * base
-    //
-    // This gives (with base = RC_BASE_INTERVAL_LENGTH):
-    // Cascade 0: [0, 4*base]           length = 4*base
-    // Cascade 1: [4*base, 16*base]     length = 12*base
-    // Cascade 2: [16*base, 64*base]    length = 48*base
-    // Cascade 3: [64*base, 256*base]   length = 192*base
-    // Cascade 4: [256*base, 1024*base] length = 768*base
-    // Cascade 5: [1024*base, 4096*base] length = 3072*base
-    //
-    // Total max distance = 4^(N+1) * base = 4096 * base for 6 cascades
-    // Example: if base = 0.25, cascade 5 reaches 1024 world units
-
-    const float baseSegmentLength = Rendering::RC_BASE_INTERVAL_LENGTH;
-    const uint32_t cascadeCount = Rendering::RC_CASCADE_COUNT;
-
-    for (uint32_t c = 0; c < cascadeCount; ++c) {
-        // scale(c) = 4^c for c > 0, else 0
-        // scale(c+1) = 4^(c+1)
-        const uint32_t scaleStart = (c == 0) ? 0u : (1u << (2u * c));
-        const uint32_t scaleEnd = 1u << (2u * (c + 1u));
-
-        float start = baseSegmentLength * static_cast<float>(scaleStart);
-        float end = baseSegmentLength * static_cast<float>(scaleEnd);
-
-        cascadeBands[c].start = start;
-        cascadeBands[c].length = end - start;
-    }
-}
-
-RCGIPass::CascadeDispatchInfo RCGIPass::prepareCascadeDispatch(uint32_t cascadeIndex, const CascadeBand& band) const {
+RCGIPass::CascadeDispatchInfo RCGIPass::prepareCascadeDispatch(uint32_t cascadeIndex) const {
+    const RcBand band = rcCascadeBand(cascadeIndex);
     CascadeDispatchInfo dispatch{};
     dispatch.push.cascadeIndex = static_cast<int>(cascadeIndex);
     dispatch.push.probeStridePx = std::max(1, static_cast<int>(Rendering::RC_PROBE_STRIDE0_PX) << cascadeIndex);
@@ -204,10 +212,8 @@ RCGIPass::CascadeDispatchInfo RCGIPass::prepareCascadeDispatch(uint32_t cascadeI
     dispatch.push.frameIndex = 0;
     dispatch.push.tStart = std::max(0.0f, band.start);
 
-    const float prevLen =
-        (cascadeIndex > 0u) ? std::max(0.0f, cascadeBands[cascadeIndex - 1u].length) : std::max(0.0f, band.length);
-    const float overlap = prevLen * Rendering::RC_INTERVAL_OVERLAP_FRACTION;
-    dispatch.push.segmentLen = std::max(0.0f, band.length + overlap);
+    // The band is traced exactly: intervals partition the ray, so L(0..2) = L(0..1) + beta(0..1) * L(1..2) holds.
+    dispatch.push.segmentLen = band.length;
 
     if (info.width == 0 || info.height == 0) {
         return dispatch;
@@ -274,6 +280,7 @@ void RCGIPass::resolveIndirect(FrameContext& frameContext) {
     pc.tileSize = static_cast<int>(Rendering::RC_BASE_TILE_SIZE);
     pc.temporalFrame = static_cast<int>(frameContext.temporalFrameIndex);
     pc.prevViewProj = frameContext.prevCameraData.viewProjectionMatrix;
+    pc.mode = static_cast<int>(mode);
 
     vkCmdPushConstants(cmd, rcResolvePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ResolvePushConstants), &pc);
 
@@ -284,6 +291,23 @@ void RCGIPass::resolveIndirect(FrameContext& frameContext) {
     uint32_t groupsY = (info.height + groupSizeY - 1) / groupSizeY;
 
     rcResolvePipeline->dispatch(cmd, groupsX, groupsY, 1);
+}
+
+void RCGIPass::traceReference(FrameContext& frameContext) {
+    VkCommandBuffer cmd = frameContext.commandBuffer;
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, rcReferencePipeline->getPipeline());
+    VkDescriptorSet ds = frameContext.rcBuildDescriptorSet;
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, rcBuildPipelineLayout, 0, 1, &ds, 0, nullptr);
+
+    CascadeBuildPushConstants push{};
+    push.frameIndex = static_cast<int>(frameContext.temporalFrameIndex % 1000u);
+    push.segmentLen = rcCascadeReach(maxCascade); // the reference's maximum ray distance
+    vkCmdPushConstants(cmd, rcBuildPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                       static_cast<uint32_t>(sizeof(CascadeBuildPushConstants)), &push);
+
+    rcReferencePipeline->dispatch(cmd, (info.width + RC_BUILD_GROUP_SIZE_X - 1u) / RC_BUILD_GROUP_SIZE_X,
+                                  (info.height + RC_BUILD_GROUP_SIZE_Y - 1u) / RC_BUILD_GROUP_SIZE_Y, 1);
+    emitComputeBarrier(cmd);
 }
 
 void RCGIPass::setDepthPyramidBarriersBefore(FrameContext& frameContext) {
@@ -367,10 +391,13 @@ void RCGIPass::buildDepthPyramid(FrameContext& frameContext) {
 }
 
 void RCGIPass::run(FrameContext& frameContext) {
-    computeCascadeBands();
     buildDepthPyramid(frameContext);
-    buildRCCascades(frameContext);
-    mergeRCCascades(frameContext);
+    if (mode == Mode::Cascades) {
+        buildRCCascades(frameContext);
+        mergeRCCascades(frameContext);
+    } else if (mode == Mode::Reference) {
+        traceReference(frameContext);
+    }
     resolveIndirect(frameContext);
 }
 

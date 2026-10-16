@@ -5,6 +5,7 @@
 #include "Rendering/Core/compute_pipeline.hpp"
 #include "Rendering/Core/descriptors.hpp"
 #include "Rendering/rendering_constants.hpp"
+#include "rc_bands.hpp"
 #include "Scene/scene.hpp"
 
 #include <array>
@@ -31,6 +32,15 @@ public:
     RCGIPass(const RCGIPass&) = delete;
     RCGIPass& operator=(const RCGIPass&) = delete;
 
+    // What the pass computes. ALPHA_RC_MODE selects it at startup: unset or "cascades" is the normal path, "reference"
+    // replaces build and merge with a brute-force screen-space reference (shaders/rc_reference.comp), "off" writes no GI.
+    // The reference and off modes exist to judge the cascades, see RadianceCascadeFixPlan.md.
+    enum class Mode : int { Cascades = 0, Reference = 1, Off = 2 };
+    static Mode modeFromEnvironment();
+    // ALPHA_RC_MAX_CASCADE=k (0 to RC_CASCADE_COUNT - 1, default the last) limits the pass to cascades 0..k, and the reference
+    // to the distance they reach, so the two can be compared band by band. Diagnostic only.
+    static uint32_t maxCascadeFromEnvironment();
+
     // Entry point: sequences compute stages
     void run(FrameContext& frameContext);
 
@@ -50,6 +60,7 @@ public:
         int probeStridePx = 0;
         int tileSize = 0;
         int temporalFrame = 0; // Frame counter for jittering
+        int mode = 0;          // Mode: how the resolve gets its irradiance
     };
 
     struct DepthPyramidPushConstants {
@@ -70,6 +81,8 @@ private:
     void createRCBuildPipeline();
     void createRCResolvePipeline();
     void createRCMergePipeline();
+    void createRCReferencePipeline();
+    void traceReference(FrameContext& frameContext);
     void buildRCCascades(FrameContext& frameContext);
     void mergeRCCascades(FrameContext& frameContext);
     void resolveIndirect(FrameContext& frameContext);
@@ -83,16 +96,13 @@ private:
         uint32_t groupsY{0};
     };
 
-    struct CascadeBand {
-        float start = 0.0f;
-        float length = 0.0f;
-    };
-    CascadeDispatchInfo prepareCascadeDispatch(uint32_t cascadeIndex, const CascadeBand& band) const;
+    CascadeDispatchInfo prepareCascadeDispatch(uint32_t cascadeIndex) const;
     void dispatchCascade(VkCommandBuffer cmd, const CascadeDispatchInfo& dispatchInfo) const;
-    void computeCascadeBands();
 
     Device& device;
     CreateInfo info;
+    Mode mode{Mode::Cascades};
+    uint32_t maxCascade{Rendering::RC_CASCADE_COUNT - 1u};
 
     // Depth pyramid compute
     VkPipelineLayout depthPyramidPipelineLayout{VK_NULL_HANDLE};
@@ -105,8 +115,8 @@ private:
     VkPipelineLayout rcResolvePipelineLayout{VK_NULL_HANDLE};
     std::unique_ptr<ComputePipeline> rcBuildPipeline;
     std::unique_ptr<ComputePipeline> rcMergePipeline;
+    std::unique_ptr<ComputePipeline> rcReferencePipeline;
     std::unique_ptr<ComputePipeline> rcResolvePipeline;
-    std::array<CascadeBand, Rendering::RC_CASCADE_COUNT> cascadeBands{};
 };
 
 } // namespace Rendering
