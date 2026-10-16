@@ -1,4 +1,5 @@
 #include "texture.hpp"
+#include "Rendering/Core/debug_names.hpp"
 #include "Rendering/Core/barriers.hpp"
 #include "Rendering/Core/images.hpp"
 #include "Rendering/Core/samplers.hpp"
@@ -6,20 +7,6 @@
 #include "Rendering/Core/buffer.hpp"
 #include <cmath>
 namespace Rendering {
-
-void Texture::setDebugName(VkObjectType objectType, uint64_t handle, const std::string& name) {
-    VkDebugUtilsObjectNameInfoEXT nameInfo{};
-    nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-    nameInfo.objectType = objectType;
-    nameInfo.objectHandle = handle;
-    nameInfo.pObjectName = name.c_str();
-
-    auto func =
-        (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(device.getDevice(), "vkSetDebugUtilsObjectNameEXT");
-    if (func != nullptr) {
-        func(device.getDevice(), &nameInfo);
-    }
-}
 
 Texture::Texture(Device& device, uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling,
                  VkImageUsageFlags usage, VkMemoryPropertyFlags properties, const void* data, uint32_t faces,
@@ -54,10 +41,11 @@ Texture::Texture(Device& device, uint32_t width, uint32_t height, VkFormat forma
 
     // Set debug names
     if (!textureName.empty()) {
-        setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)image, "TextureImage_" + textureName);
-        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)imageView, "TextureView_" + textureName);
-        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)imageMemory, "TextureMemory_" + textureName);
-        setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)sampler, "TextureSampler_" + textureName);
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_IMAGE, (uint64_t)image, "TextureImage_" + textureName);
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)imageView, "TextureView_" + textureName);
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)imageMemory,
+                     "TextureMemory_" + textureName);
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_SAMPLER, (uint64_t)sampler, "TextureSampler_" + textureName);
     }
 }
 
@@ -81,10 +69,11 @@ Texture::Texture(Device& device, uint32_t width, uint32_t height, VkFormat forma
 
     // Set debug names for existing resources
     if (!textureName.empty()) {
-        setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)image, "TextureImage_" + textureName);
-        setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)imageView, "TextureView_" + textureName);
-        setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)imageMemory, "TextureMemory_" + textureName);
-        setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)sampler, "TextureSampler_" + textureName);
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_IMAGE, (uint64_t)image, "TextureImage_" + textureName);
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)imageView, "TextureView_" + textureName);
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)imageMemory,
+                     "TextureMemory_" + textureName);
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_SAMPLER, (uint64_t)sampler, "TextureSampler_" + textureName);
     }
 }
 
@@ -342,10 +331,10 @@ std::unique_ptr<Texture> Texture::createCubemap(Device& device, uint32_t size, V
 
     // Set debug names for cubemap
     texture->textureName = "Cubemap";
-    texture->setDebugName(VK_OBJECT_TYPE_IMAGE, (uint64_t)texture->image, "CubemapImage");
-    texture->setDebugName(VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)texture->imageView, "CubemapView");
-    texture->setDebugName(VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)texture->imageMemory, "CubemapMemory");
-    texture->setDebugName(VK_OBJECT_TYPE_SAMPLER, (uint64_t)texture->sampler, "CubemapSampler");
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_IMAGE, (uint64_t)texture->image, "CubemapImage");
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_IMAGE_VIEW, (uint64_t)texture->imageView, "CubemapView");
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DEVICE_MEMORY, (uint64_t)texture->imageMemory, "CubemapMemory");
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_SAMPLER, (uint64_t)texture->sampler, "CubemapSampler");
 
     return texture;
 }

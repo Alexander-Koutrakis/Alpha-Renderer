@@ -44,8 +44,6 @@ protected:
                                                   const std::vector<const void*>& faceData);
 
 private:
-    void setDebugName(VkObjectType objectType, uint64_t handle, const std::string& name);
-
     void createTextureImageView();
     void createTextureSampler();
     void transitionImageLayout(VkImage vkImage, VkImageLayout oldLayout, VkImageLayout newLayout,
