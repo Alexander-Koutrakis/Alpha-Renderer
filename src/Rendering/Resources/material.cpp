@@ -1,4 +1,5 @@
 #include "material.hpp"
+#include "Rendering/Core/debug_names.hpp"
 #include <cassert>
 #include <stdexcept>
 #include <mutex>
@@ -7,20 +8,6 @@ namespace Rendering {
 // Initialize static members
 std::unique_ptr<Texture> Material::s_defaultTexture = nullptr;
 std::once_flag Material::s_defaultTextureInitFlag;
-
-void Material::setDebugName(VkObjectType objectType, uint64_t handle, const std::string& name) {
-    VkDebugUtilsObjectNameInfoEXT nameInfo{};
-    nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-    nameInfo.objectType = objectType;
-    nameInfo.objectHandle = handle;
-    nameInfo.pObjectName = name.c_str();
-
-    auto func =
-        (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(device.getDevice(), "vkSetDebugUtilsObjectNameEXT");
-    if (func != nullptr) {
-        func(device.getDevice(), &nameInfo);
-    }
-}
 
 Material::Material(Device& device, const MaterialInfo& materialInfo, DescriptorPool& descriptorPool,
                    VkDescriptorSetLayout materialSetLayout)
@@ -39,7 +26,7 @@ Material::Material(Device& device, const MaterialInfo& materialInfo, DescriptorP
     propertiesBuffer->writeToBuffer(&properties);
 
     // Set debug name for the material properties buffer
-    setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)propertiesBuffer->getBuffer(),
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_BUFFER, (uint64_t)propertiesBuffer->getBuffer(),
                  "MaterialPropertiesBuffer_" + info.name);
 
     createMaterialDescriptorSet();
@@ -57,7 +44,8 @@ void Material::createMaterialDescriptorSet() {
     }
 
     // Set debug name for the material descriptor set
-    setDebugName(VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)materialDescriptorSet, "MaterialDescriptorSet_" + info.name);
+    setDebugName(device.getDevice(), VK_OBJECT_TYPE_DESCRIPTOR_SET, (uint64_t)materialDescriptorSet,
+                 "MaterialDescriptorSet_" + info.name);
 }
 
 void Material::updateDescriptorSet() {

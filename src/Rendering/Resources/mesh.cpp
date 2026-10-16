@@ -1,22 +1,9 @@
 #include "mesh.hpp"
+#include "Rendering/Core/debug_names.hpp"
 #include <cassert>
 #include <stdexcept>
 
 namespace Rendering {
-
-void Mesh::setDebugName(VkObjectType objectType, uint64_t handle, const std::string& name) {
-    VkDebugUtilsObjectNameInfoEXT nameInfo{};
-    nameInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_OBJECT_NAME_INFO_EXT;
-    nameInfo.objectType = objectType;
-    nameInfo.objectHandle = handle;
-    nameInfo.pObjectName = name.c_str();
-
-    auto func =
-        (PFN_vkSetDebugUtilsObjectNameEXT)vkGetDeviceProcAddr(device.getDevice(), "vkSetDebugUtilsObjectNameEXT");
-    if (func != nullptr) {
-        func(device.getDevice(), &nameInfo);
-    }
-}
 
 Mesh::~Mesh() {}
 
@@ -40,7 +27,8 @@ void Mesh::createVertexBuffers(const std::vector<Vertex>& vertices) {
 
     // Set debug name for vertex buffer
     if (!meshName.empty()) {
-        setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)vertexBuffer->getBuffer(), "VertexBuffer_" + meshName);
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_BUFFER, (uint64_t)vertexBuffer->getBuffer(),
+                     "VertexBuffer_" + meshName);
     }
 }
 
@@ -69,7 +57,8 @@ void Mesh::createIndexBuffers(const std::vector<uint32_t>& indices) {
 
     // Set debug name for index buffer
     if (!meshName.empty()) {
-        setDebugName(VK_OBJECT_TYPE_BUFFER, (uint64_t)indexBuffer->getBuffer(), "IndexBuffer_" + meshName);
+        setDebugName(device.getDevice(), VK_OBJECT_TYPE_BUFFER, (uint64_t)indexBuffer->getBuffer(),
+                     "IndexBuffer_" + meshName);
     }
 }
 
