@@ -6,12 +6,19 @@ default:
     @just --list
 
 # Everything that must be green.
-check: build shaders format-check tidy test
+check: build shaders format-check tidy test release
 
 # Configure and build with warnings visible (Ninja + MinGW, Debug).
 build:
     cmake --preset debug
     cmake --build --preset debug
+
+# Release build (-O3, -Werror, no validation layers) and its unit tests, so the optimised configuration cannot rot.
+release: shaders
+    cmake --preset release
+    cmake --build --preset release
+    if (-not (Select-String -Path build/release/CMakeCache.txt -Pattern 'ALPHA_ENABLE_VALIDATION:BOOL=OFF' -Quiet)) { Write-Error "release: validation layers are on in the release build"; exit 1 }
+    ctest --test-dir build/release --output-on-failure
 
 # Unit tests (doctest via CTest): math, octree, ECS, shader block layouts. No GPU needed.
 test: build shaders
