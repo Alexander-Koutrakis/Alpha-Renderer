@@ -30,7 +30,8 @@ layout(set = 0, binding = 5) uniform sampler2D uDepthPyramid; // mip 0: linear v
 layout(set = 0, binding = 6) uniform sampler2D uIncidentBuffer;
 layout(rgba16f, set = 0, binding = 7) uniform writeonly image2D uRadiance[6];
 
-// Shares the cascade build's push-constant block; only frameIndex is used.
+// Shares the cascade build's push-constant block; frameIndex seeds the rays and segmentLen is the maximum ray distance
+// (the reach of the cascades being compared against).
 layout(push_constant) uniform BuildPC {
     int cascadeIndex;
     int probeStridePx;
@@ -43,8 +44,7 @@ layout(push_constant) uniform BuildPC {
 
 const float PI = 3.14159265359;
 const int RAYS_PER_FRAME = 2;
-const int MAX_STEPS = 1200;           // longer than the longest screen diagonal in pixels
-const float MAX_RANGE = 327.68;       // 0.08 * 4^6: the cascades' total reach
+const int MAX_STEPS = 2300;           // longer than the longest screen diagonal (2203 px at 1920x1080), never reached
 const float ORIGIN_OFFSET = 0.01;     // along the normal, as the cascade build does
 const float MIN_HIT_DISTANCE = 0.02;
 const float COPLANAR_DISTANCE = 0.02;
@@ -57,11 +57,12 @@ float rcHash(vec3 p) {
 
 // Radiance of the first front-facing surface the ray reaches, or 0 for a miss.
 vec3 traceReference(vec3 origin, vec3 dir, vec3 originNormal) {
+    float maxRange = pc.segmentLen;
     ivec2 screenSize = textureSize(uDepthPyramid, 0);
     float nearPlane = uCamera.clipPlanes.x;
 
     vec3 vs = (uCamera.view * vec4(origin, 1.0)).xyz;
-    vec3 ve = (uCamera.view * vec4(origin + dir * MAX_RANGE, 1.0)).xyz;
+    vec3 ve = (uCamera.view * vec4(origin + dir * maxRange, 1.0)).xyz;
     // The engine is left-handed: view-space z grows away from the camera and equals clip w.
     if (vs.z < nearPlane) return vec3(0.0);
     if (ve.z < nearPlane) {
@@ -77,12 +78,17 @@ vec3 traceReference(vec3 origin, vec3 dir, vec3 originNormal) {
     float k0 = 1.0 / c0.w;
     float k1 = 1.0 / c1.w;
 
+    // Clip the segment to the screen so it is marched at 1 pixel per step however far the ray's end is off-screen. a is
+    // the fraction of the segment, linear in screen space; the depth is interpolated perspective-correctly through k.
     vec2 delta = p1 - p0;
-    float steps = min(max(abs(delta.x), abs(delta.y)), float(MAX_STEPS));
+    vec2 toEdge = vec2(delta.x > 0.0 ? (float(screenSize.x) - p0.x) / delta.x : (delta.x < 0.0 ? -p0.x / delta.x : 1e30),
+                       delta.y > 0.0 ? (float(screenSize.y) - p0.y) / delta.y : (delta.y < 0.0 ? -p0.y / delta.y : 1e30));
+    float aMax = min(1.0, min(toEdge.x, toEdge.y));
+    float steps = min(max(abs(delta.x), abs(delta.y)) * aMax, float(MAX_STEPS));
     if (steps < 1.0) return vec3(0.0);
 
     for (int i = 1; i <= int(steps); ++i) {
-        float a = float(i) / steps;
+        float a = float(i) / steps * aMax;
         vec2 p = mix(p0, p1, a);
         ivec2 pixel = ivec2(floor(p));
         if (pixel.x < 0 || pixel.y < 0 || pixel.x >= screenSize.x || pixel.y >= screenSize.y) break;
@@ -98,7 +104,7 @@ vec3 traceReference(vec3 origin, vec3 dir, vec3 originNormal) {
         if (hitPos.w <= 0.0) continue;
         vec3 toHit = hitPos.xyz - origin;
         float t = dot(toHit, dir);
-        if (t < MIN_HIT_DISTANCE || t > MAX_RANGE) continue;
+        if (t < MIN_HIT_DISTANCE || t > maxRange) continue;
 
         vec3 hitNormal = decodeNormal(texelFetch(uGBufferNormal, pixel, 0).xyz);
         // A surface in the origin's own plane cannot occlude or light it.

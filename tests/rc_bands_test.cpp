@@ -19,3 +19,11 @@ TEST_CASE("RC bands: the cascades cover the ray from 0 with no gap and 4x growth
     const RcBand last = rcCascadeBand(RC_CASCADE_COUNT - 1);
     CHECK(last.start + last.length == doctest::Approx(4096.0f * RC_BASE_INTERVAL_LENGTH).epsilon(1e-6));
 }
+
+TEST_CASE("RC bands: the reach of cascade k is 4^(k+1) times the base interval") {
+    for (uint32_t c = 0; c < RC_CASCADE_COUNT; ++c) {
+        INFO("cascade " << c);
+        CHECK(rcCascadeReach(c) ==
+              doctest::Approx(std::pow(4.0f, float(c + 1)) * RC_BASE_INTERVAL_LENGTH).epsilon(1e-6));
+    }
+}

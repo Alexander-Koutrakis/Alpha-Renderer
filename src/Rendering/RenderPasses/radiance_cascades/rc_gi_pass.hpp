@@ -37,6 +37,9 @@ public:
     // The reference and off modes exist to judge the cascades, see RadianceCascadeFixPlan.md.
     enum class Mode : int { Cascades = 0, Reference = 1, Off = 2 };
     static Mode modeFromEnvironment();
+    // ALPHA_RC_MAX_CASCADE=k (0 to RC_CASCADE_COUNT - 1, default the last) limits the pass to cascades 0..k, and the reference
+    // to the distance they reach, so the two can be compared band by band. Diagnostic only.
+    static uint32_t maxCascadeFromEnvironment();
 
     // Entry point: sequences compute stages
     void run(FrameContext& frameContext);
@@ -99,6 +102,7 @@ private:
     Device& device;
     CreateInfo info;
     Mode mode{Mode::Cascades};
+    uint32_t maxCascade{Rendering::RC_CASCADE_COUNT - 1u};
 
     // Depth pyramid compute
     VkPipelineLayout depthPyramidPipelineLayout{VK_NULL_HANDLE};

@@ -15,10 +15,15 @@
 # them as "direction and size of the error", not as exact photometry. The reference averages about 64 samples per pixel
 # over time (a few percent noise), so differences below roughly 5% are not significant.
 # Needs a GPU and a display, and nothing else on screen while it runs; not part of `just check`.
+#
+# -MaxCascade k (0 to 5) limits both sides to the distance cascades 0..k reach (ALPHA_RC_MAX_CASCADE): the cascades stop
+# at cascade k and the reference stops its rays at that distance. Captures go to <scene>/c<k>/, the GI-off capture is shared
+# in <scene>/. scripts/rc_bands.ps1 runs this for every k.
 param(
     [string]$Scene = "",
     [string]$BuildDir = "build",
-    [int]$SettleSeconds = 20
+    [int]$SettleSeconds = 20,
+    [int]$MaxCascade = -1
 )
 $ErrorActionPreference = "Stop"
 $root = Resolve-Path (Join-Path $PSScriptRoot "..")
@@ -80,25 +85,36 @@ public static class GiStats {
 "@
 
 $name = if ($Scene -eq "") { "scene" } else { $Scene }
-$outDir = Join-Path $root "build/rc-compare/$name"
+$sceneDir = Join-Path $root "build/rc-compare/$name"
+$relDir = "build/rc-compare/$name"
+if ($MaxCascade -ge 0) { $relDir = "$relDir/c$MaxCascade" }
+$outDir = Join-Path $root $relDir
 New-Item -ItemType Directory -Force $outDir | Out-Null
 $sceneArgs = if ($Scene -eq "") { @() } else { @("-Scene", $Scene) }
 
 $old = $env:ALPHA_RC_MODE
 try {
+    if ($MaxCascade -ge 0) { $env:ALPHA_RC_MAX_CASCADE = "$MaxCascade" }
     foreach ($mode in @("off", "cascades", "reference")) {
+        $target = "$relDir/$mode.png"
+        if ($mode -eq "off" -and $MaxCascade -ge 0) {
+            $target = "build/rc-compare/$name/off.png"
+            if (Test-Path (Join-Path $root $target)) { continue }   # the GI-off image does not depend on the cascade limit
+        }
         $env:ALPHA_RC_MODE = $mode
         Write-Host "== ALPHA_RC_MODE=$mode"
         & (Join-Path $PSScriptRoot "screenshot_diff.ps1") -BuildDir $BuildDir -Update -SettleSeconds $SettleSeconds `
-            -Baseline "build/rc-compare/$name/$mode.png" @sceneArgs
+            -Baseline $target @sceneArgs
         if ($LASTEXITCODE -ne 0) { throw "capture failed for mode $mode" }
     }
 }
 finally {
     if ($null -eq $old) { Remove-Item Env:ALPHA_RC_MODE -ErrorAction SilentlyContinue } else { $env:ALPHA_RC_MODE = $old }
+    Remove-Item Env:ALPHA_RC_MAX_CASCADE -ErrorAction SilentlyContinue
 }
 
-$off = New-Object System.Drawing.Bitmap (Join-Path $outDir "off.png")
+$offPath = if ($MaxCascade -ge 0) { Join-Path $sceneDir "off.png" } else { Join-Path $outDir "off.png" }
+$off = New-Object System.Drawing.Bitmap $offPath
 $rc = New-Object System.Drawing.Bitmap (Join-Path $outDir "cascades.png")
 $rf = New-Object System.Drawing.Bitmap (Join-Path $outDir "reference.png")
 $ignore = New-Object System.Drawing.Rectangle 0, ($off.Height - 90), 220, 90   # FPS overlay
@@ -113,3 +129,4 @@ if ($r[1] -gt 0) {
 }
 Write-Host ("correlation: {0:N3}" -f $r[3])
 Write-Host "images: $outDir"
+Write-Output ("RESULT maxCascade={0} meanCascades={1:N4} meanReference={2:N4} meanAbsError={3:N4} correlation={4:N4}" -f $MaxCascade, $r[0], $r[1], $r[2], $r[3])

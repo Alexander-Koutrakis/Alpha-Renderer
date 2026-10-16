@@ -24,4 +24,10 @@ inline RcBand rcCascadeBand(uint32_t cascade) {
     return band;
 }
 
+// Distance from the probe up to which cascades 0..cascade together see: the end of that cascade's band.
+inline float rcCascadeReach(uint32_t cascade) {
+    const RcBand band = rcCascadeBand(cascade);
+    return band.start + band.length;
+}
+
 } // namespace Rendering

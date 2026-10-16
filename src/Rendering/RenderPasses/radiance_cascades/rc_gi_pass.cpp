@@ -25,8 +25,22 @@ RCGIPass::Mode RCGIPass::modeFromEnvironment() {
     throw std::runtime_error(std::string("ALPHA_RC_MODE must be cascades, reference or off, got: ") + value);
 }
 
+uint32_t RCGIPass::maxCascadeFromEnvironment() {
+    const char* value = std::getenv("ALPHA_RC_MAX_CASCADE");
+    if (value == nullptr || *value == '\0') {
+        return RC_CASCADE_COUNT - 1u;
+    }
+    char* end = nullptr;
+    const long parsed = std::strtol(value, &end, 10);
+    if (*end != '\0' || parsed < 0 || parsed >= static_cast<long>(RC_CASCADE_COUNT)) {
+        throw std::runtime_error(std::string("ALPHA_RC_MAX_CASCADE must be 0 to ") +
+                                 std::to_string(RC_CASCADE_COUNT - 1u) + ", got: " + value);
+    }
+    return static_cast<uint32_t>(parsed);
+}
+
 RCGIPass::RCGIPass(Device& device, const CreateInfo& createInfo)
-    : device(device), info(createInfo), mode(modeFromEnvironment()) {
+    : device(device), info(createInfo), mode(modeFromEnvironment()), maxCascade(maxCascadeFromEnvironment()) {
     // Create a dedicated sampler for compute sampling
     // texelFetch ignores filter, but NEAREST is explicit
     rcSampler =
@@ -152,7 +166,7 @@ void RCGIPass::buildRCCascades(FrameContext& frameContext) {
     }
 
     const int frameIndexMod = static_cast<int>(frameContext.temporalFrameIndex % 1000u);
-    for (uint32_t cascade = 0; cascade < Rendering::RC_CASCADE_COUNT; ++cascade) {
+    for (uint32_t cascade = 0; cascade <= maxCascade; ++cascade) {
         CascadeDispatchInfo dispatchInfo = prepareCascadeDispatch(cascade);
         dispatchInfo.push.depthMipCount = static_cast<int>(depthMipLevels);
         dispatchInfo.push.frameIndex = frameIndexMod;
@@ -172,7 +186,7 @@ void RCGIPass::mergeRCCascades(FrameContext& frameContext) {
     VkDescriptorSet ds = frameContext.rcBuildDescriptorSet;
     vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, rcBuildPipelineLayout, 0, 1, &ds, 0, nullptr);
 
-    for (int cascade = static_cast<int>(Rendering::RC_CASCADE_COUNT) - 2; cascade >= 0; --cascade) {
+    for (int cascade = static_cast<int>(maxCascade) - 1; cascade >= 0; --cascade) {
         CascadeDispatchInfo dispatchInfo = prepareCascadeDispatch(static_cast<uint32_t>(cascade));
         dispatchInfo.push.depthMipCount = 0;
         dispatchInfo.push.frameIndex = static_cast<int>(frameContext.temporalFrameIndex % 1000u);
@@ -287,6 +301,7 @@ void RCGIPass::traceReference(FrameContext& frameContext) {
 
     CascadeBuildPushConstants push{};
     push.frameIndex = static_cast<int>(frameContext.temporalFrameIndex % 1000u);
+    push.segmentLen = rcCascadeReach(maxCascade); // the reference's maximum ray distance
     vkCmdPushConstants(cmd, rcBuildPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
                        static_cast<uint32_t>(sizeof(CascadeBuildPushConstants)), &push);
 
