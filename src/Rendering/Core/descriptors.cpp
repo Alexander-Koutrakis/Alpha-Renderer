@@ -47,13 +47,6 @@ std::vector<VkDescriptorPoolSize> DescriptorBudget::poolSizes() const {
     return sizes;
 }
 
-VkDescriptorSetLayout createDescriptorSetLayout(Device& device,
-                                                std::initializer_list<VkDescriptorSetLayoutBinding> bindings,
-                                                DescriptorBudget& budget, uint32_t setCount) {
-    budget.add(bindings.begin(), static_cast<uint32_t>(bindings.size()), setCount);
-    return createDescriptorSetLayout(device, bindings);
-}
-
 // *************** Descriptor Pool Builder *********************
 
 DescriptorPool::Builder& DescriptorPool::Builder::fromBudget(const DescriptorBudget& budget) {

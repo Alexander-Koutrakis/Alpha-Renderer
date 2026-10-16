@@ -5,6 +5,7 @@
 #include "Rendering/Core/device.hpp"
 #include "Rendering/Core/swapchain.hpp"
 #include "Rendering/Core/buffer.hpp"
+#include "Rendering/Resources/frame_descriptor.hpp"
 #include "Rendering/Resources/frame_image.hpp"
 #include "Rendering/Resources/gbuffer.hpp"
 #include "Rendering/Core/descriptors.hpp"
@@ -43,34 +44,33 @@ public:
     VkFormat getSMAAEdgeFormat() const { return smaaEdgeFormat; }
     VkFormat getSMAABlendFormat() const { return smaaBlendFormat; }
 
-    VkDescriptorSetLayout getCameraDescriptorSetLayout() const { return cameraDescriptorSetLayout; }
-    VkDescriptorSetLayout getModelsDescriptorSetLayout() const { return modelsDescriptorSetLayout; }
+    VkDescriptorSetLayout getCameraDescriptorSetLayout() const { return cameraDescriptor->layout(); }
+    VkDescriptorSetLayout getModelsDescriptorSetLayout() const { return modelsDescriptor->layout(); }
     VkDescriptorSetLayout getMaterialDescriptorSetLayout() const { return materialDescriptorSetLayout; }
-    VkDescriptorSetLayout getGBufferDescriptorSetLayout() const { return gBufferDescriptorSetLayout; }
-    VkDescriptorSetLayout getLightArrayDescriptorSetLayout() const { return lightArrayDescriptorSetLayout; }
-    VkDescriptorSetLayout getCascadeSplitsDescriptorSetLayout() const { return cascadeSplitsSetLayout; }
-    VkDescriptorSetLayout getSceneLightingDescriptorSetLayout() const { return sceneLightingDescriptorSetLayout; }
-    VkDescriptorSetLayout getShadowSamplerDescriptorSetLayout() const { return shadowMapSamplerLayout; }
+    VkDescriptorSetLayout getGBufferDescriptorSetLayout() const { return gBufferDescriptor->layout(); }
+    VkDescriptorSetLayout getLightArrayDescriptorSetLayout() const { return lightArrayDescriptor->layout(); }
+    VkDescriptorSetLayout getCascadeSplitsDescriptorSetLayout() const { return cascadeSplitsDescriptor->layout(); }
+    VkDescriptorSetLayout getSceneLightingDescriptorSetLayout() const { return sceneLightingDescriptor->layout(); }
+    VkDescriptorSetLayout getShadowSamplerDescriptorSetLayout() const { return shadowMapSamplerDescriptor->layout(); }
     VkDescriptorSetLayout getShadowcastingLightMatrixDescriptorSetLayout() const {
-        return shadowcastinglightMatrixDescriptorSetLayout;
+        return lightMatrixDescriptor->layout();
     }
     VkDescriptorSetLayout getShadowModelMatrixDescriptorSetLayout() const {
-        return shadowModelMatrixDescriptorSetLayout;
+        return shadowModelMatrixDescriptor->layout();
     }
-    VkDescriptorSetLayout getEnvironmentalReflectionsDescriptorSetLayout() const { return skyboxDescriptorSetLayout; }
-    VkDescriptorSetLayout getSkyboxDescriptorSetLayout() const { return skyboxDescriptorSetLayout; }
+    VkDescriptorSetLayout getSkyboxDescriptorSetLayout() const { return skyboxDescriptor->layout(); }
     VkDescriptorSetLayout getTransparencyModelDescriptorSetLayout() const {
-        return transparencyModelDescriptorSetLayout;
+        return transparencyModelDescriptor->layout();
     }
-    VkDescriptorSetLayout getCompositionDescriptorSetLayout() const { return compositionSetLayout; }
-    VkDescriptorSetLayout getRCBuildDescriptorSetLayout() const { return rcBuildSetLayout; }
-    VkDescriptorSetLayout getRCResolveDescriptorSetLayout() const { return rcResolveSetLayout; }
-    VkDescriptorSetLayout getDepthPyramidDescriptorSetLayout() const { return depthPyramidSetLayout; }
+    VkDescriptorSetLayout getCompositionDescriptorSetLayout() const { return compositionDescriptor->layout(); }
+    VkDescriptorSetLayout getRCBuildDescriptorSetLayout() const { return rcBuildDescriptor->layout(); }
+    VkDescriptorSetLayout getRCResolveDescriptorSetLayout() const { return rcResolveDescriptor->layout(); }
+    VkDescriptorSetLayout getDepthPyramidDescriptorSetLayout() const { return depthPyramidDescriptor->layout(); }
     // Post-processing layouts
-    VkDescriptorSetLayout getSMAAEdgeSetLayout() const { return smaaEdgeSetLayout; }
-    VkDescriptorSetLayout getSMAAWeightSetLayout() const { return smaaWeightSetLayout; }
-    VkDescriptorSetLayout getSMAABlendSetLayout() const { return smaaBlendSetLayout; }
-    VkDescriptorSetLayout getColorCorrectionSetLayout() const { return colorCorrectionSetLayout; }
+    VkDescriptorSetLayout getSMAAEdgeSetLayout() const { return smaaEdgeDescriptor->layout(); }
+    VkDescriptorSetLayout getSMAAWeightSetLayout() const { return smaaWeightDescriptor->layout(); }
+    VkDescriptorSetLayout getSMAABlendSetLayout() const { return smaaBlendDescriptor->layout(); }
+    VkDescriptorSetLayout getColorCorrectionSetLayout() const { return colorCorrectionDescriptor->layout(); }
     VkSampler getPostProcessSampler() const { return postProcessSampler; }
 
     //Shadow map accessors - now with frame index support
@@ -83,7 +83,9 @@ public:
     }
 
     // Shadow map sampler descriptor set accessor
-    VkDescriptorSet getShadowMapSamplerDescriptorSet(size_t frameIndex) { return shadowMapSamplerSets[frameIndex]; }
+    VkDescriptorSet getShadowMapSamplerDescriptorSet(size_t frameIndex) {
+        return shadowMapSamplerDescriptor->set(frameIndex);
+    }
 
     // GBuffer accessor
     GBuffer& getGBuffer() { return *gBuffer; }
@@ -170,8 +172,6 @@ private:
     std::unique_ptr<FrameImage> postAAColorImage;                               // HDR post-AA chain
     std::array<std::unique_ptr<FrameImage>, RC_CASCADE_COUNT> rcRadianceImages; // RC atlas per cascade
 
-    std::array<std::vector<VkDescriptorSet>, MAX_FRAMES_IN_FLIGHT> depthPyramidMipDescriptorSets{};
-
     VkSampler lightPassSampler{VK_NULL_HANDLE};
     // Depth pyramid is used for ray-depth comparisons; it must be sampled with POINT/NEAREST filtering.
     VkSampler depthPyramidSampler{VK_NULL_HANDLE};
@@ -196,45 +196,27 @@ private:
     Texture* skyboxTexture{nullptr};
 
     VkDescriptorSetLayout materialDescriptorSetLayout{VK_NULL_HANDLE}; // borrowed, see the constructor
-    VkDescriptorSetLayout modelsDescriptorSetLayout{VK_NULL_HANDLE};
-    VkDescriptorSetLayout cameraDescriptorSetLayout{VK_NULL_HANDLE};
-    VkDescriptorSetLayout gBufferDescriptorSetLayout{VK_NULL_HANDLE};
-    VkDescriptorSetLayout lightArrayDescriptorSetLayout{VK_NULL_HANDLE};
-    VkDescriptorSetLayout cascadeSplitsSetLayout{VK_NULL_HANDLE};
-    VkDescriptorSetLayout sceneLightingDescriptorSetLayout{VK_NULL_HANDLE};
-    VkDescriptorSetLayout shadowcastinglightMatrixDescriptorSetLayout{VK_NULL_HANDLE};
-    VkDescriptorSetLayout shadowModelMatrixDescriptorSetLayout{VK_NULL_HANDLE};
-    VkDescriptorSetLayout shadowMapSamplerLayout{VK_NULL_HANDLE};
-    VkDescriptorSetLayout skyboxDescriptorSetLayout{VK_NULL_HANDLE};
-    VkDescriptorSetLayout transparencyModelDescriptorSetLayout{VK_NULL_HANDLE};
-    VkDescriptorSetLayout compositionSetLayout{VK_NULL_HANDLE};
-    VkDescriptorSetLayout rcBuildSetLayout{VK_NULL_HANDLE};
-    VkDescriptorSetLayout rcResolveSetLayout{VK_NULL_HANDLE};
-    VkDescriptorSetLayout depthPyramidSetLayout{VK_NULL_HANDLE};
-    VkDescriptorSetLayout smaaEdgeSetLayout{VK_NULL_HANDLE};
-    VkDescriptorSetLayout smaaWeightSetLayout{VK_NULL_HANDLE};
-    VkDescriptorSetLayout smaaBlendSetLayout{VK_NULL_HANDLE};
-    VkDescriptorSetLayout colorCorrectionSetLayout{VK_NULL_HANDLE};
 
-    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> modelsDescriptorSets{};
-    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> cameraDescriptorSets{};
-    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> gBufferDescriptorSets{};
-    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> lightArrayDescriptorSets{};
-    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> cascadeSplitsDescriptorSets{};
-    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> sceneLightingDescriptorSets{};
-    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> lightMatrixDescriptorSets{};
-    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> shadowModelMatrixDescriptorSets{};
-    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> shadowMapSamplerSets{};
-    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> transparencyModelMatrixDescriptorSets{};
-    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> compositionDescriptorSets{};
-    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> rcBuildDescriptorSets{};
-    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> rcResolveDescriptorSets{};
-    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> depthPyramidDescriptorSets{};
-    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> smaaEdgeDescriptorSets{};
-    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> smaaWeightDescriptorSets{};
-    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> smaaBlendDescriptorSets{};
-    std::array<VkDescriptorSet, MAX_FRAMES_IN_FLIGHT> colorCorrectionDescriptorSets{};
-    VkDescriptorSet skyboxDescriptorSet{VK_NULL_HANDLE};
+    // Descriptor set layouts and their sets, in layout-creation order
+    std::unique_ptr<FrameDescriptor> modelsDescriptor;
+    std::unique_ptr<FrameDescriptor> cameraDescriptor;
+    std::unique_ptr<FrameDescriptor> gBufferDescriptor;
+    std::unique_ptr<FrameDescriptor> lightArrayDescriptor;
+    std::unique_ptr<FrameDescriptor> cascadeSplitsDescriptor;
+    std::unique_ptr<FrameDescriptor> sceneLightingDescriptor;
+    std::unique_ptr<FrameDescriptor> lightMatrixDescriptor;
+    std::unique_ptr<FrameDescriptor> shadowMapSamplerDescriptor;
+    std::unique_ptr<FrameDescriptor> shadowModelMatrixDescriptor;
+    std::unique_ptr<FrameDescriptor> skyboxDescriptor;
+    std::unique_ptr<FrameDescriptor> transparencyModelDescriptor;
+    std::unique_ptr<FrameDescriptor> compositionDescriptor;
+    std::unique_ptr<FrameDescriptor> smaaEdgeDescriptor;
+    std::unique_ptr<FrameDescriptor> smaaWeightDescriptor;
+    std::unique_ptr<FrameDescriptor> smaaBlendDescriptor;
+    std::unique_ptr<FrameDescriptor> colorCorrectionDescriptor;
+    std::unique_ptr<FrameDescriptor> rcBuildDescriptor;
+    std::unique_ptr<FrameDescriptor> rcResolveDescriptor;
+    std::unique_ptr<FrameDescriptor> depthPyramidDescriptor;
 
     std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> modelMatrixBuffers{};
     std::array<std::unique_ptr<Buffer>, MAX_FRAMES_IN_FLIGHT> normalMatrixBuffers{};
