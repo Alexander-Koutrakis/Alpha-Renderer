@@ -3,6 +3,7 @@
 
 namespace Rendering {
 constexpr uint32_t MAX_FRAMES_IN_FLIGHT = 3;
+constexpr uint32_t kMaxTimedScopes = 16; // GPU timer scopes per frame: 11 passes + ImGui, with room to grow
 constexpr uint32_t MAX_DIRECTIONAL_LIGHTS = 4;
 constexpr uint32_t MAX_SPOT_LIGHTS = 8;
 constexpr uint32_t MAX_POINT_LIGHTS = 8;

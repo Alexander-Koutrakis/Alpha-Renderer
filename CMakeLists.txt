@@ -70,6 +70,7 @@ add_executable(AlphaRenderer
   "src/Rendering/Core/render_passes.cpp"
   "src/Rendering/Core/samplers.cpp"
   "src/Rendering/Core/debug_names.cpp"
+  "src/Rendering/Core/gpu_timer.cpp"
 
   # Rendering Resources
   "src/Rendering/Resources/rendering_resources.cpp"

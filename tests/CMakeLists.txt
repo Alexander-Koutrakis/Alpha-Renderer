@@ -13,6 +13,7 @@ add_executable(AlphaTests
   transform_system_test.cpp
   scene_test.cpp
   light_system_test.cpp
+  timestamp_math_test.cpp
 
   ${CMAKE_SOURCE_DIR}/src/Math/AABB.cpp
   ${CMAKE_SOURCE_DIR}/src/Math/view_frustum.cpp

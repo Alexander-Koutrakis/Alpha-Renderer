@@ -3,7 +3,11 @@ class AlphaEngine;
 #include "renderer.hpp"
 #include "Core/vk_check.hpp"
 #include "Engine/alpha_engine.hpp"
+#include "Engine/log.hpp"
 #include <array>
+#include <iomanip>
+#include <optional>
+#include <sstream>
 
 using namespace ECS;
 using namespace Systems;
@@ -14,6 +18,9 @@ Renderer::Renderer(Window& window, Device& device, VkDescriptorSetLayout materia
     recreateSwapChain();
     recreateWindowDependentResources();
     createCommandBuffers();
+    if (GpuTimer::requestedByEnvironment()) {
+        gpuTimer = std::make_unique<GpuTimer>(device, MAX_FRAMES_IN_FLIGHT, kMaxTimedScopes);
+    }
 
     // Initialize ImGui after swap chain and command buffers are ready
     imguiManager =
@@ -192,6 +199,9 @@ void Renderer::endFrame() {
     VK_CHECK(vkEndCommandBuffer(commandBuffer));
 
     auto result = swapChain->submitCommandBuffers(currentFrameIndex, &commandBuffer, &currentImageIndex);
+    if (gpuTimer) {
+        gpuTimer->markSubmitted(currentFrameIndex);
+    }
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || window.wasWindowResized()) {
         window.resetWindowResizedFlag();
         handleWindowResize();
@@ -373,22 +383,59 @@ void Renderer::run() {
     FrameContext& frameContext = frameContexts[currentFrameIndex];
     updateFrameContext(commandBuffer, frameContext);
 
-    shadowmapPass->run(frameContext);
-    geometryPass->run(frameContext);
-    skyboxPass->run(frameContext);
-    lightPass->run(frameContext);
-    rcgiPass->run(frameContext);
-    transparencyPass->run(frameContext);
-    compositionPass->run(frameContext);
-    smaaEdgePass->run(frameContext);
-    smaaWeightPass->run(frameContext);
-    smaaBlendPass->run(frameContext);
-    colorCorrectionPass->run(frameContext);
+    if (gpuTimer) {
+        gpuTimer->beginFrame(commandBuffer, currentFrameIndex);
+    }
 
-    // Render ImGui overlay
-    imguiManager->run(commandBuffer, currentImageIndex);
+    // With timing on, each pass runs inside a GPU timer scope; with it off this only calls run().
+    auto timed = [&](const char* name, auto& pass) {
+        std::optional<GpuTimer::Scope> scope;
+        if (gpuTimer) {
+            scope.emplace(*gpuTimer, commandBuffer, name);
+        }
+        pass->run(frameContext);
+    };
+
+    timed("Shadow maps", shadowmapPass);
+    timed("Geometry", geometryPass);
+    timed("Skybox", skyboxPass);
+    timed("Direct lighting", lightPass);
+    timed("Radiance cascades GI", rcgiPass);
+    timed("Transparency", transparencyPass);
+    timed("Composition", compositionPass);
+    timed("SMAA edges", smaaEdgePass);
+    timed("SMAA weights", smaaWeightPass);
+    timed("SMAA blend", smaaBlendPass);
+    timed("Color correction", colorCorrectionPass);
+
+    // Render ImGui overlay (it shows the timings read back at the start of this frame)
+    if (gpuTimer) {
+        imguiManager->setGpuTimings(gpuTimer->timings());
+        logGpuTimings();
+    }
+    {
+        std::optional<GpuTimer::Scope> scope;
+        if (gpuTimer) {
+            scope.emplace(*gpuTimer, commandBuffer, "ImGui");
+        }
+        imguiManager->run(commandBuffer, currentImageIndex);
+    }
 
     endFrame();
+}
+
+void Renderer::logGpuTimings() {
+    constexpr uint32_t kLogEveryFrames = 240;
+    if (++timingLogCounter % kLogEveryFrames != 0 || gpuTimer->timings().empty()) {
+        return;
+    }
+    std::ostringstream line;
+    line << std::fixed << std::setprecision(2) << "GPU ms:";
+    for (const GpuTimer::Timing& timing : gpuTimer->timings()) {
+        line << ' ' << timing.name << '=' << timing.ms << ';';
+    }
+    line << " total=" << gpuTimer->totalMs();
+    Log::info(line.str());
 }
 
 void Renderer::updateFrameContext(VkCommandBuffer commandBuffer, FrameContext& frameContext) {

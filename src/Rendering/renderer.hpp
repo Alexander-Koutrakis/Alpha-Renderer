@@ -15,6 +15,7 @@
 #include "Rendering/RenderPasses/SMAA/smaa_blend_pass.hpp"
 #include "Rendering/RenderPasses/color_correction/color_correction_pass.hpp"
 #include "Rendering/Resources/gbuffer.hpp"
+#include "Rendering/Core/gpu_timer.hpp"
 #include "Rendering/Core/imgui_manager.hpp"
 #include "Systems/camera_system.hpp"
 #include "Systems/camera_culling.hpp"
@@ -85,6 +86,7 @@ private:
     void createSMAAPasses();
     void createColorCorrectionPass();
     void updateFrameContext(VkCommandBuffer commandBuffer, FrameContext& frameContext);
+    void logGpuTimings();
     Window& window;
     Device& device;
     VkDescriptorSetLayout materialDescriptorSetLayout;
@@ -107,6 +109,8 @@ private:
 
     std::vector<VkImageView> swapchainImageViews; // one per swapchain image
     std::unique_ptr<ImGuiManager> imguiManager;
+    std::unique_ptr<GpuTimer> gpuTimer; // null unless ALPHA_GPU_TIMING is set
+    uint32_t timingLogCounter{0};
 
     uint32_t currentImageIndex{0};
     uint32_t currentFrameIndex{0}; // frame-in-flight slot; the only owner of this counter

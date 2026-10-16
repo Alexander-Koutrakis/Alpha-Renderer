@@ -1,6 +1,7 @@
 #pragma once
 
 #include "device.hpp"
+#include "gpu_timer.hpp"
 #include "window.hpp"
 #include "swapchain.hpp"
 #include <imgui.h>
@@ -53,6 +54,11 @@ public:
     void setFrameStats(float fps, float frameTime);
 
     /**
+     * @brief Show per-pass GPU timings under the frame stats (only called when ALPHA_GPU_TIMING is set)
+     */
+    void setGpuTimings(const std::vector<GpuTimer::Timing>& timings);
+
+    /**
      * @brief Handle window resize
      * @param swapChain Reference to the new swap chain after resize
      */
@@ -82,6 +88,7 @@ private:
     // Frame statistics
     float currentFPS{0.0f};
     float currentFrameTime{0.0f};
+    std::vector<GpuTimer::Timing> gpuTimings;
 };
 
 } // namespace Rendering
