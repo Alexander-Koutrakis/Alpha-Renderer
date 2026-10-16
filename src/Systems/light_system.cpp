@@ -41,7 +41,7 @@ void LightSystem::updateSpotLight(SpotLight& spotLight) {
         glm::lookAtLH(transform.position, transform.position + TransformSystem::getForward(transform), up);
 
     glm::mat4 projectionMatrix =
-        glm::perspectiveLH_ZO(glm::radians(spotLight.outerCutoff * 0.5f) * 2.0f, 1.0f, 0.1f, spotLight.range);
+        glm::perspectiveLH_ZO(glm::radians(spotLight.outerCutoff), 1.0f, 0.1f, spotLight.range);
 
     projectionMatrix[1][1] *= -1.0f;
     spotLight.viewProjectionMatrix = projectionMatrix * viewMatrix;

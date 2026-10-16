@@ -185,7 +185,8 @@ TEST_CASE("calculateSpotlightBounds contains the tip and the whole base circle i
         const glm::vec3 helper = std::abs(direction.y) > 0.99f ? glm::vec3(1, 0, 0) : glm::vec3(0, 1, 0);
         const glm::vec3 u = glm::normalize(glm::cross(direction, helper));
         const glm::vec3 v = glm::cross(direction, u);
-        const float radius = range * std::tan(glm::radians(outerDegrees));
+        // outerDegrees is the full cone angle, so the base circle has the half angle's radius.
+        const float radius = range * std::tan(glm::radians(outerDegrees * 0.5f));
         for (int i = 0; i < 16; ++i) {
             const float angle = 2.0f * kPi * float(i) / 16.0f;
             const glm::vec3 onCircle =
@@ -193,6 +194,19 @@ TEST_CASE("calculateSpotlightBounds contains the tip and the whole base circle i
             CHECK_MESSAGE(BoundingBoxSystem::Contains(bounds, onCircle), "direction (", rawDirection.x, ", ",
                           rawDirection.y, ", ", rawDirection.z, ") angle step ", i);
         }
+    }
+}
+
+TEST_CASE("calculateSpotlightBounds is as wide as the cone's base circle and no wider") {
+    // Along +Z the box is the tip (z = 0), the base plane (z = range) and a square of half-size radius around the axis.
+    const float range = 10.0f;
+    for (const float fullAngle : {20.0f, 60.0f, 90.0f}) {
+        AABB bounds{};
+        BoundingBoxSystem::calculateSpotlightBounds(bounds, {0, 0, 0}, {0, 0, 1}, range, fullAngle);
+        const float radius = range * std::tan(glm::radians(fullAngle * 0.5f));
+        CHECK_MESSAGE(bounds.extents.x == doctest::Approx(radius), "full angle ", fullAngle);
+        CHECK_MESSAGE(bounds.extents.y == doctest::Approx(radius), "full angle ", fullAngle);
+        CHECK_MESSAGE(bounds.extents.z == doctest::Approx(range * 0.5f), "full angle ", fullAngle);
     }
 }
 

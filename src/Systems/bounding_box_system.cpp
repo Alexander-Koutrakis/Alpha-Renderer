@@ -85,8 +85,10 @@ void BoundingBoxSystem::calculateSpotlightBounds(AABB& worldBounds, const glm::v
     std::vector<glm::vec3> corners;
     corners.reserve(5); // 4 corners of the cone base + light position
 
-    float outerCutoffRadians = glm::radians(outerCutoffDegrees);
-    calculateSpotLightCorners(position, direction, range, outerCutoffRadians, corners);
+    // outerCutoffDegrees is the full cone angle (as in the light buffer and the shadow projection); the cone's
+    // half angle sets the radius of its base.
+    float halfAngleRadians = glm::radians(outerCutoffDegrees * 0.5f);
+    calculateSpotLightCorners(position, direction, range, halfAngleRadians, corners);
 
     // Find min and max points
     glm::vec3 minPoint(std::numeric_limits<float>::max());
@@ -103,12 +105,12 @@ void BoundingBoxSystem::calculateSpotlightBounds(AABB& worldBounds, const glm::v
 }
 
 void BoundingBoxSystem::calculateSpotLightCorners(const glm::vec3& position, const glm::vec3& direction, float range,
-                                                  float outerCutoffRadians, std::vector<glm::vec3>& corners) {
+                                                  float halfAngleRadians, std::vector<glm::vec3>& corners) {
     // Add light position as first corner
     corners.push_back(position);
 
     // Calculate the radius of the cone base
-    float radius = range * std::tan(outerCutoffRadians);
+    float radius = range * std::tan(halfAngleRadians);
 
     // Create a coordinate system where direction is the z-axis. A direction along world up has no usable cross
     // product with it (normalize of the zero vector is NaN), so pick another helper axis there.
