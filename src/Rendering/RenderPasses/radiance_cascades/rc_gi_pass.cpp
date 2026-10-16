@@ -4,12 +4,29 @@
 #include "Rendering/Core/samplers.hpp"
 
 #include <algorithm>
+#include <cstdlib>
+#include <cstring>
 #include <stdexcept>
 
 namespace Rendering {
 constexpr uint32_t RC_BUILD_GROUP_SIZE_X = 8u;
 constexpr uint32_t RC_BUILD_GROUP_SIZE_Y = 8u;
-RCGIPass::RCGIPass(Device& device, const CreateInfo& createInfo) : device(device), info(createInfo) {
+RCGIPass::Mode RCGIPass::modeFromEnvironment() {
+    const char* value = std::getenv("ALPHA_RC_MODE");
+    if (value == nullptr || *value == '\0' || std::strcmp(value, "cascades") == 0) {
+        return Mode::Cascades;
+    }
+    if (std::strcmp(value, "reference") == 0) {
+        return Mode::Reference;
+    }
+    if (std::strcmp(value, "off") == 0) {
+        return Mode::Off;
+    }
+    throw std::runtime_error(std::string("ALPHA_RC_MODE must be cascades, reference or off, got: ") + value);
+}
+
+RCGIPass::RCGIPass(Device& device, const CreateInfo& createInfo)
+    : device(device), info(createInfo), mode(modeFromEnvironment()) {
     // Create a dedicated sampler for compute sampling
     // texelFetch ignores filter, but NEAREST is explicit
     rcSampler =
@@ -20,6 +37,9 @@ RCGIPass::RCGIPass(Device& device, const CreateInfo& createInfo) : device(device
     createRCBuildPipeline();
     createRCMergePipeline();
     createRCResolvePipeline();
+    if (mode == Mode::Reference) {
+        createRCReferencePipeline();
+    }
 }
 
 RCGIPass::~RCGIPass() {
@@ -45,6 +65,9 @@ RCGIPass::~RCGIPass() {
     }
     if (rcResolvePipeline) {
         rcResolvePipeline.reset();
+    }
+    if (rcReferencePipeline) {
+        rcReferencePipeline.reset();
     }
     if (rcBuildPipelineLayout != VK_NULL_HANDLE) {
         vkDestroyPipelineLayout(device.getDevice(), rcBuildPipelineLayout, nullptr);
@@ -88,6 +111,13 @@ void RCGIPass::createRCMergePipeline() {
     ComputePipelineConfigInfo cfg{};
     cfg.pipelineLayout = rcBuildPipelineLayout;
     rcMergePipeline = std::make_unique<ComputePipeline>(device, "shaders/rc_merge.comp.spv", cfg);
+}
+
+void RCGIPass::createRCReferencePipeline() {
+    // Same descriptor set and push constants as the cascade build: it reads the same G-buffer, pyramid and incident light.
+    ComputePipelineConfigInfo cfg{};
+    cfg.pipelineLayout = rcBuildPipelineLayout;
+    rcReferencePipeline = std::make_unique<ComputePipeline>(device, "shaders/rc_reference.comp.spv", cfg);
 }
 
 void RCGIPass::createRCResolvePipeline() {
@@ -274,6 +304,7 @@ void RCGIPass::resolveIndirect(FrameContext& frameContext) {
     pc.tileSize = static_cast<int>(Rendering::RC_BASE_TILE_SIZE);
     pc.temporalFrame = static_cast<int>(frameContext.temporalFrameIndex);
     pc.prevViewProj = frameContext.prevCameraData.viewProjectionMatrix;
+    pc.mode = static_cast<int>(mode);
 
     vkCmdPushConstants(cmd, rcResolvePipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0, sizeof(ResolvePushConstants), &pc);
 
@@ -284,6 +315,22 @@ void RCGIPass::resolveIndirect(FrameContext& frameContext) {
     uint32_t groupsY = (info.height + groupSizeY - 1) / groupSizeY;
 
     rcResolvePipeline->dispatch(cmd, groupsX, groupsY, 1);
+}
+
+void RCGIPass::traceReference(FrameContext& frameContext) {
+    VkCommandBuffer cmd = frameContext.commandBuffer;
+    vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, rcReferencePipeline->getPipeline());
+    VkDescriptorSet ds = frameContext.rcBuildDescriptorSet;
+    vkCmdBindDescriptorSets(cmd, VK_PIPELINE_BIND_POINT_COMPUTE, rcBuildPipelineLayout, 0, 1, &ds, 0, nullptr);
+
+    CascadeBuildPushConstants push{};
+    push.frameIndex = static_cast<int>(frameContext.temporalFrameIndex % 1000u);
+    vkCmdPushConstants(cmd, rcBuildPipelineLayout, VK_SHADER_STAGE_COMPUTE_BIT, 0,
+                       static_cast<uint32_t>(sizeof(CascadeBuildPushConstants)), &push);
+
+    rcReferencePipeline->dispatch(cmd, (info.width + RC_BUILD_GROUP_SIZE_X - 1u) / RC_BUILD_GROUP_SIZE_X,
+                                  (info.height + RC_BUILD_GROUP_SIZE_Y - 1u) / RC_BUILD_GROUP_SIZE_Y, 1);
+    emitComputeBarrier(cmd);
 }
 
 void RCGIPass::setDepthPyramidBarriersBefore(FrameContext& frameContext) {
@@ -369,8 +416,12 @@ void RCGIPass::buildDepthPyramid(FrameContext& frameContext) {
 void RCGIPass::run(FrameContext& frameContext) {
     computeCascadeBands();
     buildDepthPyramid(frameContext);
-    buildRCCascades(frameContext);
-    mergeRCCascades(frameContext);
+    if (mode == Mode::Cascades) {
+        buildRCCascades(frameContext);
+        mergeRCCascades(frameContext);
+    } else if (mode == Mode::Reference) {
+        traceReference(frameContext);
+    }
     resolveIndirect(frameContext);
 }
 

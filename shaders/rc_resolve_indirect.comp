@@ -39,6 +39,7 @@ layout(push_constant) uniform ResolvePC {
     int probeStridePx;
     int tileSize;
     int temporalFrame;   // Frame index seed for sample jitter / temporal logic
+    int mode;            // 0 = cascades, 1 = reference (irradiance from rc_reference.comp in cascade 0's atlas), 2 = off
 } pc;
 
 const int RESOLVE_WIDTH = 2;
@@ -55,6 +56,7 @@ const float RC_BASE_INTERVAL_LENGTH = 0.08; // Must match Rendering::RC_BASE_INT
 const float TEMPORAL_DEPTH_THRESHOLD = 0.6;      
 const float TEMPORAL_NORMAL_THRESHOLD = 0.75;    
 const float TEMPORAL_BLEND_ALPHA = 0.05;
+const float REFERENCE_BLEND_ALPHA = 1.0 / 32.0; // the reference is noisier per frame, so it averages longer
 const float HISTORY_SPATIAL_BLUR_RADIUS = 1.5;
 
 vec3 FresnelSchlick(float cosTheta, vec3 F0) {
@@ -338,7 +340,8 @@ TemporalResult applyTemporalAccumulation(
     vec3 historyGI = sampleHistoryWithSpatialBlur(historyUV, targetSize);
     historyGI = clampHistoryToNeighborhood(historyGI, currentGI, pixel, targetSize);
 
-    float alpha = mix(TEMPORAL_BLEND_ALPHA, 0.5, 1.0 - confidence); // more history when confident
+    float baseAlpha = (pc.mode == 1) ? REFERENCE_BLEND_ALPHA : TEMPORAL_BLEND_ALPHA;
+    float alpha = mix(baseAlpha, 0.5, 1.0 - confidence); // more history when confident
     outResult.blendedGI = mix(historyGI, currentGI, alpha);
     outResult.historyValid = true;
     return outResult;
@@ -395,7 +398,14 @@ void main() {
         return;
     }
 
-    IntegrationResult gi = integrateDiffuseGI(pixel, screenSample);
+    IntegrationResult gi;
+    if (pc.mode == 1) {
+        gi.irradiance = texelFetch(uRadiance[0], pixel, 0).rgb;
+    } else if (pc.mode == 2) {
+        gi.irradiance = vec3(0.0);
+    } else {
+        gi = integrateDiffuseGI(pixel, screenSample);
+    }
 
     vec3 viewDir = normalize(uCamera.camPos.xyz - screenSample.worldPosition);
     float NdotV = max(dot(screenSample.normal, viewDir), 0.0);

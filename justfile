@@ -86,3 +86,8 @@ doctor:
     clang-tidy --version
     glslc --version
     spirv-val --version
+
+# Compare the Radiance Cascades GI with the brute-force reference (ALPHA_RC_MODE=reference); prints bias, error and correlation
+# and writes build/rc-compare/<scene>/ (needs a GPU and an untouched screen; not in `check`). Usage: just rc-compare, just rc-compare glass
+rc-compare scene="":
+    ./scripts/rc_compare.ps1 {{ if scene == "" { "" } else { "-Scene " + scene } }}

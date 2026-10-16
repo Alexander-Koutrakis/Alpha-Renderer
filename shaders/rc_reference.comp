@@ -1,0 +1,145 @@
+#version 450
+#extension GL_GOOGLE_include_directive : require
+
+// Reference for the Radiance Cascades pass (ALPHA_RC_MODE=reference). It answers the same question the cascades do,
+// "how much light does the lit G-buffer send to this pixel", but with brute force and none of the cascade machinery:
+// - per pixel, a few cosine-weighted rays per frame, each marched in 1-pixel screen-space steps up to the end of the screen;
+// - the hit is the same definition the cascades use (depth buffer + thickness, front faces only, hit radiance =
+//   incident * albedo * kD / PI from the light pass), but without intervals, probes, merging, jitter or attenuation hacks.
+// The estimate is the irradiance E = PI * mean(L) and is written to cascade 0's atlas at the pixel's own texel; the
+// resolve pass reads it (mode 1) and applies the same albedo, kD, GI_BOOST and temporal accumulation as the normal path,
+// so a difference between the two images is the cascades' error and nothing else.
+
+#include "rc_common.glsl"
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) uniform CameraUBO {
+    mat4 view;
+    mat4 proj;
+    mat4 viewProj;
+    vec4 camPos;
+    vec4 clipPlanes; // x=near, y=far, z=far-near, w=near*far
+} uCamera;
+
+layout(set = 0, binding = 1) uniform sampler2D uGBufferPosition;
+layout(set = 0, binding = 2) uniform sampler2D uGBufferNormal;
+layout(set = 0, binding = 3) uniform sampler2D uGBufferAlbedo;
+layout(set = 0, binding = 4) uniform sampler2D uGBufferMaterial;
+layout(set = 0, binding = 5) uniform sampler2D uDepthPyramid; // mip 0: linear view depth in R
+layout(set = 0, binding = 6) uniform sampler2D uIncidentBuffer;
+layout(rgba16f, set = 0, binding = 7) uniform writeonly image2D uRadiance[6];
+
+// Shares the cascade build's push-constant block; only frameIndex is used.
+layout(push_constant) uniform BuildPC {
+    int cascadeIndex;
+    int probeStridePx;
+    int tileSize;
+    int depthMipCount;
+    int frameIndex;
+    float tStart;
+    float segmentLen;
+} pc;
+
+const float PI = 3.14159265359;
+const int RAYS_PER_FRAME = 2;
+const int MAX_STEPS = 1200;           // longer than the longest screen diagonal in pixels
+const float MAX_RANGE = 327.68;       // 0.08 * 4^6: the cascades' total reach
+const float ORIGIN_OFFSET = 0.01;     // along the normal, as the cascade build does
+const float MIN_HIT_DISTANCE = 0.02;
+const float COPLANAR_DISTANCE = 0.02;
+
+float rcHash(vec3 p) {
+    p = fract(p * vec3(0.1031, 0.1030, 0.0973));
+    p += dot(p, p.yxz + 33.33);
+    return fract((p.x + p.y) * p.z);
+}
+
+// Radiance of the first front-facing surface the ray reaches, or 0 for a miss.
+vec3 traceReference(vec3 origin, vec3 dir, vec3 originNormal) {
+    ivec2 screenSize = textureSize(uDepthPyramid, 0);
+    float nearPlane = uCamera.clipPlanes.x;
+
+    vec3 vs = (uCamera.view * vec4(origin, 1.0)).xyz;
+    vec3 ve = (uCamera.view * vec4(origin + dir * MAX_RANGE, 1.0)).xyz;
+    // The engine is left-handed: view-space z grows away from the camera and equals clip w.
+    if (vs.z < nearPlane) return vec3(0.0);
+    if (ve.z < nearPlane) {
+        // Stop just in front of the near plane.
+        float t = (nearPlane - vs.z) / (ve.z - vs.z);
+        ve = mix(vs, ve, t * 0.999);
+    }
+
+    vec4 c0 = uCamera.proj * vec4(vs, 1.0);
+    vec4 c1 = uCamera.proj * vec4(ve, 1.0);
+    vec2 p0 = (c0.xy / c0.w * 0.5 + 0.5) * vec2(screenSize);
+    vec2 p1 = (c1.xy / c1.w * 0.5 + 0.5) * vec2(screenSize);
+    float k0 = 1.0 / c0.w;
+    float k1 = 1.0 / c1.w;
+
+    vec2 delta = p1 - p0;
+    float steps = min(max(abs(delta.x), abs(delta.y)), float(MAX_STEPS));
+    if (steps < 1.0) return vec3(0.0);
+
+    for (int i = 1; i <= int(steps); ++i) {
+        float a = float(i) / steps;
+        vec2 p = mix(p0, p1, a);
+        ivec2 pixel = ivec2(floor(p));
+        if (pixel.x < 0 || pixel.y < 0 || pixel.x >= screenSize.x || pixel.y >= screenSize.y) break;
+
+        float rayDepth = 1.0 / mix(k0, k1, a);   // perspective projection: clip w is view depth (left-handed)
+        float sceneDepth = texelFetch(uDepthPyramid, pixel, 0).r;
+        if (sceneDepth <= 0.0 || sceneDepth >= uCamera.clipPlanes.y * 0.99) continue;
+
+        float thickness = 0.01 + 0.015 * sceneDepth;
+        if (rayDepth < sceneDepth - thickness || rayDepth > sceneDepth + 2.0 * thickness) continue;
+
+        vec4 hitPos = texelFetch(uGBufferPosition, pixel, 0);
+        if (hitPos.w <= 0.0) continue;
+        vec3 toHit = hitPos.xyz - origin;
+        float t = dot(toHit, dir);
+        if (t < MIN_HIT_DISTANCE || t > MAX_RANGE) continue;
+
+        vec3 hitNormal = decodeNormal(texelFetch(uGBufferNormal, pixel, 0).xyz);
+        // A surface in the origin's own plane cannot occlude or light it.
+        if (dot(hitNormal, originNormal) > 0.98 && abs(dot(toHit, originNormal)) < COPLANAR_DISTANCE) continue;
+        if (dot(hitNormal, -dir) < -0.05) continue;   // back face
+
+        vec3 albedo = texelFetch(uGBufferAlbedo, pixel, 0).rgb;
+        vec3 incident = texelFetch(uIncidentBuffer, pixel, 0).rgb;
+        float kD = 1.0 - texelFetch(uGBufferMaterial, pixel, 0).r;
+        return incident * albedo * kD * (1.0 / PI);
+    }
+    return vec3(0.0);
+}
+
+void main() {
+    ivec2 pixel = ivec2(gl_GlobalInvocationID.xy);
+    ivec2 atlasSize = imageSize(uRadiance[0]);
+    if (pixel.x >= atlasSize.x || pixel.y >= atlasSize.y) return;
+
+    vec4 gbufPos = texelFetch(uGBufferPosition, pixel, 0);
+    if (gbufPos.w <= 0.0) {
+        imageStore(uRadiance[0], pixel, vec4(0.0));
+        return;
+    }
+
+    vec3 normal = decodeNormal(texelFetch(uGBufferNormal, pixel, 0).xyz);
+    mat3 basis = buildProbeBasis(normal);
+    float depth = texelFetch(uDepthPyramid, pixel, 0).r;
+    vec3 origin = gbufPos.xyz + normal * max(ORIGIN_OFFSET, depth * 0.0015);
+
+    vec3 radianceSum = vec3(0.0);
+    for (int r = 0; r < RAYS_PER_FRAME; ++r) {
+        float seed = float(pc.frameIndex * RAYS_PER_FRAME + r);
+        vec2 u = vec2(rcHash(vec3(vec2(pixel), seed)), rcHash(vec3(vec2(pixel) + vec2(127.1, 311.7), seed + 0.5)));
+        float phi = 2.0 * PI * u.x;
+        float radius = sqrt(u.y);
+        vec3 local = vec3(radius * cos(phi), radius * sin(phi), sqrt(1.0 - u.y));   // cosine-weighted hemisphere
+        radianceSum += traceReference(origin, normalize(basis * local), normal);
+    }
+
+    // E = integral of L cos = PI * mean(L) for cosine-weighted directions.
+    vec3 irradiance = PI * radianceSum / float(RAYS_PER_FRAME);
+    imageStore(uRadiance[0], pixel, vec4(irradiance, 1.0));
+}
